@@ -1,0 +1,11 @@
+version: "3.9"
+services:
+  localstack:
+    image: localstack/localstack:2.3
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=dynamodb,s3,logs,events,lambda,apigateway,iam,sts,cloudwatch
+      - DEBUG=1
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"

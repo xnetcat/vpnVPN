@@ -1,0 +1,87 @@
+name: Pulumi Deploy (Global + Region)
+
+on:
+  workflow_run:
+    workflows: ["Build and Push Rust Server"]
+    types: ["completed"]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+  ECR_REPO_NAME: ${{ secrets.ECR_REPO_NAME }}
+  AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set defaults
+        run: |
+          echo "ECR_REPO_NAME=${ECR_REPO_NAME:-vpnvpn/rust-server}" >> $GITHUB_ENV
+          echo "AWS_REGION=${AWS_REGION:-us-east-1}" >> $GITHUB_ENV
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Pulumi CLI
+        uses: pulumi/actions@v5
+        with:
+          pulumi-version: latest
+
+      - name: Install deps
+        working-directory: infra/pulumi
+        run: npm ci
+
+      - name: Pulumi login
+        working-directory: infra/pulumi
+        run: pulumi login
+
+      - name: Ensure stacks
+        working-directory: infra/pulumi
+        run: |
+          pulumi stack select global || pulumi stack init global
+          pulumi stack select region-us-east-1 || pulumi stack init region-us-east-1
+
+      - name: Configure global stack
+        working-directory: infra/pulumi
+        run: |
+          pulumi config set aws:region $AWS_REGION --stack global
+          pulumi config set global:ecrRepoName $ECR_REPO_NAME --stack global
+
+      - name: Pulumi up (global)
+        working-directory: infra/pulumi
+        run: pulumi up -y --stack global
+
+      - name: Compute image tag
+        id: image
+        run: |
+          echo "tag=sha-${GITHUB_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Configure region stack
+        working-directory: infra/pulumi
+        run: |
+          pulumi config set aws:region $AWS_REGION --stack region-us-east-1
+          pulumi config set global:ecrRepoName $ECR_REPO_NAME --stack region-us-east-1
+          pulumi config set region:imageTag ${{ steps.image.outputs.tag }} --stack region-us-east-1
+          pulumi config set region:minInstances 1 --stack region-us-east-1
+          pulumi config set region:maxInstances 3 --stack region-us-east-1
+          pulumi config set region:instanceCpu 1024 --stack region-us-east-1
+          pulumi config set region:instanceMemory 2048 --stack region-us-east-1
+          pulumi config set region:adminCidr 0.0.0.0/0 --stack region-us-east-1
+
+      - name: Pulumi up (region)
+        working-directory: infra/pulumi
+        run: pulumi up -y --stack region-us-east-1

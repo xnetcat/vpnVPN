@@ -1,0 +1,3 @@
+name: vpnvpn-infra
+runtime: nodejs
+description: Pulumi project for vpnVPN (global + region stacks)
