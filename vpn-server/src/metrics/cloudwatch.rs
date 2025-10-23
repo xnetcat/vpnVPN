@@ -6,7 +6,7 @@ use aws_sdk_cloudwatch::Client as CloudWatchClient;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
 
-use super::{get_active_sessions, get_bytes_sent_delta};
+use super::{get_active_sessions, get_bytes_sent_delta, get_per_protocol_active, get_per_protocol_egress_delta};
 
 const NAMESPACE: &str = "vpnVPN";
 
@@ -42,6 +42,8 @@ pub async fn start_publisher_task() {
 
             let active_sessions = get_active_sessions();
             let bytes_delta = get_bytes_sent_delta();
+            let protos_env = env::var("VPN_PROTOCOLS").unwrap_or_else(|_| "wireguard,openvpn,ikev2".into());
+            let protocols: Vec<&str> = protos_env.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
 
             let mut data = Vec::new();
             data.push(
@@ -55,12 +57,40 @@ pub async fn start_publisher_task() {
 
             data.push(
                 MetricDatum::builder()
-                    .metric_name("BytesSent")
+                    .metric_name("BytesEgress")
                     .unit(StandardUnit::Bytes)
                     .value(bytes_delta as f64)
                     .set_dimensions(Some(dimensions.clone()))
                     .build(),
             );
+
+            // Per protocol metrics
+            let per_active = get_per_protocol_active(&protocols);
+            let per_egress = get_per_protocol_egress_delta(&protocols);
+            for (proto, active) in per_active {
+                let mut dims = dimensions.clone();
+                dims.push(Dimension::builder().name("Protocol").value(proto.clone()).build());
+                data.push(
+                    MetricDatum::builder()
+                        .metric_name("ActiveSessions")
+                        .unit(StandardUnit::Count)
+                        .value(active as f64)
+                        .set_dimensions(Some(dims.clone()))
+                        .build(),
+                );
+            }
+            for (proto, egress) in per_egress {
+                let mut dims = dimensions.clone();
+                dims.push(Dimension::builder().name("Protocol").value(proto.clone()).build());
+                data.push(
+                    MetricDatum::builder()
+                        .metric_name("BytesEgress")
+                        .unit(StandardUnit::Bytes)
+                        .value(egress as f64)
+                        .set_dimensions(Some(dims.clone()))
+                        .build(),
+                );
+            }
 
             if let Err(err) = client
                 .put_metric_data()

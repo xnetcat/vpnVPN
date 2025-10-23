@@ -3,6 +3,7 @@ type Server = {
   region: string;
   status: string;
   sessions: number;
+  cpu?: number;
 };
 
 async function getServers(): Promise<Server[]> {
@@ -36,6 +37,9 @@ export default async function ServersPage() {
               <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
                 Sessions
               </th>
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
+                CPU
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -45,6 +49,9 @@ export default async function ServersPage() {
                 <td className="px-4 py-2 text-sm">{s.region}</td>
                 <td className="px-4 py-2 text-sm">{s.status}</td>
                 <td className="px-4 py-2 text-sm">{s.sessions}</td>
+                <td className="px-4 py-2 text-sm">
+                  {typeof s.cpu === "number" ? `${s.cpu.toFixed(1)}%` : "—"}
+                </td>
               </tr>
             ))}
           </tbody>

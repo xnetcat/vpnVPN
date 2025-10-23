@@ -46,6 +46,24 @@ export class VpnAsg extends pulumi.ComponentResource {
             cidrBlocks: ["0.0.0.0/0"],
           },
           {
+            protocol: "udp",
+            fromPort: 1194,
+            toPort: 1194,
+            cidrBlocks: ["0.0.0.0/0"],
+          },
+          {
+            protocol: "udp",
+            fromPort: 500,
+            toPort: 500,
+            cidrBlocks: ["0.0.0.0/0"],
+          },
+          {
+            protocol: "udp",
+            fromPort: 4500,
+            toPort: 4500,
+            cidrBlocks: ["0.0.0.0/0"],
+          },
+          {
             protocol: "tcp",
             fromPort: 8080,
             toPort: 8080,
@@ -85,6 +103,42 @@ export class VpnAsg extends pulumi.ComponentResource {
       { parent: this }
     );
 
+    const tgOpenvpn = new aws.lb.TargetGroup(
+      `${name}-tg-ovpn`,
+      {
+        port: 1194,
+        protocol: "UDP",
+        targetType: "instance",
+        vpcId: vpc.vpcId,
+        healthCheck: { protocol: "TCP", port: "8080" },
+      },
+      { parent: this }
+    );
+
+    const tgIke500 = new aws.lb.TargetGroup(
+      `${name}-tg-ike500`,
+      {
+        port: 500,
+        protocol: "UDP",
+        targetType: "instance",
+        vpcId: vpc.vpcId,
+        healthCheck: { protocol: "TCP", port: "8080" },
+      },
+      { parent: this }
+    );
+
+    const tgIke4500 = new aws.lb.TargetGroup(
+      `${name}-tg-ike4500`,
+      {
+        port: 4500,
+        protocol: "UDP",
+        targetType: "instance",
+        vpcId: vpc.vpcId,
+        healthCheck: { protocol: "TCP", port: "8080" },
+      },
+      { parent: this }
+    );
+
     const tgTcp = new aws.lb.TargetGroup(
       `${name}-tg-tcp`,
       {
@@ -104,6 +158,39 @@ export class VpnAsg extends pulumi.ComponentResource {
         port: 51820,
         protocol: "UDP",
         defaultActions: [{ type: "forward", targetGroupArn: tgUdp.arn }],
+      },
+      { parent: this }
+    );
+
+    new aws.lb.Listener(
+      `${name}-lis-ovpn`,
+      {
+        loadBalancerArn: nlb.arn,
+        port: 1194,
+        protocol: "UDP",
+        defaultActions: [{ type: "forward", targetGroupArn: tgOpenvpn.arn }],
+      },
+      { parent: this }
+    );
+
+    new aws.lb.Listener(
+      `${name}-lis-ike500`,
+      {
+        loadBalancerArn: nlb.arn,
+        port: 500,
+        protocol: "UDP",
+        defaultActions: [{ type: "forward", targetGroupArn: tgIke500.arn }],
+      },
+      { parent: this }
+    );
+
+    new aws.lb.Listener(
+      `${name}-lis-ike4500`,
+      {
+        loadBalancerArn: nlb.arn,
+        port: 4500,
+        protocol: "UDP",
+        defaultActions: [{ type: "forward", targetGroupArn: tgIke4500.arn }],
       },
       { parent: this }
     );
@@ -191,6 +278,9 @@ runcmd:
     aws ecr get-login-password --region ${regionName} | docker login --username AWS --password-stdin ${accountId}.dkr.ecr.${regionName}.amazonaws.com
     INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
     ASG_NAME=$(aws autoscaling describe-auto-scaling-instances --instance-ids $INSTANCE_ID --query 'AutoScalingInstances[0].AutoScalingGroupName' --output text || echo "unknown")
+    # Enable IP forwarding and NAT on host for VPN traffic
+    sysctl -w net.ipv4.ip_forward=1
+    iptables -t nat -C POSTROUTING -o eth0 -j MASQUERADE || iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
     docker pull ${args.imageUri}
     mkdir -p /dev/net || true
     if [ ! -c /dev/net/tun ]; then
@@ -201,6 +291,7 @@ runcmd:
       --cap-add=NET_ADMIN \
       --device /dev/net/tun:/dev/net/tun \
       -e LISTEN_UDP_PORT=51820 -e LISTEN_TCP_PORT=51820 -e ADMIN_PORT=8080 \
+      -e OPENVPN_PORT=1194 -e VPN_PROTOCOLS="wireguard,openvpn,ikev2" \
       -e INSTANCE_ID=$INSTANCE_ID -e ASG_NAME=$ASG_NAME -e AWS_REGION=${regionName} \
       ${args.imageUri}
 `;
@@ -240,7 +331,13 @@ runcmd:
         maxSize: args.maxInstances,
         vpcZoneIdentifiers: vpc.privateSubnetIds,
         launchTemplate: { id: lt.id, version: "$Latest" },
-        targetGroupArns: [tgUdp.arn, tgTcp.arn],
+        targetGroupArns: [
+          tgUdp.arn,
+          tgOpenvpn.arn,
+          tgIke500.arn,
+          tgIke4500.arn,
+          tgTcp.arn,
+        ],
         tags: [{ key: "Project", value: "vpnvpn", propagateAtLaunch: true }],
       },
       { parent: this }
