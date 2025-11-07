@@ -1,3 +1,6 @@
+import { requirePaidUser } from "@/lib/requirePaidUser";
+import { redirect } from "next/navigation";
+
 type Server = {
   id: string;
   region: string;
@@ -7,16 +10,18 @@ type Server = {
 };
 
 async function getServers(): Promise<Server[]> {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL ?? ""}/api/servers`,
-    {
-      cache: "no-store",
-    }
-  );
+  const res = await fetch(`/api/servers`, { cache: "no-store" });
+  if (!res.ok) return [];
   return res.json();
 }
 
 export default async function ServersPage() {
+  const gate = await requirePaidUser();
+  if (!gate.ok) {
+    redirect(
+      gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing"
+    );
+  }
   const servers = await getServers();
   return (
     <main className="mx-auto max-w-6xl p-6">
@@ -60,3 +65,5 @@ export default async function ServersPage() {
     </main>
   );
 }
+
+

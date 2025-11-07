@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requirePaidUser } from "@/lib/requirePaidUser";
 import {
   AutoScalingClient,
   DescribeAutoScalingGroupsCommand,
@@ -18,6 +19,13 @@ type Server = {
 };
 
 export async function GET() {
+  const gate = await requirePaidUser();
+  if (!gate.ok) {
+    return NextResponse.json(
+      { error: gate.reason },
+      { status: gate.reason === "unauthenticated" ? 401 : 402 }
+    );
+  }
   try {
     const region =
       process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";

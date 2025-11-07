@@ -1,3 +1,6 @@
+import { requirePaidUser } from "@/lib/requirePaidUser";
+import { redirect } from "next/navigation";
+
 type ProxyItem = {
   proxyId: string;
   type: string;
@@ -11,10 +14,17 @@ type ProxyItem = {
 async function getProxies(): Promise<ProxyItem[]> {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
   const res = await fetch(`${base}/proxies`, { cache: "no-store" });
+  if (!res.ok) return [];
   return res.json();
 }
 
 export default async function ProxiesPage() {
+  const gate = await requirePaidUser();
+  if (!gate.ok) {
+    redirect(
+      gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing"
+    );
+  }
   const proxies = await getProxies();
   return (
     <main className="mx-auto max-w-6xl p-6">
@@ -56,3 +66,5 @@ export default async function ProxiesPage() {
     </main>
   );
 }
+
+

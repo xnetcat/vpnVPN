@@ -1,4 +1,13 @@
-export default function DashboardPage() {
+import { requirePaidUser } from "@/lib/requirePaidUser";
+import { redirect } from "next/navigation";
+
+export default async function DashboardPage() {
+  const gate = await requirePaidUser();
+  if (!gate.ok) {
+    redirect(
+      gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing"
+    );
+  }
   return (
     <main className="mx-auto max-w-6xl p-6">
       <h1 className="text-2xl font-semibold mb-4">Dashboard</h1>
@@ -19,3 +28,5 @@ export default function DashboardPage() {
     </main>
   );
 }
+
+

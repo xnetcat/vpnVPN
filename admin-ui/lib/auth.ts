@@ -1,0 +1,69 @@
+import { PrismaAdapter } from "@auth/prisma-adapter";
+import type { NextAuthOptions } from "next-auth";
+import GitHubProvider from "next-auth/providers/github";
+import GoogleProvider from "next-auth/providers/google";
+import { getServerSession } from "next-auth";
+import { prisma } from "@/lib/prisma";
+import { stripe } from "@/lib/stripe";
+
+export const authOptions: NextAuthOptions = {
+  adapter: PrismaAdapter(prisma),
+  providers: [
+    GitHubProvider({
+      clientId: process.env.GITHUB_ID || "",
+      clientSecret: process.env.GITHUB_SECRET || "",
+      allowDangerousEmailAccountLinking: true,
+    }),
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID || "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+      allowDangerousEmailAccountLinking: true,
+    }),
+  ],
+  session: { strategy: "jwt" },
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = (user as any).id;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user && token) {
+        (session.user as any).id = token.id ?? token.sub;
+      }
+      return session;
+    },
+  },
+  events: {
+    // When a user is created, ensure a Stripe Customer exists and is linked.
+    async createUser({ user }) {
+      try {
+        const existing = await prisma.user.findUnique({
+          where: { id: user.id },
+        });
+        if (!existing) return;
+        if (existing.stripeCustomerId) return;
+        if (!process.env.STRIPE_SECRET_KEY) return;
+        const customer = await stripe.customers.create({
+          email: existing.email ?? undefined,
+          name: existing.name ?? undefined,
+          metadata: { userId: existing.id },
+        });
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: { stripeCustomerId: customer.id },
+        });
+      } catch (err) {
+        console.error("createUser event error", err);
+      }
+    },
+  },
+  pages: {
+    signIn: "/api/auth/signin",
+  },
+  secret: process.env.NEXTAUTH_SECRET,
+};
+
+// NextAuth route handler factory (for app router)
+export const getSession = () => getServerSession(authOptions);
