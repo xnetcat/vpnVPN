@@ -23,6 +23,7 @@ impl AppConfig {
             .set_default("server.allowed_ips", vec!["0.0.0.0/0", "::/0"])?
             .set_default("server.peer_config_base_path", "/var/lib/vpnvpn/peers")?
             .set_default("server.state_sync_interval_secs", 10)?
+            .set_default("server.control_plane_url", "http://localhost:8080")?
             .set_default("admin.bind_address", "0.0.0.0")?
             .set_default("admin.port", 8080)?
             .set_default("admin.jwt_issuer", "vpnvpn")?
@@ -64,6 +65,7 @@ pub struct ServerConfig {
     pub wg_command: String,
     pub peer_config_base_path: String,
     pub state_sync_interval_secs: u64,
+    pub control_plane_url: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

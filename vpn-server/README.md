@@ -1,15 +1,56 @@
-vpn-server (Rust)
+# VPN Server
 
-- Exposes `/health` and `/metrics` on `ADMIN_PORT` (default 8080)
-- Listens on UDP 51820 and TCP 51820 as stubs
-- Built statically for Linux (musl)
+High-performance VPN server written in Rust, supporting WireGuard, OpenVPN, and IKEv2.
 
-Env vars:
+## Supported Platforms
 
-- `LISTEN_UDP_PORT` (default 51820)
-- `LISTEN_TCP_PORT` (default 51820)
-- `ADMIN_PORT` (default 8080)
-- `INSTANCE_ID` (EC2 metadata, used for CloudWatch metrics)
-- `ASG_NAME` (Auto Scaling Group name, used for metrics dimensions)
-- `METRICS_INTERVAL_SECONDS` (optional publishing interval override)
-- `DISABLE_CLOUDWATCH_METRICS` (set to `1` to disable CloudWatch publishing locally)
+| Platform | Support Status | Requirements |
+|----------|---------------|--------------|
+| **Linux** | ✅ First-class | Kernel WireGuard or `wireguard-go` |
+| **macOS** | ✅ Supported | `brew install wireguard-tools` |
+| **Windows** | ⚠️ Beta | Requires [WireGuard for Windows](https://www.wireguard.com/install/) |
+
+## Prerequisites
+
+### Linux (Debian/Ubuntu)
+```bash
+sudo apt update
+sudo apt install wireguard openvpn iproute2
+```
+
+### macOS
+```bash
+brew install wireguard-tools openvpn
+# Note: Userspace wireguard-go (utun) is used.
+```
+
+### Windows
+1. Download and install [WireGuard for Windows](https://www.wireguard.com/install/).
+2. Ensure `wg.exe` or `wireguard.exe` is in your PATH.
+3. Install [OpenVPN Connect](https://openvpn.net/client-connect-vpn-for-windows/) if using OpenVPN.
+
+## Running
+
+```bash
+cargo run --release -- --listen-port 51820
+```
+
+## Architecture
+
+The server uses a modular backend system:
+- **WireGuard**:
+  - **Linux**: Uses kernel module if available, falls back to `wireguard-go`.
+  - **macOS**: Uses `wireguard-go` (userspace).
+  - **Windows**: Uses `wireguard.exe` service wrapper.
+
+## Configuration
+
+Environment variables:
+- `API_URL`: Control Plane URL (e.g., `https://api.vpn.com`)
+- `VPN_TOKEN`: Registration token.
+- `VPN_PROTOCOLS`: Comma-separated list (default: `wireguard,openvpn,ikev2`).
+
+## Cross-Platform Notes
+
+- On **Windows**, the server should be run with **Administrator privileges** to manage network interfaces and services.
+- On **macOS/Linux**, `sudo` is generally required to manipulate `utun`/`tun` devices.

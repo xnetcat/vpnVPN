@@ -42,6 +42,9 @@ pub trait VpnBackend: Send + Sync {
     fn apply_peers(&self, _peers: &[PeerSpec]) -> Result<()> {
         Ok(())
     }
+    fn public_key(&self) -> Option<String> {
+        None
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -58,12 +61,12 @@ pub struct VpnNode {
 }
 
 impl VpnNode {
-    pub fn new(enabled: &[VpnProtocol]) -> Result<Self> {
+    pub fn new(enabled: &[VpnProtocol], listen_port: u16) -> Result<Self> {
         let mut backends: Vec<Arc<dyn VpnBackend>> = Vec::new();
         for proto in enabled {
             match proto {
                 VpnProtocol::WireGuard => {
-                    backends.push(Arc::new(wireguard::WireGuardBackend::new()?));
+                    backends.push(Arc::new(wireguard::WireGuardBackend::new(listen_port)?));
                 }
                 VpnProtocol::OpenVpn => {
                     backends.push(Arc::new(openvpn::OpenVpnBackend::new()?));
@@ -97,8 +100,22 @@ impl VpnNode {
             .filter_map(|b| b.status().ok())
             .collect()
     }
+
+    pub fn apply_peers(&self, peers: &[PeerSpec]) -> Result<()> {
+        for b in &self.backends {
+            b.apply_peers(peers)?;
+        }
+        Ok(())
+    }
+
+    pub fn get_public_key(&self) -> Option<String> {
+        for b in &self.backends {
+            if b.protocol() == VpnProtocol::WireGuard {
+                return b.public_key();
+            }
+        }
+        None
+    }
 }
 
 pub static VPN_NODE: OnceCell<Arc<VpnNode>> = OnceCell::new();
-
-

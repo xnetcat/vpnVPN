@@ -1,22 +1,62 @@
 use axum::{routing::get, Router};
+use clap::Parser;
 use std::{env, net::SocketAddr};
 use tokio::net::TcpListener;
 use tokio::signal;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 mod admin;
 mod metrics;
 mod vpn;
 
+#[derive(Parser, Debug, Clone)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    /// Control Plane API URL
+    #[arg(long, env = "API_URL")]
+    api_url: String,
+
+    /// Authentication Token for Control Plane
+    #[arg(long, env = "VPN_TOKEN")]
+    token: String,
+
+    /// Port for the VPN server to listen on (UDP)
+    #[arg(long, env = "LISTEN_UDP_PORT", default_value_t = 51820)]
+    listen_port: u16,
+
+    /// Admin API port
+    #[arg(long, env = "ADMIN_PORT", default_value_t = 8080)]
+    admin_port: u16,
+}
+
 #[tokio::main]
 async fn main() {
     let filter_layer = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new("info"))
         .unwrap();
-    tracing_subscriber::fmt().with_env_filter(filter_layer).with_target(false).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(filter_layer)
+        .with_target(false)
+        .init();
 
-    let admin_port: u16 = env::var("ADMIN_PORT").ok().and_then(|s| s.parse().ok()).unwrap_or(8080);
+    let args = Cli::parse();
+    info!(
+        api_url = %args.api_url,
+        listen_port = args.listen_port,
+        admin_port = args.admin_port,
+        "starting_vpn_server"
+    );
+
+    // Check system dependencies
+    let nm = crate::net::os::get_network_manager();
+    if let Err(e) = nm.check_dependencies() {
+        error!(error = ?e, "missing_dependencies");
+        // In a real scenario we might want to exit, but for now we log error
+        // and might fail later when trying to start backends
+        std::process::exit(1);
+    }
+    info!("system_dependencies_check_passed");
 
     // Initialize VPN backends
     let protos_env = env::var("VPN_PROTOCOLS").unwrap_or_else(|_| "wireguard,openvpn,ikev2".into());
@@ -30,9 +70,57 @@ async fn main() {
             _ => None,
         })
         .collect();
-    let node = vpn::VpnNode::new(&enabled).expect("vpn node init");
+
+    let node = vpn::VpnNode::new(&enabled, args.listen_port).expect("vpn node init");
     node.start_all();
-    let _ = vpn::VPN_NODE.set(std::sync::Arc::new(node));
+    let node_arc = std::sync::Arc::new(node);
+    let _ = vpn::VPN_NODE.set(node_arc.clone());
+
+    // Client initialization
+    let cp_client = std::sync::Arc::new(crate::client::ControlPlaneClient::new(
+        args.api_url.clone(),
+        args.token.clone(),
+    ));
+
+    // Registration
+    if let Some(pubkey) = node_arc.get_public_key() {
+        let client = cp_client.clone();
+        let listen_port = args.listen_port;
+        tokio::spawn(async move {
+            // Simple retry loop for registration
+            loop {
+                match client.register(&pubkey, listen_port).await {
+                    Ok(_) => break,
+                    Err(e) => {
+                        error!(error = ?e, "registration_failed_retrying");
+                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    }
+                }
+            }
+        });
+    } else {
+        warn!("no_public_key_found_skipping_registration");
+    }
+
+    // Peer Sync Loop
+    let sync_node = node_arc.clone();
+    let sync_client = cp_client.clone();
+    tokio::spawn(async move {
+        loop {
+            // Initial delay and interval
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            
+            match sync_client.fetch_peers().await {
+                Ok(peers) => {
+                    info!(count = peers.len(), "applying_peers");
+                    if let Err(e) = sync_node.apply_peers(&peers) {
+                        error!(error = ?e, "apply_peers_failed");
+                    }
+                }
+                Err(e) => error!(error = ?e, "peer_sync_request_failed"),
+            }
+        }
+    });
 
     // Periodic sampler to update metrics
     tokio::spawn(async move {
@@ -56,9 +144,9 @@ async fn main() {
 
     metrics::cloudwatch::start_publisher_task().await;
 
-    let admin_server = tokio::spawn(run_admin(admin_port));
+    let admin_server = tokio::spawn(run_admin(args.admin_port));
 
-    info!(admin_port, "server_started");
+    info!(port = args.admin_port, "admin_server_started");
 
     tokio::select! {
         _ = signal::ctrl_c() => {
@@ -98,5 +186,3 @@ async fn run_admin(port: u16) {
         .await
         .ok();
 }
-
-
