@@ -1,163 +1,163 @@
-## vpnVPN — Project Documentation and Specification
+# vpnVPN — Project Documentation and Specification
 
-### 1. Executive summary
+## 1. Executive Summary
 
-vpnVPN is a VPN SaaS built on AWS and Vercel. It provides a Rust-based VPN data plane deployed on EC2 with autoscaling behind an NLB, a control plane on AWS (API Gateway + Lambda + DynamoDB), and an admin dashboard on Vercel (Next.js + TypeScript). Infrastructure is fully expressed as code with Pulumi (TypeScript). CI/CD uses GitHub Actions to build images and deploy infra.
+vpnVPN is a privacy-focused, verified-data-flow VPN SaaS platform. It provides a complete solution for selling and managing VPN access, featuring a modern frontend for users and admins, a robust control plane, and autonomous VPN server nodes that can run on any infrastructure (EC2, VPS, bare metal).
 
-### 2. Scope and goals
+Key Pillars:
 
-- End users: consumers, SMBs, enterprise; provide desktop/mobile/CLI clients over time.
-- Protocols: modern secure protocols (WireGuard, OpenVPN, IKEv2) planned; server scaffold is ready for TUN/TAP and metrics.
-- Regions: user-selectable; multi-region via per-region Pulumi stacks.
-- Billing/auth: subscriptions (Stripe), trials, usage metering; auth via email/password, OAuth, SSO (subsequent phases).
-- Admin: dashboard with server list, proxy pool, and resource monitoring.
-- Cloud: AWS backend only; Vercel for the admin UI.
+- **Privacy & Security:** No traffic logging, strong encryption (WireGuard, OpenVPN, IKEv2), verifiable data flow.
+- **Universal Deployment:** VPN nodes are infrastructure-agnostic and self-registering.
+- **User Experience:** Seamless frontend for purchasing subscriptions and managing connections.
+- **Transparency:** Open-source architecture with verifiable components.
 
-### 3. Architecture overview
+## 2. Architecture Overview
 
-- Admin UI (Vercel): Next.js App Router, TailwindCSS.
-- Control plane (AWS):
-  - API: API Gateway HTTP + Lambda for endpoints like GET /proxies.
-  - Proxy pool: EventBridge schedule → Lambda scraper → DynamoDB table.
-  - Observability: AMP (Prometheus) and AMG (Grafana).
-- Data plane (AWS):
-  - EC2 Auto Scaling Group running the Rust VPN server container with TUN/TAP.
-  - Network Load Balancer (NLB) exposes UDP 51820 (VPN) and TCP 8080 (admin/metrics).
-  - Security groups allow minimal ports; SSM Session Manager for access.
-- IaC: Pulumi TypeScript for all resources.
-- CI/CD: GitHub Actions builds Rust Docker image to ECR and deploys with Pulumi (OIDC auth).
+### 2.1 Frontend App (formerly admin-ui) -> `web-app`
 
-### 4. Data plane — Rust VPN server
+A full-stack Next.js application hosted on Vercel (or containerized).
 
-- Runtime: Docker on Amazon Linux 2 EC2 instances; started via cloud-init UserData.
-- Listeners: UDP 51820 (VPN stub), TCP 51820 (stub), admin HTTP on 8080.
-- Admin endpoints: `/health` (200 OK), `/metrics` (Prometheus text format).
-- Privileges: `NET_ADMIN`, `/dev/net/tun` device mapped; host networking; NLB forwards traffic.
-- Scaling: target-tracking on custom `ActiveSessions` CloudWatch metric emitted per node (dimension: ASG, Instance). Override target via `region:targetSessionsPerInstance` Pulumi config.
-- Future protocol work: integrate WireGuard/IKEv2/OpenVPN with X25519 handshakes and AEAD (ChaCha20-Poly1305/AES-GCM).
+- **Roles:**
+  - **Public:** Landing page, Pricing, Features, Sign-up/Login.
+  - **User:** Dashboard to view subscription status, select servers, generate VPN configs (QR code/file), view usage history.
+  - **Admin:** Secure panel to manage users, view revenue, and manage the server fleet (add/remove/monitor nodes).
+- **Tech Stack:** Next.js App Router, TailwindCSS, Prisma (PostgreSQL/SQLite for dev), NextAuth.js, Stripe (Billing).
 
-### 5. Control plane — APIs and proxy pipeline
+### 2.2 Control Plane (Backend)
 
-- API endpoints (HTTP API):
-  - GET `/proxies`: returns top proxy candidates from DynamoDB.
-  - GET `/health`: reserved for status.
-- Proxy scraper:
-  - EventBridge `rate(30 minutes)` → Lambda fetches lists, parses and writes batch records into DynamoDB with simple scoring fields.
-  - Extendable to latency checks/anonymity scoring.
+The central brain managing the fleet and users.
 
-### 6. Infrastructure as Code (Pulumi)
+- **Functions:**
+  - **Server Registry:** API for VPN nodes to register and heartbeat.
+  - **Peer Management:** Distributes allowed peer configurations to relevant VPN nodes.
+  - **Billing & Auth:** webhooks for Stripe, user session management.
+- **Infrastructure:** AWS Serverless (API Gateway + Lambda + DynamoDB) OR containerized backend (to be decided during implementation, currently AWS Serverless via Pulumi).
 
-- Global stack:
-  - ECR repository for Rust server images.
-  - Control plane: HTTP API + Lambdas + DynamoDB + EventBridge schedule.
-  - Observability: AMP + AMG workspaces.
-- Region stack:
-  - `vpnAsg` component: VPC (2 AZs), private subnets for EC2, public subnets for NLB.
-  - Security groups; NLB with UDP 51820 and TCP 8080 listeners.
-  - EC2 Launch Template with cloud-init to pull ECR image and run container.
-  - ASG with target-tracking scaling policy (CPU 40%).
+### 2.3 VPN Server (Data Plane)
 
-### 7. Autoscaling and load balancing
+A portable, autonomous Rust-based agent that manages the actual VPN protocols.
 
-- NLB distributes UDP and TCP to instances (instance target mode).
-- ASG scales on custom `ActiveSessions` CloudWatch metric published by each node (dimension: `AutoScalingGroupName`), with default target 120 sessions per instance.
-- Session stickiness is handled via NLB’s UDP/TCP forwarding; clients reconnect as needed.
+- **Capabilities:**
+  - **Self-Registration:** On startup, connects to Control Plane to register availability.
+  - **Dynamic Configuration:** Periodically fetches or receives updates for allowed peers (public keys) and applies them to WireGuard/OpenVPN interfaces.
+  - **Monitoring:** Reports health and anonymized metrics (connected session count, bandwidth) to Control Plane.
+  - **Multi-Protocol:** WireGuard (priority), OpenVPN, IKEv2.
+- **Deployment:** Docker container or binary. Runs on EC2, VPS (DigitalOcean, Hetzner), or home servers.
+- **Configuration:** configured via CLI arguments (no .env files).
 
-### 8. Proxy scraping and obfuscation
+## 3. Technical Specifications
 
-- Built-in scraper (Lambda) populates DynamoDB with proxy candidates.
-- Admin can view proxies (UI page). Future: allow enable/disable sources, blacklisting.
-- Obfuscation transport roadmap: TLS-wrapping, udp2raw, obfs4; optional pre/post-VPN hops.
+### 3.1 Privacy & Verification
 
-### 9. Security and key management
+- **No Logging:** Server configuration must explicitly disable traffic logging.
+- **Minimal Metadata:** Only track active session count and aggregate bandwidth for billing/fair-use limits. No IP logging.
+- **Encryption:**
+  - WireGuard: ChaCha20-Poly1305.
+  - OpenVPN: AES-256-GCM.
 
-- EC2 instance role with least privilege (ECR read-only, SSM Core, CloudWatch agent policy).
-- No public SSH; use SSM Session Manager.
-- Image scanning on push.
-- Secrets in AWS Secrets Manager + KMS; Pulumi references ARNs (no plaintext secrets).
+### 3.2 Data Model (Draft)
 
-### 10. Data model
+- **User:** `id`, `email`, `subscriptionStatus`, `plan`.
+- **Device/Peer:** `id`, `userId`, `publicKey`, `allowedIPs`.
+- **Server:** `id`, `region`, `ipAddress`, `load`, `status`, `protocols`.
 
-- DynamoDB `proxies` table:
-  - PK: `proxyId` (S)
-  - Attributes: `type`, `ip`, `port`, `country`, `latency`, `score`, `lastValidated`.
+### 3.3 VPN Server Logic
 
-### 11. Observability and alerting
+The Rust server is the critical component for enforcement.
 
-- Rust server exposes Prometheus metrics at `/metrics` (e.g., sessions, bytes).
-- CloudWatch publisher emits `ActiveSessions` and `BytesSent` each minute for autoscaling and dashboards.
-- AMP workspace for ingestion; AMG workspace for dashboards.
-- CloudWatch Logs for Lambda/API Gateway; Event logs for scraper.
-- Future alerts: node crash/restart, 5xx spikes, scaling anomalies.
+1.  **Startup:** Parse CLI args (`--api-url`, `--token`, `--public-ip`).
+2.  **Register:** POST `/server/register` to Control Plane.
+3.  **Loop:**
+    - Heartbeat (every 10s).
+    - Fetch Peers (every 30s or via push): Get list of `{ public_key, allowed_ip }` for this node.
+    - **Sync:** Update WireGuard interface peers to match the list exactly (remove revoked, add new).
+    - **Metrics:** Collect bytes sent/received (for user quotas) and report to API.
 
-### 12. Admin dashboard (Next.js on Vercel)
+### 3.4 Infrastructure as Code
 
-- Pages:
-  - Dashboard: overall status cards (placeholder values now).
-  - Servers: list of nodes (mocked for now; wire to control plane later).
-  - Proxies: fetch from control-plane `/proxies` using `NEXT_PUBLIC_API_BASE_URL`.
-- Styling: Tailwind; accessible markup; responsive grid for cards/tables.
+- **Pulumi (TypeScript):**
+  - **Global:** Control Plane resources (DynamoDB, API Gateway, ECR).
+  - **Region (optional):** AWS-specific auto-scaling groups (legacy support, moving towards agnostic nodes).
 
-### 13. Billing, auth and entitlements (roadmap)
+## 4. System Architecture & Data Flow
 
-- Billing: Stripe (subscriptions, trials, usage metering via usage records).
-- Auth: email/password, OAuth providers, SSO (SAML/OIDC) for admin.
-- Entitlements: plan-based policy enforcement in control plane when issuing configs.
+```mermaid
+sequenceDiagram
+    participant U as User (Browser)
+    participant F as Web App (Next.js)
+    participant DB as Postgres (User Data)
+    participant S as Stripe
+    participant CP as Control Plane API (Lambda/DynamoDB)
+    participant VPN as VPN Server (Rust)
+    participant WG as WireGuard Interface
 
-### 14. Testing and local development
+    Note over U, S: **1. User Subscription Flow**
+    U->>F: Sign Up / Login
+    U->>F: Purchase Subscription
+    F->>S: Create Checkout Session
+    S-->>U: Redirect to Payment
+    U->>S: Complete Payment
+    S->>F: Webhook (subscription.created)
+    F->>DB: Update User (active=true)
 
-- Local AWS: LocalStack via `local/compose.yaml` for control-plane (DynamoDB, API GW, Lambda, etc.).
-  - Limitation: EC2/NLB not supported in LocalStack community; data plane testing requires real AWS.
-- Admin UI: `cd admin-ui && pnpm i && pnpm dev`; set `NEXT_PUBLIC_API_BASE_URL`.
-- Rust server: `cd vpn-server && cargo build --release --target x86_64-unknown-linux-musl`.
-- Infra: `cd infra/pulumi && npm i && pulumi login` then `pulumi up -s global` and `pulumi up -s region-us-east-1`.
+    Note over U, VPN: **2. Peer Provisioning Flow**
+    U->>F: Dashboard -> "Add Device"
+    F->>F: Generate Client Keypair (JS)
+    F->>CP: POST /peers { publicKey, userId }
+    CP->>DB: Store Peer (dynamo)
+    F-->>U: Download .conf / QR Code
 
-### 15. CI/CD
+    Note over VPN, CP: **3. VPN Server Registration & Sync**
+    VPN->>VPN: Startup (CLI Args)
+    VPN->>CP: POST /server/register { ip, pubKey }
+    CP->>DB: Update Server Status (Online)
 
-- Workflow 1: Build and push Rust server image to ECR, tag `sha-<commit>` (OIDC role).
-- Workflow 2: Pulumi deploy global then region stack; sets `region:imageTag` to the commit SHA tag.
-- Rollouts: new ASG instances pull the new tag; old instances drain via NLB as they terminate.
+    loop Every 30s
+        VPN->>CP: GET /server/peers
+        CP->>DB: Fetch Allowed Peers for Server
+        CP-->>VPN: List [ { pubKey, allowedIP } ... ]
+        VPN->>WG: Apply Diff (Add new, Remove old)
+    end
 
-### 16. Runbooks
+    Note over VPN, CP: **4. Monitoring & Usage**
+    loop Every 1m
+        VPN->>WG: Collect Stats (Bytes, Sessions)
+        VPN->>CP: POST /server/heartbeat { stats }
+        CP->>DB: Update Metrics
+    end
 
-- Replace/upgrade nodes: push new commit → CI builds → deploy region stack with new tag.
-- Node degraded: increase desired count; terminate unhealthy instance after replacement is healthy.
-- Proxy pool stale: check scraper logs; trigger Lambda manually; adjust sources.
+    Note over U, WG: **5. Connection**
+    U->>WG: Connect (UDP 51820)
+    WG->>WG: Handshake (Authenticated by Public Key)
+    WG-->>U: Traffic Flowing
+```
 
-### 17. Compliance and privacy (initial posture)
+## 5. Development Plan
 
-- Data minimization: avoid PII in logs; short retention for operational logs.
-- Path to SOC2/GDPR readiness via audit logs, access control, data retention policies.
+### 5.1 Phase 1: Foundation & Rework
 
-### 18. Environments and configuration
+- Convert `admin-ui` to `web-app`.
+- Define strict API contract between Control Plane and VPN Server.
+- Implement "Self-Registration" logic in Rust server.
 
-- Pulumi stacks:
-  - `global`: ECR, control plane, observability.
-  - `region-us-east-1`: VPC, NLB, EC2 ASG.
-- Config keys (examples):
-  - `global:ecrRepoName = vpnvpn/rust-server`
-  - `region:imageTag = sha-<commit>`
-  - `region:minInstances = 1`, `region:maxInstances = 3`
-  - `region:instanceType = t3.medium`
-  - `region:adminCidr = 0.0.0.0/0` (tighten to office/VPN ranges in prod)
+### 5.2 Phase 2: Frontend & Billing
 
-### 19. Getting started
+- Implement User Dashboard.
+- Integrate Stripe Checkout.
+- Implement Admin Panel for server management.
 
-1. CI secrets: set `AWS_REGION`, `AWS_ACCOUNT_ID`, `AWS_ROLE_TO_ASSUME`, `PULUMI_ACCESS_TOKEN`, optional `ECR_REPO_NAME`.
-2. First deploy:
-   - Global: `cd infra/pulumi && npm i && pulumi up -s global`.
-   - Build and push the image (push to main or run the workflow).
-   - Region: `pulumi config set region:imageTag sha-<commit> -s region-us-east-1 && pulumi up -s region-us-east-1`.
-3. Admin UI: `cd admin-ui && pnpm i && pnpm dev`; set `NEXT_PUBLIC_API_BASE_URL` to Pulumi `apiUrl` output.
-4. Local metrics: set `DISABLE_CLOUDWATCH_METRICS=1` when running the Rust server outside AWS to avoid publishing attempts.
+### 5.3 Phase 3: VPN Core Enhancements
 
-### 20. VPS support (optional)
+- Implement `apply_peers` for WireGuard in Rust.
+- Add OpenVPN support.
+- Add "No Logging" verification tests.
 
-- The Rust server container can run on third-party VPS: install Docker, create `/dev/net/tun`, run with `--cap-add=NET_ADMIN --device /dev/net/tun --network host`, map ports 51820/udp and 8080/tcp. You will not have autoscaling/NLB; use DNS + health checks external to AWS.
+### 5.4 Phase 4: Local Dev & Testing
 
-### 21. Roadmap next steps
+- `docker-compose` setup mimicking the full stack.
+- Mock Control Plane for local VPN server testing.
 
-- Protocol integration (WireGuard/IKEv2/OpenVPN) and client distro configs.
-- Custom CloudWatch metric (`ActiveSessions`) and scaling based on it.
-- AuthN/AuthZ integration for admin UI; Stripe for billing.
-- Multi-region scaling and routing (Route53 latency-based, Global Accelerator optional).
+## 6. Operational Runbooks
+
+- **Adding a Node:** Simply spin up a VPS, run the Docker container with the correct API token. It appears in the Admin Panel. Admin approves it (optional security step) and it starts accepting traffic.
+- **User Ban:** Revoke subscription in Stripe -> Webhook updates DB -> Server fetches new peer list (user missing) -> VPN access cut instantly.
