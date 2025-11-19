@@ -1,5 +1,6 @@
 import { requirePaidUser } from "@/lib/requirePaidUser";
 import { redirect } from "next/navigation";
+import AddDeviceModal from "@/components/AddDeviceModal";
 
 export default async function DashboardPage() {
   const gate = await requirePaidUser();
@@ -10,7 +11,10 @@ export default async function DashboardPage() {
   }
   return (
     <main className="mx-auto max-w-6xl p-6">
-      <h1 className="text-2xl font-semibold mb-4">Dashboard</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
+        <AddDeviceModal />
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="rounded-lg border bg-white p-4 shadow-sm">
           <div className="text-sm text-gray-500">Active Sessions</div>
@@ -28,7 +32,3 @@ export default async function DashboardPage() {
     </main>
   );
 }
-
-
-
-

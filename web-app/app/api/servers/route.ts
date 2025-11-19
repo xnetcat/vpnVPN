@@ -3,7 +3,7 @@ import { requirePaidUser } from "@/lib/requirePaidUser";
 import {
   AutoScalingClient,
   DescribeAutoScalingGroupsCommand,
-} from "@aws-sdk/client-autoscaling";
+} from "@aws-sdk/client-auto-scaling";
 import {
   CloudWatchClient,
   GetMetricDataCommand,

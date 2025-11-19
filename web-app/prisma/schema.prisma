@@ -20,6 +20,8 @@ model User {
   accounts          Account[]
   sessions          Session[]
   subscriptions     Subscription[]
+  notificationPreferences NotificationPreferences?
+  devices           Device[]
 
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
@@ -82,5 +84,29 @@ model Subscription {
   @@index([userId])
 }
 
+model NotificationPreferences {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  marketing     Boolean  @default(true)
+  transactional Boolean  @default(true)
+  security      Boolean  @default(true)
 
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
 
+model Device {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name      String
+  publicKey String   @unique
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
