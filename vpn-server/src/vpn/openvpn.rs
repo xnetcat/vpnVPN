@@ -3,7 +3,7 @@ use anyhow::{anyhow, Context, Result};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use tracing::{info, warn};
+use tracing::info;
 
 const OVPN_DIR: &str = "/etc/openvpn";
 const OVPN_CONF: &str = "/etc/openvpn/server.conf";

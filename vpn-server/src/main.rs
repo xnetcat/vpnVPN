@@ -7,7 +7,9 @@ use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 mod admin;
+mod client;
 mod metrics;
+mod net;
 mod vpn;
 
 #[derive(Parser, Debug, Clone)]

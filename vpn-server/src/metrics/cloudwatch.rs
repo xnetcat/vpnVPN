@@ -16,7 +16,7 @@ pub async fn start_publisher_task() {
         return;
     }
 
-    let config = aws_config::load_from_env().await;
+    let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
     let client = CloudWatchClient::new(&config);
     let instance_id = env::var("INSTANCE_ID").unwrap_or_else(|_| "unknown".into());
     let asg_name = env::var("ASG_NAME").ok();

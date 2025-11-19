@@ -3,7 +3,7 @@ use anyhow::{anyhow, Context, Result};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use tracing::{info, warn};
+use tracing::info;
 
 const SWANCTL_DIR: &str = "/etc/swanctl";
 const SWANCTL_CONF: &str = "/etc/swanctl/swanctl.conf";

@@ -47,7 +47,7 @@ pub trait VpnBackend: Send + Sync {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct PeerSpec {
     pub public_key: Option<String>,
     pub preshared_key: Option<String>,

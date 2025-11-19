@@ -59,6 +59,13 @@ impl NetworkManager for PlatformNetworkManager {
     fn teardown_interface(&self, _: &str) -> Result<()> { Err(anyhow!("Unsupported OS")) }
 }
 
+// Default impl for PlatformNetworkManager if not covered by above cfgs?
+// Actually the above fallback struct satisfies it.
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+impl Default for PlatformNetworkManager {
+    fn default() -> Self { Self }
+}
+
 pub fn get_network_manager() -> Box<dyn NetworkManager> {
     Box::new(PlatformNetworkManager::default())
 }
