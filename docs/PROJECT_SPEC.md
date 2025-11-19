@@ -13,15 +13,21 @@ Key Pillars:
 
 ## 2. Architecture Overview
 
-### 2.1 Frontend App (formerly admin-ui) -> `web-app`
+### 2.1 Frontend App (`web-app`)
 
-A full-stack Next.js application hosted on Vercel (or containerized).
+A full-stack Next.js SaaS application hosted on **Vercel**.
 
 - **Roles:**
   - **Public:** Landing page, Pricing, Features, Sign-up/Login.
   - **User:** Dashboard to view subscription status, select servers, generate VPN configs (QR code/file), view usage history.
   - **Admin:** Secure panel to manage users, view revenue, and manage the server fleet (add/remove/monitor nodes).
-- **Tech Stack:** Next.js App Router, TailwindCSS, Prisma (PostgreSQL/SQLite for dev), NextAuth.js, Stripe (Billing).
+- **SaaS Features:**
+  - **Authentication:** NextAuth.js with SSO (Google, GitHub) and Magic Links.
+  - **Billing:** Stripe Subscriptions (Checkout & Portal).
+  - **Notifications:** Transactional emails (Welcome, Invoice, Usage Limits) via Resend/SendGrid.
+  - **Entitlements:** Role-based access control (RBAC) and subscription-gated features.
+- **Tech Stack:** Next.js 14+ App Router, TailwindCSS, Prisma (PostgreSQL), NextAuth.js, Stripe, Recharts.
+- **Deployment:** Vercel (Middleware, Serverless Functions).
 
 ### 2.2 Control Plane (Backend)
 
@@ -30,8 +36,8 @@ The central brain managing the fleet and users.
 - **Functions:**
   - **Server Registry:** API for VPN nodes to register and heartbeat.
   - **Peer Management:** Distributes allowed peer configurations to relevant VPN nodes.
-  - **Billing & Auth:** webhooks for Stripe, user session management.
-- **Infrastructure:** AWS Serverless (API Gateway + Lambda + DynamoDB) OR containerized backend (to be decided during implementation, currently AWS Serverless via Pulumi).
+  - **Billing & Auth:** Webhooks for Stripe, user session management.
+- **Infrastructure:** **AWS Serverless** (API Gateway + Lambda + DynamoDB). Deployed via Pulumi.
 
 ### 2.3 VPN Server (Data Plane)
 
@@ -57,7 +63,7 @@ A portable, autonomous Rust-based agent that manages the actual VPN protocols.
 
 ### 3.2 Data Model (Draft)
 
-- **User:** `id`, `email`, `subscriptionStatus`, `plan`.
+- **User:** `id`, `email`, `subscriptionStatus`, `plan`, `stripeCustomerId`.
 - **Device/Peer:** `id`, `userId`, `publicKey`, `allowedIPs`.
 - **Server:** `id`, `region`, `ipAddress`, `load`, `status`, `protocols`.
 
@@ -84,21 +90,22 @@ The Rust server is the critical component for enforcement.
 ```mermaid
 sequenceDiagram
     participant U as User (Browser)
-    participant F as Web App (Next.js)
+    participant F as Web App (Next.js on Vercel)
     participant DB as Postgres (User Data)
     participant S as Stripe
-    participant CP as Control Plane API (Lambda/DynamoDB)
+    participant CP as Control Plane API (AWS Lambda/DynamoDB)
     participant VPN as VPN Server (Rust)
     participant WG as WireGuard Interface
 
     Note over U, S: **1. User Subscription Flow**
-    U->>F: Sign Up / Login
+    U->>F: Sign Up / Login (SSO)
     U->>F: Purchase Subscription
     F->>S: Create Checkout Session
     S-->>U: Redirect to Payment
     U->>S: Complete Payment
     S->>F: Webhook (subscription.created)
     F->>DB: Update User (active=true)
+    F->>U: Email Notification (Welcome)
 
     Note over U, VPN: **2. Peer Provisioning Flow**
     U->>F: Dashboard -> "Add Device"
@@ -142,9 +149,9 @@ sequenceDiagram
 
 ### 5.2 Phase 2: Frontend & Billing
 
-- Implement User Dashboard.
-- Integrate Stripe Checkout.
+- Implement User Dashboard with SSO and Stripe.
 - Implement Admin Panel for server management.
+- Add transactional emails.
 
 ### 5.3 Phase 3: VPN Core Enhancements
 
