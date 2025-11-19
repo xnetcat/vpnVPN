@@ -13,26 +13,23 @@
 _These tasks block multiple streams of work._
 
 - [ ] **API Contract Finalization**
-  - [ ] Define JSON Schema for `POST /server/register` (Input/Output).
-  - [ ] Define JSON Schema for `GET /server/peers` (Response format).
-  - [ ] Define Authentication Method for Nodes (e.g., Bearer Token vs. mTLS).
-- [ ] **Shared Secrets / Environment**
-  - [ ] Define mechanism for sharing `STRIPE_SECRET_KEY` between Frontend and Local Mock.
-  - [ ] Define `API_TOKEN` generation strategy for VPN Nodes.
+  - [ ] Formalize request/response JSON for `POST /server/register`, `POST /server/heartbeat`, `GET /server/peers`, `POST /peers`, and `/proxies` endpoints.
+  - [ ] Define authentication for nodes (signed tokens from `vpnTokens`) and for web-app calls (internal key or signed JWT).
+- [ ] **Secrets / Environment**
+  - [ ] Document how Stripe, email provider, and control-plane secrets are stored in Vercel / AWS (no secrets in git).
+  - [ ] Document how `vpn-server` is configured via CLI + env (no `.env` files required).
 
 ---
 
 ## 1. Frontend (`web-app`)
 
-### 1.1. Refactoring & Setup
+### 1.1. Foundation & Dependencies
 
-- [ ] **Rename Project Root**
-  - [ ] Rename folder `admin-ui` -> `web-app`.
-  - [ ] Update `package.json` name to `@vpnvpn/web`.
-  - [ ] Update `tsconfig.json` paths if necessary.
+- [ ] **Project Identity**
+  - [ ] Ensure project name is `@vpnvpn/web` and references to `admin-ui` are removed from docs and configs.
 - [ ] **Dependency Update**
   - [ ] Audit `package.json` for outdated deps.
-  - [ ] Ensure `next`, `react`, `tailwindcss` are latest stable.
+  - [ ] Ensure `next`, `react`, `tailwindcss`, Prisma, and Auth.js are on latest stable versions.
 
 ### 1.2. Authentication & Database
 
@@ -70,7 +67,7 @@ _These tasks block multiple streams of work._
 - [ ] **VPN Configuration Flow**
   - [ ] **"Add Device" Button:** Opens Modal.
   - [ ] **Client-Side Key Gen:** Use JS lib (e.g. `tweetnacl` or `sodium-plus`) to generate WireGuard Keypair in browser.
-  - [ ] **API Registration:** Call `POST /api/peers` (Proxy to Control Plane) with `publicKey`.
+  - [ ] **API Registration:** Call `POST /api/peers` (proxy to control plane) with `publicKey` and desired region/server.
   - [ ] **Config Download:** Generate `.conf` file string client-side and trigger download.
   - [ ] **QR Code:** Render QR code of the config for mobile scanning.
 - [ ] **Server List**
@@ -79,12 +76,16 @@ _These tasks block multiple streams of work._
 
 ### 1.5. Admin Panel (`/admin`)
 
-- [ ] **Migration**
-  - [ ] Move existing admin pages to `/admin` subpath.
+- [ ] **Admin Scope & Security**
+  - [ ] Add admin flag/role on `User` model and protect `/admin` routes based on it.
+  - [ ] Ensure all admin pages require paid + admin access.
 - [ ] **Fleet Monitor**
-  - [ ] Fetch real data from Control Plane `GET /servers` (admin view).
-  - [ ] Show table of Nodes: IP, Version, Last Heartbeat, Active Sessions.
-  - [ ] Action: "Decommission" (Remove from DB).
+  - [ ] Fetch node data from control-plane (DynamoDB-backed) instead of EC2-only view.
+  - [ ] Show table of nodes: id, region, status, last heartbeat, active sessions.
+  - [ ] Actions: decommission node (mark offline) and view node metadata.
+- [ ] **Token Management**
+  - [ ] Admin can create and revoke node registration tokens (backed by `vpnTokens`).
+  - [ ] UI shows which nodes registered with which token.
 
 ---
 
@@ -99,24 +100,27 @@ _These tasks block multiple streams of work._
   - [ ] Define HTTP API (v2).
   - [ ] Setup CORS (Allow `web-app` domain).
 
-### 2.2. Lambda Functions (Node.js)
+### 2.2. Lambda Functions (Node.js, container-based)
 
+- [ ] **Containerization**
+  - [ ] Extract each Lambda into a dedicated TypeScript handler file.
+  - [ ] Add Dockerfiles to build Node 20 images for these handlers and push to ECR.
+  - [ ] Replace `CallbackFunction` with `aws.lambda.Function` using `packageType: "Image"`.
 - [ ] **Node Registration (`POST /server/register`)**
-  - [ ] Validate `token` (Shared Secret or similar).
-  - [ ] Write/Update item in `VpnServers` table.
-  - [ ] Return `200 OK`.
+  - [ ] Validate bearer token against `vpnTokens`.
+  - [ ] Write/update item in `vpnServers` table.
+  - [ ] Return `200 OK` with minimal metadata.
 - [ ] **Heartbeat (`POST /server/heartbeat`)**
-  - [ ] Input: `{ id, stats: { sessions, bytes } }`.
-  - [ ] Update `lastHeartbeat` and `metrics` in `VpnServers`.
+  - [ ] Input: `{ id, metrics: { sessions, bytesPerProtocol } }`.
+  - [ ] Update `lastSeen` and `metrics` in `vpnServers`.
 - [ ] **Peer Sync (`GET /server/peers`)**
-  - [ ] Input: `?serverId=...` (or derived from token).
-  - [ ] Query `VpnPeers` table for all peers assigned to this server (or global).
-  - [ ] Return list: `[{ publicKey, allowedIps }]`.
+  - [ ] Authenticate node and derive `serverId`.
+  - [ ] Query `vpnPeers` for peers assigned to this server.
+  - [ ] Return list: `[{ publicKey, allowedIps, endpoint? }]`.
 - [ ] **Add Peer (`POST /peers`)**
-  - [ ] Auth: Validate JWT from Web App.
-  - [ ] Input: `{ publicKey, userId, region? }`.
-  - [ ] Write to `VpnPeers`.
-  - [ ] (Optional) Assign to specific `serverId` based on load balancing logic.
+  - [ ] Auth: internal API key or signed JWT from web-app.
+  - [ ] Input: `{ publicKey, userId, region?, allowedIps }`.
+  - [ ] Write to `vpnPeers` and assign to a server based on load-balancing policy.
 
 ---
 
@@ -124,54 +128,43 @@ _These tasks block multiple streams of work._
 
 ### 3.1. Core & CLI
 
-- [ ] **Dependencies**
-  - [ ] Add `clap` (Command Line Argument Parser).
-  - [ ] Add `reqwest` (HTTP Client).
-  - [ ] Add `wireguard-control` or similar (or wrapper around `wg` binary).
+- [ ] **CLI Shape**
+  - [ ] Implement `vpn-server run` subcommand with flags/env for `--api-url`, `--token`, `--listen-port`, and enabled protocols.
+  - [ ] Implement `vpn-server doctor` subcommand.
 - [ ] **Startup Logic**
-  - [ ] Parse args: `--api-url`, `--token`, `--listen-port`.
-  - [ ] Check for `/etc/wireguard/privatekey`. Generate if missing.
-  - [ ] Register with Control Plane (`POST /server/register`).
+  - [ ] Generate/load WireGuard key material and base config.
+  - [ ] Register with control plane (`POST /server/register`).
 
 ### 3.2. Synchronization Loop
 
 - [ ] **Peer Fetcher**
-  - [ ] Create loop (interval: 30s).
-  - [ ] HTTP GET to Control Plane for allowed peers.
+  - [ ] Create loop (interval: 30s) that calls control-plane `GET /server/peers`.
 - [ ] **Diff & Apply**
-  - [ ] Get current kernel peers (`wg show`).
-  - [ ] Compare with API list.
-  - [ ] **Add:** `wg set ... peer <KEY> allowed-ips ...`
-  - [ ] **Remove:** `wg set ... peer <KEY> remove`
-  - [ ] **Modify:** Update allowed IPs if changed.
+  - [ ] Get current peers from WireGuard/OpenVPN/IPsec.
+  - [ ] Compare with API list and add/remove/modify peers accordingly.
 
 ### 3.3. Metrics & Health
 
 - [ ] **Stats Collection**
-  - [ ] Read interface transfer stats.
-  - [ ] Count active handshakes (< 3 mins).
+  - [ ] Read interface transfer stats and active handshakes per protocol.
 - [ ] **Reporting**
-  - [ ] Send `POST /server/heartbeat` every 60s.
+  - [ ] Send `POST /server/heartbeat` every 60s and publish CloudWatch metrics.
 
 ### 3.4. Privacy & Security
 
 - [ ] **Audit Logging**
-  - [ ] Ensure _no_ traffic logs are printed to stdout.
-  - [ ] Ensure _no_ IP addresses of peers are logged.
-  - [ ] Log only operational events ("Synced X peers", "Registration successful").
+  - [ ] Ensure no traffic logs or client IPs are printed.
+  - [ ] Log only aggregate counts and operational events.
 
 ---
 
 ## 4. Local Development (`local`)
 
-### 4.1. Mock Control Plane
+### 4.1. LocalStack Control Plane
 
-- [ ] **Scaffold**
-  - [ ] Create `local/mock-api` (Express or Fastify).
-- [ ] **Endpoints**
-  - [ ] Implement `POST /server/register` (Store in variable).
-  - [ ] Implement `GET /server/peers` (Return mock list).
-  - [ ] Implement `POST /peers` (Add to mock list).
+- [ ] **Services**
+  - [ ] Run LocalStack for DynamoDB, Lambda, and API Gateway.
+  - [ ] Apply Pulumi control-plane stack against LocalStack.
 
 ### 4.2. Docker Compose
 
@@ -179,19 +172,15 @@ _These tasks block multiple streams of work._
   - [ ] Standard image, expose port 5432.
 - [ ] **Service: Web App**
   - [ ] Build context `../web-app`.
-  - [ ] Env vars pointing to local Postgres and Mock API.
-- [ ] **Service: Mock API**
-  - [ ] Build context `./mock-api`.
+  - [ ] Env vars pointing to local Postgres and LocalStack-hosted control plane.
 - [ ] **Service: VPN Node**
   - [ ] Build context `../vpn-server`.
-  - [ ] Capabilities: `NET_ADMIN`.
-  - [ ] Args: `--api-url http://mock-api:3000`.
+  - [ ] Capabilities: `NET_ADMIN`, TUN device.
+  - [ ] CLI args: `--api-url http://control-plane/...` matching LocalStack gateway.
 
 ### 4.3. Integration Testing
 
 - [ ] **Shell Script (`test-flow.sh`)**
-  - [ ] `docker-compose up -d`.
-  - [ ] `curl` to Mock API to add a test peer.
-  - [ ] Wait 30s.
-  - [ ] `docker exec vpn-node wg show` -> Grep for peer key.
-  - [ ] Assert peer exists.
+  - [ ] Bring up Docker stack.
+  - [ ] Drive a real user → subscription → device → peer registration flow via `web-app`.
+  - [ ] Wait for node sync and verify peers in WireGuard config inside container.
