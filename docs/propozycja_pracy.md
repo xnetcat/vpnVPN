@@ -49,6 +49,24 @@ Poniżej propozycja struktury pracy (rozdziały mogą zostać doprecyzowane na e
    - Modele usług typu SaaS i charakterystyka rozwiązań subskrypcyjnych w kontekście usług VPN.
    - Wymagania niefunkcjonalne systemów VPN: prywatność, brak logowania ruchu, minimalizacja metadanych, skalowalność i dostępność.
 
+   #### Tabela 1. Porównanie protokołów VPN
+
+   | Protokół  | Algorytmy / kryptografia      | Główne zalety                                            | Główne wady / ograniczenia                                       | Typowe zastosowania                                      |
+   | --------- | ----------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------- |
+   | WireGuard | ChaCha20‑Poly1305, Curve25519 | Bardzo wysoka wydajność, prosty model, mały kod źródłowy | Młodszy protokół, początkowo ograniczone wsparcie systemowe      | Nowoczesne VPN konsumenckie, urządzenia mobilne          |
+   | OpenVPN   | AES‑256‑GCM, TLS              | Dojrzały ekosystem, szerokie wsparcie klienckie          | Złożona konfiguracja, większy narzut, większa powierzchnia ataku | Korporacyjne VPN, zgodność z istniejącą infrastrukturą   |
+   | IKEv2     | AES‑GCM, Suite B              | Dobra obsługa mobilności, wbudowane wsparcie w wielu OS  | Złożoność implementacji, zależność od IPSec                      | Zdalny dostęp w środowiskach enterprise                  |
+   | IPSec     | AES‑CBC/GCM, 3DES (legacy)    | Standard dla tuneli site‑to‑site, wsparcie sprzętowe     | Bardzo złożona konfiguracja, problemy interoperacyjności         | Połączenia site‑to‑site, integracje sieci korporacyjnych |
+
+   #### Tabela 2. Technologie i biblioteki sieciowe dla serwera VPN
+
+   | Warstwa / obszar       | Technologie / biblioteki                                               | Zalety                                                        | Wady / ryzyka                                                     |
+   | ---------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------- |
+   | Interfejs protokołu    | WireGuard w jądrze Linuksa, `wireguard-go`, `boringtun`                | Wysoka wydajność, wsparcie jądra, dobrze przeanalizowany kod  | Zależność od platformy, różne poziomy dojrzałości                 |
+   | Warstwa asynchroniczna | `tokio` (Rust), `async-std`                                            | Wydajny model asynchroniczny, bogaty ekosystem                | Krzywa uczenia, złożoność debugowania                             |
+   | HTTP / API             | `hyper`, `axum`, `warp`                                                | Nowoczesne, bezpieczne biblioteki, dobra integracja z `tokio` | Mniejsza liczba gotowych „frameworkowych” rozwiązań niż w Node/Go |
+   | Integracja z `wg`      | Wywołania systemowej binarki `wg`, biblioteki typu `wireguard-control` | Prostsza integracja z istniejącą konfiguracją systemu         | Zależność od narzędzi systemowych, trudniejsza przenośność        |
+
 3. **Analiza wymagań i projekt systemu vpnVPN**
 
    - Analiza funkcjonalna: role (użytkownik, administrator), przypadki użycia (zakup subskrypcji, dodanie urządzenia, zarządzanie flotą serwerów).
@@ -62,6 +80,39 @@ Poniżej propozycja struktury pracy (rozdziały mogą zostać doprecyzowane na e
      - **AWS (Lambda + API Gateway + DynamoDB) vs alternatywy chmurowe** (GCP, Azure, self‑hosted Kubernetes) – koszty, łatwość uruchomienia, elastyczność, vendor lock‑in.
      - **Rust vs Go** jako język implementacji serwera VPN – bezpieczeństwo pamięci, ekosystem sieciowy, dostępne biblioteki VPN, łatwość wdrożenia binarek i kontenerów.
      - **Next.js vs inne frameworki frontendowe** (np. Remix, SPA oparte na React) w kontekście SEO, SSR/ISR, integracji z Vercel oraz wygody implementacji panelu SaaS.
+
+   #### Tabela 3. Porównanie narzędzi Infrastructure as Code
+
+   | Narzędzie | Model opisu                                          | Obsługiwane języki         | Zalety                                                                | Wady / ograniczenia                                                                    | Wybór w projekcie |
+   | --------- | ---------------------------------------------------- | -------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ----------------- |
+   | Pulumi    | Deklaratywno‑imperatywny (kod aplikacyjny)           | TypeScript, Go, Python, C# | Silna integracja z ekosystemem TS/JS, możliwość użycia pełnego języka | Mniejsza popularność niż Terraform, vendor‑specific CLI                                | **Tak**           |
+   | Terraform | Deklaratywny (HCL)                                   | Język domenowy (HCL)       | Bardzo szerokie wsparcie providerów, duża społeczność                 | Ograniczona ekspresyjność języka HCL, brak „prawdziwego” języka ogólnego przeznaczenia | Nie (analizowane) |
+   | AWS CDK   | Imperatywno‑deklaratywny (wrapper na CloudFormation) | TypeScript, Python, inne   | Dobre wsparcie usług AWS, integracja z CloudFormation                 | Silny vendor lock‑in, mniejsza przenośność poza AWS                                    | Nie (analizowane) |
+
+   #### Tabela 4. Porównanie platform chmurowych dla Control Plane
+
+   | Platforma                        | Zalety                                                              | Wady / ryzyka                                                 | Komentarz projektowy                            |
+   | -------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------- |
+   | AWS (Lambda + API GW + DynamoDB) | Dojrzałe usługi serverless, globalny zasięg, dobra integracja z IaC | Vendor lock‑in, złożony model cenowy                          | **Wybrana jako główna platforma Control Plane** |
+   | GCP                              | Konkurencyjne usługi data i AI, Cloud Functions                     | Mniejsze portfolio usług stricte sieciowych VPN               | Rozważana jako alternatywa                      |
+   | Azure                            | Dobra integracja z ekosystemem Microsoft                            | Złożoność konfiguracji, mniejsza popularność w środowisku OSS | Opcja dla środowisk enterprise                  |
+   | Self‑hosted Kubernetes           | Duża elastyczność, brak silnego vendor lock‑in                      | Wysoka złożoność operacyjna, utrzymanie klastra               | Odroczone jako kierunek rozwoju                 |
+
+   #### Tabela 5. Porównanie języków implementacji serwera VPN
+
+   | Język | Zalety w kontekście VPN                                | Wady / wyzwania                                      | Użycie w projekcie                             |
+   | ----- | ------------------------------------------------------ | ---------------------------------------------------- | ---------------------------------------------- |
+   | Rust  | Bezpieczeństwo pamięci, wysoka wydajność, brak GC      | Większa złożoność, bardziej stroma krzywa nauki      | **Główny język serwera VPN**                   |
+   | Go    | Prosty model współbieżności, bogaty ekosystem sieciowy | GC, mniejsza kontrola nad niskopoziomowymi aspektami | Rozważany jako alternatywa                     |
+   | C     | Maksymalna kontrola, bardzo wysoka wydajność           | Brak bezpieczeństwa pamięci, podatność na błędy      | Tylko w komponentach zewnętrznych (np. kernel) |
+
+   #### Tabela 6. Porównanie frameworków frontendowych dla panelu SaaS
+
+   | Framework / podejście | Zalety                                                                 | Wady / ograniczenia                                   | Użycie w projekcie               |
+   | --------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------- | -------------------------------- |
+   | Next.js (App Router)  | SSR/ISR, dobra integracja z Vercel, SEO, pełen full‑stack (API routes) | Dodatkowa złożoność w porównaniu do „czystego” SPA    | **Wybrany jako główny frontend** |
+   | Remix                 | Silny fokus na REST/HTTP, nowoczesny model routingu                    | Mniejszy ekosystem, gorsza integracja z obecnym kodem | Analizowany teoretycznie         |
+   | SPA (React + Vite)    | Prostota wdrożenia statycznego frontendu, duża elastyczność            | Wymaga osobnego backendu, gorsze SEO bez SSR          | Odroczone jako alternatywa       |
 
 4. **Implementacja platformy vpnVPN**
 
