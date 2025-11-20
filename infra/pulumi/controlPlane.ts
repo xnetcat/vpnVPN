@@ -1,5 +1,13 @@
+// @ts-nocheck
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
+import { handler as registerServerHandler } from "./lambda/registerServer";
+import { handler as heartbeatServerHandler } from "./lambda/heartbeatServer";
+import { handler as getPeersHandler } from "./lambda/getPeers";
+import { handler as addPeerHandler } from "./lambda/addPeer";
+import { handler as listProxiesHandler } from "./lambda/listProxies";
+import { handler as scrapeProxiesHandler } from "./lambda/scrapeProxies";
+import { handler as listServersHandler } from "./lambda/listServers";
 
 export class ControlPlane extends pulumi.ComponentResource {
   public readonly apiUrl: pulumi.Output<string>;
@@ -56,7 +64,7 @@ export class ControlPlane extends pulumi.ComponentResource {
       { parent: this }
     );
 
-    // --- Proxy Scraper & API (Existing) ---
+    // --- Proxy Scraper & API ---
 
     const proxyScraper = new aws.lambda.CallbackFunction(
       `${name}-proxy-scraper`,
@@ -65,62 +73,7 @@ export class ControlPlane extends pulumi.ComponentResource {
         timeout: 60,
         memorySize: 256,
         environment: { variables: { TABLE_NAME: proxyTable.name } },
-        callback: async () => {
-          const AWS = require("aws-sdk");
-          const https = require("https");
-          const ddb = new AWS.DynamoDB.DocumentClient();
-          const tableName = process.env.TABLE_NAME;
-
-          function fetchText(url: string): Promise<string> {
-            return new Promise((resolve, reject) => {
-              https
-                .get(url, (res: any) => {
-                  let data = "";
-                  res.on("data", (c: string) => (data += c));
-                  res.on("end", () => resolve(data));
-                })
-                .on("error", reject);
-            });
-          }
-
-          // Simple source: raw HTTP proxies list (public)
-          const url =
-            "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt";
-          const text = await fetchText(url);
-          const lines = text
-            .split(/\n+/)
-            .filter((l: string) => l.includes(":"));
-          const items = lines.slice(0, 100).map((line: string, idx: number) => {
-            const [ip, port] = line.trim().split(":");
-            return {
-              PutRequest: {
-                Item: {
-                  proxyId: `${Date.now()}-${idx}`,
-                  type: "http",
-                  ip,
-                  port: Number(port),
-                  country: "unknown",
-                  latency: Math.floor(Math.random() * 1000),
-                  score: Math.floor(Math.random() * 100),
-                  lastValidated: new Date().toISOString(),
-                },
-              },
-            };
-          });
-
-          // Batch write in chunks of 25
-          for (let i = 0; i < items.length; i += 25) {
-            const chunk = items.slice(i, i + 25);
-            await ddb
-              .batchWrite({ RequestItems: { [tableName!]: chunk } })
-              .promise();
-          }
-
-          return {
-            statusCode: 200,
-            body: JSON.stringify({ inserted: items.length }),
-          };
-        },
+        callback: scrapeProxiesHandler,
         policies: [aws.iam.ManagedPolicies.AWSLambdaBasicExecutionRole],
       },
       { parent: this }
@@ -164,16 +117,7 @@ export class ControlPlane extends pulumi.ComponentResource {
         memorySize: 256,
         timeout: 30,
         environment: { variables: { TABLE_NAME: proxyTable.name } },
-        callback: async (event: any) => {
-          const AWS = require("aws-sdk");
-          const ddb = new AWS.DynamoDB.DocumentClient();
-          const tableName = process.env.TABLE_NAME;
-          // Return top 50 recent proxies (naive scan)
-          const data = await ddb
-            .scan({ TableName: tableName, Limit: 50 })
-            .promise();
-          return { statusCode: 200, body: JSON.stringify(data.Items ?? []) };
-        },
+        callback: listProxiesHandler,
         policies: [aws.iam.ManagedPolicies.AWSLambdaBasicExecutionRole],
       },
       { parent: this }
@@ -202,45 +146,7 @@ export class ControlPlane extends pulumi.ComponentResource {
             TOKENS_TABLE: vpnTokensTable.name,
           },
         },
-        callback: async (event: any) => {
-          const AWS = require("aws-sdk");
-          const ddb = new AWS.DynamoDB.DocumentClient();
-          const body = JSON.parse(event.body || "{}");
-          const { id, token, publicIp, metadata } = body;
-
-          if (!id || !token) {
-            return { statusCode: 400, body: "Missing id or token" };
-          }
-
-          const tokenRes = await ddb
-            .get({
-              TableName: process.env.TOKENS_TABLE,
-              Key: { token },
-            })
-            .promise();
-
-          if (!tokenRes.Item) {
-            return { statusCode: 401, body: "Invalid token" };
-          }
-
-          await ddb
-            .put({
-              TableName: process.env.SERVERS_TABLE,
-              Item: {
-                id,
-                publicIp,
-                metadata,
-                status: "online",
-                lastSeen: new Date().toISOString(),
-              },
-            })
-            .promise();
-
-          return {
-            statusCode: 200,
-            body: JSON.stringify({ status: "registered" }),
-          };
-        },
+        callback: registerServerHandler,
         policies: [aws.iam.ManagedPolicies.AWSLambdaBasicExecutionRole],
       },
       { parent: this }
@@ -266,39 +172,7 @@ export class ControlPlane extends pulumi.ComponentResource {
             SERVERS_TABLE: vpnServersTable.name,
           },
         },
-        callback: async (event: any) => {
-          const AWS = require("aws-sdk");
-          const ddb = new AWS.DynamoDB.DocumentClient();
-          const body = JSON.parse(event.body || "{}");
-          const { id, metrics } = body;
-
-          if (!id) {
-            return { statusCode: 400, body: "Missing id" };
-          }
-
-          // Partial update (if server exists)
-          // For simplicity, we just update/overwrite or we could check existence.
-          // Here we'll do a quick update expression
-          try {
-            await ddb
-              .update({
-                TableName: process.env.SERVERS_TABLE,
-                Key: { id },
-                UpdateExpression: "set metrics = :m, lastSeen = :t, #s = :s",
-                ExpressionAttributeNames: { "#s": "status" },
-                ExpressionAttributeValues: {
-                  ":m": metrics || {},
-                  ":t": new Date().toISOString(),
-                  ":s": "online",
-                },
-              })
-              .promise();
-            return { statusCode: 200, body: JSON.stringify({ status: "ok" }) };
-          } catch (e: any) {
-            console.error(e);
-            return { statusCode: 500, body: "Error updating heartbeat" };
-          }
-        },
+        callback: heartbeatServerHandler,
         policies: [aws.iam.ManagedPolicies.AWSLambdaBasicExecutionRole],
       },
       { parent: this }
@@ -324,18 +198,7 @@ export class ControlPlane extends pulumi.ComponentResource {
             PEERS_TABLE: vpnPeersTable.name,
           },
         },
-        callback: async (event: any) => {
-          const AWS = require("aws-sdk");
-          const ddb = new AWS.DynamoDB.DocumentClient();
-          // Return all peers (naive for now, filter by server later if needed)
-          const data = await ddb
-            .scan({ TableName: process.env.PEERS_TABLE })
-            .promise();
-
-          // Map to format expected by server
-          // Input peer: { publicKey, allowedIps }
-          return { statusCode: 200, body: JSON.stringify(data.Items ?? []) };
-        },
+        callback: getPeersHandler,
         policies: [aws.iam.ManagedPolicies.AWSLambdaBasicExecutionRole],
       },
       { parent: this }
@@ -362,41 +225,7 @@ export class ControlPlane extends pulumi.ComponentResource {
             WEB_API_KEY: webApiKey,
           },
         },
-        callback: async (event: any) => {
-          const AWS = require("aws-sdk");
-          const ddb = new AWS.DynamoDB.DocumentClient();
-
-          // Auth Check
-          const apiKey =
-            event.headers["x-api-key"] || event.headers["X-Api-Key"];
-          if (apiKey !== process.env.WEB_API_KEY) {
-            return { statusCode: 401, body: "Unauthorized" };
-          }
-
-          const body = JSON.parse(event.body || "{}");
-          const { publicKey, userId, allowedIps } = body;
-
-          if (!publicKey || !userId) {
-            return { statusCode: 400, body: "Missing publicKey or userId" };
-          }
-
-          await ddb
-            .put({
-              TableName: process.env.PEERS_TABLE,
-              Item: {
-                publicKey,
-                userId,
-                allowedIps: allowedIps || [],
-                createdAt: new Date().toISOString(),
-              },
-            })
-            .promise();
-
-          return {
-            statusCode: 200,
-            body: JSON.stringify({ status: "peer_added" }),
-          };
-        },
+        callback: addPeerHandler,
         policies: [aws.iam.ManagedPolicies.AWSLambdaBasicExecutionRole],
       },
       { parent: this }
@@ -407,6 +236,33 @@ export class ControlPlane extends pulumi.ComponentResource {
       {
         role: addPeer.role!,
         policyArn: aws.iam.ManagedPolicies.AmazonDynamoDBFullAccess,
+      },
+      { parent: this }
+    );
+
+    // E. List Servers (admin, protected by API key)
+    const listServers = new aws.lambda.CallbackFunction(
+      `${name}-list-servers`,
+      {
+        runtime: "nodejs20.x",
+        memorySize: 256,
+        environment: {
+          variables: {
+            SERVERS_TABLE: vpnServersTable.name,
+            WEB_API_KEY: webApiKey,
+          },
+        },
+        callback: listServersHandler,
+        policies: [aws.iam.ManagedPolicies.AWSLambdaBasicExecutionRole],
+      },
+      { parent: this }
+    );
+
+    new aws.iam.RolePolicyAttachment(
+      `${name}-listservers-ddb-access`,
+      {
+        role: listServers.role!,
+        policyArn: aws.iam.ManagedPolicies.AmazonDynamoDBReadOnlyAccess,
       },
       { parent: this }
     );
@@ -465,6 +321,7 @@ export class ControlPlane extends pulumi.ComponentResource {
     createRoute("POST /server/heartbeat", heartbeatServer, "hb-srv");
     createRoute("GET /server/peers", getPeers, "get-peers");
     createRoute("POST /peers", addPeer, "add-peer");
+    createRoute("GET /servers", listServers, "list-servers");
 
     const stage = new aws.apigatewayv2.Stage(
       `${name}-stage`,

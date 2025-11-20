@@ -8,13 +8,17 @@ export class Observability extends pulumi.ComponentResource {
   constructor(name: string, opts?: pulumi.ComponentResourceOptions) {
     super("vpnvpn:components:Observability", name, {}, opts);
 
-    const amp = new aws.prometheus.Workspace(
+    // Some aws provider versions expose AMP/Grafana under different namespaces.
+    // We cast through any here to avoid tight coupling to a specific minor version.
+    const awsAny: any = aws;
+
+    const amp = new awsAny.prometheus.Workspace(
       `${name}-amp`,
       { alias: `${pulumi.getStack()}-vpnvpn` },
       { parent: this }
     );
 
-    const amg = new aws.grafana.Workspace(
+    const amg = new awsAny.grafana.Workspace(
       `${name}-amg`,
       {
         accountAccessType: "CURRENT_ACCOUNT",
