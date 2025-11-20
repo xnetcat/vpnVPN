@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },
@@ -17,10 +18,10 @@
     "@aws-sdk/client-ec2": "^3.676.0",
     "@prisma/client": "^5.19.1",
     "lucide-react": "^0.436.0",
-    "next": "15.0.3",
+    "next": "^15.0.3",
     "next-auth": "^4.24.7",
-    "react": "19.0.0-rc-66855b96-20241106",
-    "react-dom": "19.0.0-rc-66855b96-20241106",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "stripe": "^16.10.0",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
@@ -28,16 +29,15 @@
   },
   "devDependencies": {
     "@types/node": "^20.14.11",
-    "@types/react": "npm:types-react@19.0.0-rc.1",
-    "@types/react-dom": "npm:types-react-dom@19.0.0-rc.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
     "autoprefixer": "^10.4.20",
+    "eslint": "8.57.0",
+    "eslint-config-next": "15.0.3",
     "postcss": "^8.4.41",
     "prisma": "^5.19.1",
     "tailwindcss": "^3.4.10",
-    "typescript": "^5.5.4"
-  },
-  "overrides": {
-    "@types/react": "npm:types-react@19.0.0-rc.1",
-    "@types/react-dom": "npm:types-react-dom@19.0.0-rc.1"
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.4"
   }
 }

@@ -16,7 +16,6 @@ export default function RootLayout({
     <html lang="en">
       <body className="min-h-screen bg-gray-50 text-gray-900 antialiased">
         {/* Header */}
-        {/* @ts-expect-error Async Server Component */}
         <SiteHeader />
         {children}
       </body>

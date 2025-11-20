@@ -13,9 +13,26 @@ type ProxyItem = {
 
 async function getProxies(): Promise<ProxyItem[]> {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
-  const res = await fetch(`${base}/proxies`, { cache: "no-store" });
-  if (!res.ok) return [];
-  return res.json();
+  if (!base) {
+    console.warn("[proxies] NEXT_PUBLIC_API_BASE_URL not set");
+    return [];
+  }
+
+  const url = `${base.replace(/\/$/, "")}/proxies`;
+
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) {
+      console.error("[proxies] GET /proxies failed", {
+        status: res.status,
+      });
+      return [];
+    }
+    return res.json();
+  } catch (err) {
+    console.error("[proxies] fetch error", { err });
+    return [];
+  }
 }
 
 export default async function ProxiesPage() {

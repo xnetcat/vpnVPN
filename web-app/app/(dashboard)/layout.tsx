@@ -1,11 +1,15 @@
-import Link from "next/link"
-import { LayoutDashboard, Server, Shield, User } from "lucide-react"
+import Link from "next/link";
+import { LayoutDashboard, Server, Shield, User, ShieldCheck } from "lucide-react";
+import { getSession } from "@/lib/auth";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const session = await getSession();
+  const isAdmin = Boolean((session?.user as any)?.role === "admin");
+
   return (
     <div className="flex min-h-[calc(100vh-65px)]">
       <aside className="w-64 border-r bg-white hidden md:block">
@@ -38,6 +42,15 @@ export default function DashboardLayout({
             <User className="h-4 w-4" />
             Account
           </Link>
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            >
+              <ShieldCheck className="h-4 w-4" />
+              Admin
+            </Link>
+          )}
         </nav>
       </aside>
       <main className="flex-1">{children}</main>

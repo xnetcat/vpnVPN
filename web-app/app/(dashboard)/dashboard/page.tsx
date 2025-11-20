@@ -11,11 +11,11 @@ export default async function DashboardPage() {
   }
   return (
     <main className="mx-auto max-w-6xl p-6">
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Dashboard</h1>
         <AddDeviceModal />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="rounded-lg border bg-white p-4 shadow-sm">
           <div className="text-sm text-gray-500">Active Sessions</div>
           <div className="text-3xl font-bold">—</div>
@@ -32,3 +32,5 @@ export default async function DashboardPage() {
     </main>
   );
 }
+
+

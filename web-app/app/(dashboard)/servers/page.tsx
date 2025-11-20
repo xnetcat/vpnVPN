@@ -11,7 +11,12 @@ type Server = {
 
 async function getServers(): Promise<Server[]> {
   const res = await fetch(`/api/servers`, { cache: "no-store" });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    console.error("[servers] /api/servers failed", {
+      status: res.status,
+    });
+    return [];
+  }
   return res.json();
 }
 

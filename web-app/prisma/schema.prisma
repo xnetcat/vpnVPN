@@ -16,6 +16,7 @@ model User {
   emailVerified     DateTime?
   image             String?
   stripeCustomerId  String?
+  role              String         @default("user")
 
   accounts          Account[]
   sessions          Session[]
