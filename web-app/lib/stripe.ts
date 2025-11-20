@@ -8,6 +8,7 @@ if (!stripeSecretKey) {
 }
 
 export const stripe = new Stripe(stripeSecretKey || "sk_test_placeholder", {
-  apiVersion: "2023-10-16",
+  // Match the default API version expected by the installed Stripe SDK.
+  apiVersion: "2024-06-20",
 });
 
