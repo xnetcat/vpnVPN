@@ -1,33 +1,38 @@
 services:
-  # Mock Control Plane API
-  mock-api:
-    build: ./mock-api
-    ports:
-      - "8080:8080"
+  # LocalStack for AWS control plane emulation
+  localstack:
+    image: localstack/localstack:3
     environment:
-      - PORT=8080
+      - SERVICES=lambda,dynamodb,apigateway,cloudwatch,logs
+      - DEBUG=0
+    ports:
+      - "4566:4566"
     networks:
       - vpn-net
 
   # VPN Node (Rust Server)
   vpn-node:
+    platform: linux/amd64
     build:
       context: ../vpn-server
       dockerfile: Dockerfile
     cap_add:
       - NET_ADMIN
+    devices:
+      - "/dev/net/tun:/dev/net/tun"
     environment:
-      - API_URL=http://mock-api:8080
+      - API_URL=http://control-plane:8080
       - VPN_TOKEN=dev-token
       - LISTEN_UDP_PORT=51820
       - ADMIN_PORT=9090
       - RUST_LOG=info
       - VPN_PROTOCOLS=wireguard
+      - DISABLE_CLOUDWATCH_METRICS=1
     ports:
       - "51820:51820/udp"
       - "9090:9090" # Admin/Metrics port
     depends_on:
-      - mock-api
+      - control-plane
     networks:
       - vpn-net
     volumes:
@@ -47,19 +52,37 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
-  # Web App / Admin UI
+  # Web App
   web-app:
     build:
       context: ../web-app
-      dockerfile: Dockerfile # Assuming standard Next.js Dockerfile exists or will be created, using dev mode for now might be better but let's assume build
+      dockerfile: Dockerfile
     environment:
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/vpnvpn
       - NEXTAUTH_SECRET=supersecret
       - NEXTAUTH_URL=http://localhost:3000
+      - NEXT_PUBLIC_API_BASE_URL=http://control-plane:8080
+      - CONTROL_PLANE_API_URL=http://control-plane:8080
+      - CONTROL_PLANE_API_KEY=dev-web-api-key
     ports:
       - "3000:3000"
     depends_on:
       - postgres
+      - control-plane
+    networks:
+      - vpn-net
+
+  # Minimal Control Plane (for local development)
+  control-plane:
+    image: node:20-alpine
+    working_dir: /app
+    command: ["node", "index.js"]
+    volumes:
+      - ../local/mock-api:/app
+    environment:
+      - PORT=8080
+    ports:
+      - "8080:8080"
     networks:
       - vpn-net
 
