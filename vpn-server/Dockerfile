@@ -2,8 +2,11 @@
 
 FROM rust:1.88-bullseye AS builder
 WORKDIR /src
+
+# Limit parallel compilation to reduce peak memory usage when building heavy AWS crates.
+ENV CARGO_BUILD_JOBS=1
+
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main(){}" > src/main.rs && cargo build --release --locked
 COPY . .
 RUN cargo build --release --locked
 
