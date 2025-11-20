@@ -1,13 +1,13 @@
 use axum::{routing::get, Router};
-use clap::Parser;
+use clap::{Args, Parser, Subcommand};
 use std::{env, net::SocketAddr};
 use tokio::net::TcpListener;
 use tokio::signal;
 use tracing::{error, info, warn};
-use tracing_subscriber::EnvFilter;
 
 mod admin;
 mod client;
+mod logging;
 mod metrics;
 mod net;
 mod vpn;
@@ -15,6 +15,20 @@ mod vpn;
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+enum Command {
+    /// Run the VPN node agent (default mode).
+    Run(RunArgs),
+    /// Check prerequisites and environment without starting the server.
+    Doctor,
+}
+
+#[derive(Args, Debug, Clone)]
+struct RunArgs {
     /// Control Plane API URL
     #[arg(long, env = "API_URL")]
     api_url: String,
@@ -34,15 +48,54 @@ struct Cli {
 
 #[tokio::main]
 async fn main() {
-    let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info"))
-        .unwrap();
-    tracing_subscriber::fmt()
-        .with_env_filter(filter_layer)
-        .with_target(false)
-        .init();
+    let _buffer = logging::init_logging();
+    let cli = Cli::parse();
 
-    let args = Cli::parse();
+    match cli.command {
+        Command::Run(args) => {
+            if let Err(code) = run_server(args).await {
+                std::process::exit(code);
+            }
+        }
+        Command::Doctor => {
+            let ok = run_doctor();
+            std::process::exit(if ok { 0 } else { 1 });
+        }
+    }
+}
+
+fn run_doctor() -> bool {
+    use tracing::Level;
+
+    info!(target: "doctor", "running_doctor_checks");
+
+    // OS-level VPN tooling and TUN/TAP prerequisites.
+    let nm = crate::net::os::get_network_manager();
+    match nm.check_dependencies() {
+        Ok(_) => {
+            info!(target: "doctor", "network_manager_dependencies_ok");
+        }
+        Err(e) => {
+            error!(target: "doctor", error = ?e, "network_manager_dependencies_failed");
+            return false;
+        }
+    }
+
+    // CloudWatch can be disabled; just log what will happen.
+    let cw_disabled = std::env::var("DISABLE_CLOUDWATCH_METRICS")
+        .map(|v| v == "1")
+        .unwrap_or(false);
+    if cw_disabled {
+        info!(target: "doctor", "cloudwatch_metrics_disabled_by_env");
+    } else {
+        info!(target: "doctor", "cloudwatch_metrics_enabled");
+    }
+
+    info!(target: "doctor", "doctor_checks_passed");
+    true
+}
+
+async fn run_server(args: RunArgs) -> Result<(), i32> {
     info!(
         api_url = %args.api_url,
         listen_port = args.listen_port,
@@ -54,14 +107,13 @@ async fn main() {
     let nm = crate::net::os::get_network_manager();
     if let Err(e) = nm.check_dependencies() {
         error!(error = ?e, "missing_dependencies");
-        // In a real scenario we might want to exit, but for now we log error
-        // and might fail later when trying to start backends
-        std::process::exit(1);
+        return Err(1);
     }
     info!("system_dependencies_check_passed");
 
     // Initialize VPN backends
-    let protos_env = env::var("VPN_PROTOCOLS").unwrap_or_else(|_| "wireguard,openvpn,ikev2".into());
+    let protos_env =
+        env::var("VPN_PROTOCOLS").unwrap_or_else(|_| "wireguard,openvpn,ikev2".into());
     let enabled: Vec<vpn::VpnProtocol> = protos_env
         .split(',')
         .map(|s| s.trim().to_ascii_lowercase())
@@ -111,7 +163,7 @@ async fn main() {
         loop {
             // Initial delay and interval
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-            
+
             match sync_client.fetch_peers().await {
                 Ok(peers) => {
                     info!(count = peers.len(), "applying_peers");
@@ -156,6 +208,8 @@ async fn main() {
         }
         r = admin_server => { if let Err(e)=r { error!("admin_error"=?e); } }
     }
+
+    Ok(())
 }
 
 async fn run_admin(port: u16) {

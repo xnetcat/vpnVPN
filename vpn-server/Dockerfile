@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1.7
 
-FROM rust:1.83-bullseye AS builder
+FROM rust:1.88-bullseye AS builder
 RUN apt-get update && apt-get install -y musl-tools pkg-config && rm -rf /var/lib/apt/lists/*
 RUN rustup target add x86_64-unknown-linux-musl
 WORKDIR /src
-COPY Cargo.toml ./
-RUN mkdir src && echo "fn main(){}" > src/main.rs && cargo build --release --target x86_64-unknown-linux-musl
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo "fn main(){}" > src/main.rs && cargo build --release --target x86_64-unknown-linux-musl --locked
 COPY . .
-RUN cargo build --release --target x86_64-unknown-linux-musl
+RUN cargo build --release --target x86_64-unknown-linux-musl --locked
 
 FROM debian:bookworm-slim AS runtime
 WORKDIR /
