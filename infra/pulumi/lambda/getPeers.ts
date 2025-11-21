@@ -14,7 +14,9 @@ export const handler = async (_event: GetPeersEvent) => {
     })
     .promise();
 
-  const peers = data.Items ?? [];
+  const items = data.Items ?? [];
+  // Only return active peers; if `active` is missing, treat as active for backwards compatibility.
+  const peers = items.filter((item) => (item as any).active !== false);
 
   console.log("[lambda] get-peers", { count: peers.length });
 

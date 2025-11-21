@@ -1,4 +1,4 @@
-'use server'
+"use server";
 
 import { NextResponse } from "next/server";
 
@@ -24,19 +24,23 @@ if (!CONTROL_PLANE_API_KEY) {
   );
 }
 
-export async function addPeerForDevice(payload: AddPeerPayload): Promise<void> {
+function getBaseUrl(): string {
   if (!CONTROL_PLANE_BASE || !CONTROL_PLANE_API_KEY) {
     throw new Error("Control plane not configured");
   }
+  return CONTROL_PLANE_BASE.replace(/\/$/, "");
+}
 
-  const url = `${CONTROL_PLANE_BASE.replace(/\/$/, "")}/peers`;
+export async function addPeerForDevice(payload: AddPeerPayload): Promise<void> {
+  const base = getBaseUrl();
+  const url = `${base}/peers`;
 
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-api-key": CONTROL_PLANE_API_KEY,
+        "x-api-key": CONTROL_PLANE_API_KEY!,
       },
       body: JSON.stringify(payload),
     });
@@ -60,4 +64,33 @@ export async function addPeerForDevice(payload: AddPeerPayload): Promise<void> {
   }
 }
 
+export async function revokePeersForUser(userId: string): Promise<void> {
+  const base = getBaseUrl();
+  const url = `${base}/peers/revoke-for-user`;
 
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": CONTROL_PLANE_API_KEY!,
+      },
+      body: JSON.stringify({ userId }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error("[controlPlane] revokePeersForUser non-200", {
+        status: res.status,
+        body: text,
+        userId,
+      });
+      throw new Error(`revokePeersForUser failed with status ${res.status}`);
+    }
+
+    console.log("[controlPlane] revokePeersForUser ok", { userId });
+  } catch (err) {
+    console.error("[controlPlane] revokePeersForUser error", { err, userId });
+    throw err;
+  }
+}

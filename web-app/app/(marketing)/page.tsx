@@ -30,7 +30,7 @@ export default async function HomePage() {
                 View Pricing
               </Link>
               <Link
-                href="/api/auth/signin"
+                href="/auth/signin"
                 className="rounded-md border px-4 py-2 hover:bg-gray-50"
               >
                 Sign In
@@ -42,7 +42,3 @@ export default async function HomePage() {
     </main>
   );
 }
-
-
-
-

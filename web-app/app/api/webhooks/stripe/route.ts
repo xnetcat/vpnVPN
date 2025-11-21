@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
+import { revokePeersForUser } from "@/lib/controlPlane";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,19 @@ export async function POST(req: Request) {
               currentPeriodEnd: currentPeriodEnd ?? undefined,
             },
           });
+
+          const isActive = status === "active" || status === "trialing";
+          if (!isActive) {
+            // Immediate cutoff: revoke all peers for this user.
+            try {
+              await revokePeersForUser(user.id);
+            } catch (e) {
+              console.error("Failed to revoke peers after checkout", {
+                userId: user.id,
+                error: e,
+              });
+            }
+          }
         }
         break;
       }
@@ -113,6 +127,22 @@ export async function POST(req: Request) {
               currentPeriodEnd: currentPeriodEnd ?? undefined,
             },
           });
+
+          const isActive = status === "active" || status === "trialing";
+          if (!isActive) {
+            // Immediate cutoff whenever Stripe marks a subscription as non-active.
+            try {
+              await revokePeersForUser(user.id);
+            } catch (e) {
+              console.error(
+                "Failed to revoke peers after subscription update",
+                {
+                  userId: user.id,
+                  error: e,
+                }
+              );
+            }
+          }
         }
         break;
       }

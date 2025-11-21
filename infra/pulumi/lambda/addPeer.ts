@@ -32,6 +32,7 @@ export const handler = async (event: AddPeerEvent) => {
         userId,
         allowedIps: allowedIps || [],
         createdAt: new Date().toISOString(),
+        active: true,
       },
     })
     .promise();

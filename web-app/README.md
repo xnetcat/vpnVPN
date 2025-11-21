@@ -21,12 +21,20 @@ Environment variables (see `env.local.example` for local dev)
 - OAuth:
   - `GITHUB_ID`, `GITHUB_SECRET`
   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- Email (magic link):
+  - `EMAIL_SERVER`
+  - `EMAIL_FROM`
 - Stripe:
   - `STRIPE_SECRET_KEY`
   - `STRIPE_WEBHOOK_SECRET`
   - `STRIPE_PRICE_ID`
-- Control plane:
-  - `NEXT_PUBLIC_API_BASE_URL` (base URL of the AWS control-plane HTTP API).
+- Control plane (browser + server):
+  - `NEXT_PUBLIC_API_BASE_URL` (base URL of the AWS control-plane HTTP API)
+  - `CONTROL_PLANE_API_URL` (server-side base URL for control-plane calls)
+  - `CONTROL_PLANE_API_KEY` (shared web→control-plane API key)
+- WireGuard client defaults (used when generating configs in the dashboard):
+  - `NEXT_PUBLIC_WG_ENDPOINT`
+  - `NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY`
 
 Local development
 

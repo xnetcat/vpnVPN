@@ -1,10 +1,10 @@
 'use server'
 
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { addPeerForDevice } from "@/lib/controlPlane";
 import { allocateDeviceIp } from "@/lib/networking";
+import { requirePaidUser } from "@/lib/requirePaidUser";
 
 type RegisterDeviceResult =
   | { success: true; deviceId: string; assignedIp: string }
@@ -14,15 +14,18 @@ export async function registerDevice(
   publicKey: string,
   name: string
 ): Promise<RegisterDeviceResult> {
-  const session = await getSession();
-  if (!session?.user) {
-    return { success: false, error: "Unauthorized" };
+  const gate = await requirePaidUser();
+  if (!gate.ok) {
+    return {
+      success: false,
+      error:
+        gate.reason === "unauthenticated"
+          ? "Unauthorized"
+          : "Subscription required",
+    };
   }
 
-  const userId = (session.user as any).id as string | undefined;
-  if (!userId) {
-    return { success: false, error: "Unauthorized" };
-  }
+  const userId = gate.userId;
 
   try {
     const device = await prisma.device.create({
@@ -49,7 +52,8 @@ export async function registerDevice(
       });
       return {
         success: false,
-        error: "Device saved locally but failed to register with control plane",
+        error:
+          "Device saved locally but failed to register with control plane",
       };
     }
 
@@ -66,4 +70,5 @@ export async function registerDevice(
     return { success: false, error: "Failed to register device" };
   }
 }
+
 

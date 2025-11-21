@@ -18,25 +18,25 @@ export default async function SiteHeader() {
             <>
               <Link
                 href="/dashboard"
-                className="hover:text-gray-900 text-gray-600"
+                className="text-gray-600 hover:text-gray-900"
               >
                 Dashboard
               </Link>
               <Link
                 href="/servers"
-                className="hover:text-gray-900 text-gray-600"
+                className="text-gray-600 hover:text-gray-900"
               >
                 Servers
               </Link>
               <Link
                 href="/proxies"
-                className="hover:text-gray-900 text-gray-600"
+                className="text-gray-600 hover:text-gray-900"
               >
                 Proxies
               </Link>
               <Link
                 href="/account"
-                className="hover:text-gray-900 text-gray-600"
+                className="text-gray-600 hover:text-gray-900"
               >
                 Account
               </Link>
@@ -53,12 +53,12 @@ export default async function SiteHeader() {
             <>
               <Link
                 href="/pricing"
-                className="hover:text-gray-900 text-gray-600"
+                className="text-gray-600 hover:text-gray-900"
               >
                 Pricing
               </Link>
               <Link
-                href="/api/auth/signin"
+                href="/auth/signin"
                 className="rounded-md bg-gray-900 px-3 py-1 text-white hover:bg-black"
               >
                 Sign in

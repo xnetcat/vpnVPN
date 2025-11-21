@@ -5,6 +5,7 @@ import { handler as registerServerHandler } from "./lambda/registerServer";
 import { handler as heartbeatServerHandler } from "./lambda/heartbeatServer";
 import { handler as getPeersHandler } from "./lambda/getPeers";
 import { handler as addPeerHandler } from "./lambda/addPeer";
+import { handler as revokeUserPeersHandler } from "./lambda/revokeUserPeers";
 import { handler as listProxiesHandler } from "./lambda/listProxies";
 import { handler as scrapeProxiesHandler } from "./lambda/scrapeProxies";
 import { handler as listServersHandler } from "./lambda/listServers";
@@ -45,9 +46,19 @@ export class ControlPlane extends pulumi.ComponentResource {
     const vpnPeersTable = new aws.dynamodb.Table(
       `${name}-vpn-peers`,
       {
-        attributes: [{ name: "publicKey", type: "S" }],
+        attributes: [
+          { name: "publicKey", type: "S" },
+          { name: "userId", type: "S" },
+        ],
         hashKey: "publicKey",
         billingMode: "PAY_PER_REQUEST",
+        globalSecondaryIndexes: [
+          {
+            name: "userId-index",
+            hashKey: "userId",
+            projectionType: "ALL",
+          },
+        ],
         tags: { Project: "vpnvpn" },
       },
       { parent: this }
@@ -240,7 +251,34 @@ export class ControlPlane extends pulumi.ComponentResource {
       { parent: this }
     );
 
-    // E. List Servers (admin, protected by API key)
+    // E. Revoke Peers for User (Protected by API Key)
+    const revokeUserPeers = new aws.lambda.CallbackFunction(
+      `${name}-revoke-user-peers`,
+      {
+        runtime: "nodejs20.x",
+        memorySize: 256,
+        environment: {
+          variables: {
+            PEERS_TABLE: vpnPeersTable.name,
+            WEB_API_KEY: webApiKey,
+          },
+        },
+        callback: revokeUserPeersHandler,
+        policies: [aws.iam.ManagedPolicies.AWSLambdaBasicExecutionRole],
+      },
+      { parent: this }
+    );
+
+    new aws.iam.RolePolicyAttachment(
+      `${name}-revokepeers-ddb-access`,
+      {
+        role: revokeUserPeers.role!,
+        policyArn: aws.iam.ManagedPolicies.AmazonDynamoDBFullAccess,
+      },
+      { parent: this }
+    );
+
+    // F. List Servers (admin, protected by API key)
     const listServers = new aws.lambda.CallbackFunction(
       `${name}-list-servers`,
       {
@@ -321,6 +359,11 @@ export class ControlPlane extends pulumi.ComponentResource {
     createRoute("POST /server/heartbeat", heartbeatServer, "hb-srv");
     createRoute("GET /server/peers", getPeers, "get-peers");
     createRoute("POST /peers", addPeer, "add-peer");
+    createRoute(
+      "POST /peers/revoke-for-user",
+      revokeUserPeers,
+      "revoke-user-peers"
+    );
     createRoute("GET /servers", listServers, "list-servers");
 
     const stage = new aws.apigatewayv2.Stage(

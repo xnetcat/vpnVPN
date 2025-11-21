@@ -65,7 +65,8 @@ export const authOptions: NextAuthOptions = {
     },
   },
   pages: {
-    signIn: "/api/auth/signin",
+    // Custom sign-in page implemented at `app/auth/signin/page.tsx`
+    signIn: "/auth/signin",
   },
   secret: process.env.NEXTAUTH_SECRET,
 };
