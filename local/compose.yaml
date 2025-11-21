@@ -1,7 +1,6 @@
 services:
   # VPN Node (Rust Server)
   vpn-node:
-    platform: linux/amd64
     build:
       context: ../vpn-server
       dockerfile: Dockerfile
