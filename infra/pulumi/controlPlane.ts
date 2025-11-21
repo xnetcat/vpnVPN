@@ -6,9 +6,13 @@ import { handler as heartbeatServerHandler } from "./lambda/heartbeatServer";
 import { handler as getPeersHandler } from "./lambda/getPeers";
 import { handler as addPeerHandler } from "./lambda/addPeer";
 import { handler as revokeUserPeersHandler } from "./lambda/revokeUserPeers";
+import { handler as revokePeerHandler } from "./lambda/revokePeer";
 import { handler as listProxiesHandler } from "./lambda/listProxies";
 import { handler as scrapeProxiesHandler } from "./lambda/scrapeProxies";
 import { handler as listServersHandler } from "./lambda/listServers";
+import { handler as createTokenHandler } from "./lambda/createToken";
+import { handler as listTokensHandler } from "./lambda/listTokens";
+import { handler as revokeTokenHandler } from "./lambda/revokeToken";
 
 export class ControlPlane extends pulumi.ComponentResource {
   public readonly apiUrl: pulumi.Output<string>;
@@ -305,6 +309,114 @@ export class ControlPlane extends pulumi.ComponentResource {
       { parent: this }
     );
 
+    // G. Revoke Single Peer (web app, protected by API key)
+    const revokePeer = new aws.lambda.CallbackFunction(
+      `${name}-revoke-peer`,
+      {
+        runtime: "nodejs20.x",
+        memorySize: 256,
+        environment: {
+          variables: {
+            PEERS_TABLE: vpnPeersTable.name,
+            WEB_API_KEY: webApiKey,
+          },
+        },
+        callback: revokePeerHandler,
+        policies: [aws.iam.ManagedPolicies.AWSLambdaBasicExecutionRole],
+      },
+      { parent: this }
+    );
+
+    new aws.iam.RolePolicyAttachment(
+      `${name}-revokepeer-ddb-access`,
+      {
+        role: revokePeer.role!,
+        policyArn: aws.iam.ManagedPolicies.AmazonDynamoDBFullAccess,
+      },
+      { parent: this }
+    );
+
+    // H. Create Token (admin, protected by API key)
+    const createToken = new aws.lambda.CallbackFunction(
+      `${name}-create-token`,
+      {
+        runtime: "nodejs20.x",
+        memorySize: 256,
+        environment: {
+          variables: {
+            TOKENS_TABLE: vpnTokensTable.name,
+            WEB_API_KEY: webApiKey,
+          },
+        },
+        callback: createTokenHandler,
+        policies: [aws.iam.ManagedPolicies.AWSLambdaBasicExecutionRole],
+      },
+      { parent: this }
+    );
+
+    new aws.iam.RolePolicyAttachment(
+      `${name}-createtoken-ddb-access`,
+      {
+        role: createToken.role!,
+        policyArn: aws.iam.ManagedPolicies.AmazonDynamoDBFullAccess,
+      },
+      { parent: this }
+    );
+
+    // I. List Tokens (admin, protected by API key)
+    const listTokens = new aws.lambda.CallbackFunction(
+      `${name}-list-tokens`,
+      {
+        runtime: "nodejs20.x",
+        memorySize: 256,
+        environment: {
+          variables: {
+            TOKENS_TABLE: vpnTokensTable.name,
+            WEB_API_KEY: webApiKey,
+          },
+        },
+        callback: listTokensHandler,
+        policies: [aws.iam.ManagedPolicies.AWSLambdaBasicExecutionRole],
+      },
+      { parent: this }
+    );
+
+    new aws.iam.RolePolicyAttachment(
+      `${name}-listtokens-ddb-access`,
+      {
+        role: listTokens.role!,
+        policyArn: aws.iam.ManagedPolicies.AmazonDynamoDBReadOnlyAccess,
+      },
+      { parent: this }
+    );
+
+    // J. Revoke Token (admin, protected by API key)
+    const revokeToken = new aws.lambda.CallbackFunction(
+      `${name}-revoke-token`,
+      {
+        runtime: "nodejs20.x",
+        memorySize: 256,
+        environment: {
+          variables: {
+            TOKENS_TABLE: vpnTokensTable.name,
+            WEB_API_KEY: webApiKey,
+          },
+        },
+        callback: revokeTokenHandler,
+        policies: [aws.iam.ManagedPolicies.AWSLambdaBasicExecutionRole],
+      },
+      { parent: this }
+    );
+
+    new aws.iam.RolePolicyAttachment(
+      `${name}-revoketoken-ddb-access`,
+      {
+        role: revokeToken.role!,
+        policyArn: aws.iam.ManagedPolicies.AmazonDynamoDBFullAccess,
+      },
+      { parent: this }
+    );
+
     // --- API Gateway ---
 
     const httpApi = new aws.apigatewayv2.Api(
@@ -364,7 +476,11 @@ export class ControlPlane extends pulumi.ComponentResource {
       revokeUserPeers,
       "revoke-user-peers"
     );
+    createRoute("DELETE /peers/{publicKey}", revokePeer, "revoke-peer");
     createRoute("GET /servers", listServers, "list-servers");
+    createRoute("POST /tokens", createToken, "create-token");
+    createRoute("GET /tokens", listTokens, "list-tokens");
+    createRoute("DELETE /tokens/{token}", revokeToken, "revoke-token");
 
     const stage = new aws.apigatewayv2.Stage(
       `${name}-stage`,

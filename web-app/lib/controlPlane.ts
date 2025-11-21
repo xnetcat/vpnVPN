@@ -94,3 +94,35 @@ export async function revokePeersForUser(userId: string): Promise<void> {
     throw err;
   }
 }
+
+export async function revokePeerByPublicKey(publicKey: string): Promise<void> {
+  const base = getBaseUrl();
+  const url = `${base}/peers/${encodeURIComponent(publicKey)}`;
+
+  try {
+    const res = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        "x-api-key": CONTROL_PLANE_API_KEY!,
+      },
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error("[controlPlane] revokePeerByPublicKey non-200", {
+        status: res.status,
+        body: text,
+        publicKey,
+      });
+      throw new Error(`revokePeerByPublicKey failed with status ${res.status}`);
+    }
+
+    console.log("[controlPlane] revokePeerByPublicKey ok", { publicKey });
+  } catch (err) {
+    console.error("[controlPlane] revokePeerByPublicKey error", {
+      err,
+      publicKey,
+    });
+    throw err;
+  }
+}

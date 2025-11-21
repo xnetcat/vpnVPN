@@ -1,13 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import * as nacl from "tweetnacl";
 import * as util from "tweetnacl-util";
-import { registerDevice } from "@/actions/device";
+import { trpc } from "@/lib/trpc/client";
 import { Plus } from "lucide-react";
 
 const WG_ENDPOINT = process.env.NEXT_PUBLIC_WG_ENDPOINT || "";
 const WG_SERVER_PUBLIC_KEY = process.env.NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY || "";
+
+type Server = {
+  id: string;
+  region?: string;
+  status: string;
+  sessions: number;
+};
 
 function buildWireGuardConfig(params: {
   privateKey: string;
@@ -37,12 +44,22 @@ function buildWireGuardConfig(params: {
 export default function AddDeviceModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [name, setName] = useState("");
+  const [serverId, setServerId] = useState<string>("");
   const [keys, setKeys] = useState<{ public: string; private: string } | null>(
     null
   );
-  const [loading, setLoading] = useState(false);
   const [config, setConfig] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const utils = trpc.useUtils();
+  const { data: servers = [], isLoading: loadingServers } =
+    trpc.servers.list.useQuery(undefined, { enabled: isOpen });
+
+  const registerMutation = trpc.device.register.useMutation({
+    onSuccess: () => {
+      utils.device.list.invalidate();
+    },
+  });
 
   const generateKeys = () => {
     const keyPair = nacl.box.keyPair();
@@ -55,23 +72,22 @@ export default function AddDeviceModal() {
 
   const handleSubmit = async () => {
     if (!keys || !name) return;
-    setLoading(true);
     setError(null);
     try {
-      const res = await registerDevice(keys.public, name);
-      if (!res.success) {
-        setError(res.error || "Unknown error");
-        return;
-      }
+      const result = await registerMutation.mutateAsync({
+        publicKey: keys.public,
+        name,
+        serverId: serverId || undefined,
+      });
 
       const cfg = buildWireGuardConfig({
         privateKey: keys.private,
         publicKey: keys.public,
-        assignedIp: res.assignedIp,
+        assignedIp: result.assignedIp,
       });
       setConfig(cfg);
-    } finally {
-      setLoading(false);
+    } catch (err: any) {
+      setError(err.message || "Unknown error");
     }
   };
 
@@ -104,6 +120,30 @@ export default function AddDeviceModal() {
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               placeholder="e.g. MacBook Pro"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Server Location (Optional)
+            </label>
+            <select
+              value={serverId}
+              onChange={(e) => setServerId(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              disabled={loadingServers}
+            >
+              <option value="">Auto (Best Available)</option>
+              {servers
+                .filter((s: Server) => s.status === "online")
+                .map((server: Server) => (
+                  <option key={server.id} value={server.id}>
+                    {server.region || server.id} - {server.sessions} sessions
+                  </option>
+                ))}
+            </select>
+            {loadingServers && (
+              <p className="mt-1 text-xs text-gray-500">Loading servers...</p>
+            )}
           </div>
 
           {!keys ? (
@@ -169,10 +209,12 @@ export default function AddDeviceModal() {
             </button>
             <button
               onClick={handleSubmit}
-              disabled={!keys || !name || loading}
+              disabled={!keys || !name || registerMutation.isPending}
               className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              {loading ? "Registering..." : "Register Device"}
+              {registerMutation.isPending
+                ? "Registering..."
+                : "Register Device"}
             </button>
           </div>
         </div>

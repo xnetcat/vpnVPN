@@ -1,5 +1,7 @@
 import { requireAdmin } from "@/lib/requireAdmin";
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { Server, Key, Settings } from "lucide-react";
 
 type NodeSummary = {
   id: string;
@@ -40,8 +42,58 @@ export default async function AdminPage() {
 
   return (
     <main className="mx-auto max-w-6xl p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Admin / Fleet</h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold mb-1">Admin Panel</h1>
+        <p className="text-sm text-gray-500">Manage servers, tokens, and system configuration</p>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <Link
+          href="/admin/tokens"
+          className="rounded-lg border bg-white p-6 shadow-sm hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="rounded-lg bg-blue-100 p-2">
+              <Key className="h-5 w-5 text-blue-600" />
+            </div>
+            <h3 className="font-semibold">Server Tokens</h3>
+          </div>
+          <p className="text-sm text-gray-600">
+            Manage registration tokens for VPN servers
+          </p>
+        </Link>
+
+        <Link
+          href="/admin/provision"
+          className="rounded-lg border bg-white p-6 shadow-sm hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="rounded-lg bg-green-100 p-2">
+              <Server className="h-5 w-5 text-green-600" />
+            </div>
+            <h3 className="font-semibold">Provision Server</h3>
+          </div>
+          <p className="text-sm text-gray-600">
+            Deploy new VPN servers to your infrastructure
+          </p>
+        </Link>
+
+        <div className="rounded-lg border bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="rounded-lg bg-purple-100 p-2">
+              <Settings className="h-5 w-5 text-purple-600" />
+            </div>
+            <h3 className="font-semibold">System Status</h3>
+          </div>
+          <p className="text-sm text-gray-600">
+            {nodes.filter((n) => n.status === "online").length} / {nodes.length} servers online
+          </p>
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <h2 className="text-xl font-semibold">Server Fleet</h2>
       </div>
       <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
         <table className="min-w-full divide-y divide-gray-200">

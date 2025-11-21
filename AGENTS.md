@@ -41,8 +41,8 @@
   - Tailwind CSS for styling (sorted classes).
   - **SaaS Features:**
     - **Auth:** NextAuth.js (SSO: Google, GitHub; Email: Magic Link).
-    - **Billing:** Stripe (Subscriptions, Webhooks).
-    - **Notifications:** Resend or SendGrid for transactional emails.
+    - **Billing:** Stripe (Multi-tier Subscriptions: Basic, Pro, Enterprise; Webhooks).
+    - **Notifications:** Resend for transactional emails (welcome, subscription changes, device alerts).
 - **Backend (Pulumi/AWS):**
   - **Directory:** `infra/pulumi/`
   - TypeScript for IaC.

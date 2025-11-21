@@ -48,17 +48,32 @@ export const authOptions: NextAuthOptions = {
           where: { id: user.id },
         });
         if (!existing) return;
-        if (existing.stripeCustomerId) return;
-        if (!process.env.STRIPE_SECRET_KEY) return;
-        const customer = await stripe.customers.create({
-          email: existing.email ?? undefined,
-          name: existing.name ?? undefined,
-          metadata: { userId: existing.id },
-        });
-        await prisma.user.update({
-          where: { id: existing.id },
-          data: { stripeCustomerId: customer.id },
-        });
+        
+        // Create Stripe customer if not exists
+        if (!existing.stripeCustomerId && process.env.STRIPE_SECRET_KEY) {
+          const customer = await stripe.customers.create({
+            email: existing.email ?? undefined,
+            name: existing.name ?? undefined,
+            metadata: { userId: existing.id },
+          });
+          await prisma.user.update({
+            where: { id: existing.id },
+            data: { stripeCustomerId: customer.id },
+          });
+        }
+
+        // Send welcome email
+        if (existing.email) {
+          const { sendEmail } = await import("@/lib/email");
+          await sendEmail({
+            to: existing.email,
+            template: "welcome",
+            data: {
+              name: existing.name,
+              dashboardUrl: `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/dashboard`,
+            },
+          });
+        }
       } catch (err) {
         console.error("createUser event error", err);
       }

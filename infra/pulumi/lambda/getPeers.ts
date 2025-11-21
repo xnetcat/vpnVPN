@@ -22,7 +22,7 @@ export const handler = async (_event: GetPeersEvent) => {
 
   return {
     statusCode: 200,
-    body: JSON.stringify(peers),
+    body: JSON.stringify({ peers }),
   };
 };
 

@@ -28,6 +28,24 @@ export const handler = async (event: RegisterEvent) => {
     return { statusCode: 401, body: "Invalid token" };
   }
 
+  // Check if token is active
+  if ((tokenRes.Item as any).active === false) {
+    return { statusCode: 401, body: "Token has been revoked" };
+  }
+
+  // Increment usage count
+  await ddb
+    .update({
+      TableName: TOKENS_TABLE,
+      Key: { token },
+      UpdateExpression: "SET usageCount = if_not_exists(usageCount, :zero) + :inc",
+      ExpressionAttributeValues: {
+        ":zero": 0,
+        ":inc": 1,
+      },
+    })
+    .promise();
+
   await ddb
     .put({
       TableName: SERVERS_TABLE,

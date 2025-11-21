@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { getTierConfig, type Tier } from "@/lib/tiers";
 
 export type GateResult =
-  | { ok: true; userId: string }
+  | { ok: true; userId: string; tier: Tier; deviceLimit: number }
   | { ok: false; reason: "unauthenticated" | "payment_required" };
 
 export const requirePaidUser = async (): Promise<GateResult> => {
@@ -19,7 +20,10 @@ export const requirePaidUser = async (): Promise<GateResult> => {
   });
   if (!sub) return { ok: false, reason: "payment_required" };
 
-  return { ok: true, userId };
+  const tier = (sub.tier || "basic") as Tier;
+  const tierConfig = getTierConfig(tier);
+
+  return { ok: true, userId, tier, deviceLimit: tierConfig.deviceLimit };
 };
 
 export const gateApiOr = async () => {
@@ -31,3 +35,21 @@ export const gateApiOr = async () => {
   return null;
 };
 
+export const checkDeviceLimit = async (
+  userId: string
+): Promise<{ canAdd: boolean; current: number; limit: number }> => {
+  const gate = await requirePaidUser();
+  if (!gate.ok) {
+    return { canAdd: false, current: 0, limit: 0 };
+  }
+
+  const deviceCount = await prisma.device.count({
+    where: { userId },
+  });
+
+  return {
+    canAdd: deviceCount < gate.deviceLimit,
+    current: deviceCount,
+    limit: gate.deviceLimit,
+  };
+};

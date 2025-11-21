@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LayoutDashboard, Server, Shield, User, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Server, Shield, User, ShieldCheck, Smartphone } from "lucide-react";
 import { getSession } from "@/lib/auth";
 
 export default async function DashboardLayout({
@@ -20,6 +20,13 @@ export default async function DashboardLayout({
           >
             <LayoutDashboard className="h-4 w-4" />
             Overview
+          </Link>
+          <Link
+            href="/devices"
+            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+          >
+            <Smartphone className="h-4 w-4" />
+            Devices
           </Link>
           <Link
             href="/servers"

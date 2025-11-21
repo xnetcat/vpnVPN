@@ -84,3 +84,6 @@ impl ControlPlaneClient {
     }
 }
 
+#[cfg(test)]
+mod tests;
+

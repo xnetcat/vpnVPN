@@ -1,22 +1,19 @@
 {
-  "name": "vpnvpn-infra",
+  "name": "@vpnvpn/infra",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "preview:global": "pulumi preview -s global",
-    "up:global": "pulumi up -y -s global",
-    "preview:region": "pulumi preview -s region-us-east-1",
-    "up:region": "pulumi up -y -s region-us-east-1"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "@pulumi/aws": "^6.56.0",
-    "@pulumi/pulumi": "^3.120.0",
-    "@pulumi/awsx": "^2.13.0",
-    "aws-sdk": "^2.1692.0"
+    "@pulumi/aws": "^6.0.0",
+    "@pulumi/pulumi": "^3.100.0",
+    "aws-sdk": "^2.1691.0"
   },
   "devDependencies": {
-    "typescript": "^5.5.4"
+    "@types/node": "^20.14.11",
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.4"
   }
 }

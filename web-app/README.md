@@ -1,16 +1,18 @@
 web-app (Next.js SaaS frontend)
 
-This app is the public marketing site, user dashboard, and admin panel for vpnVPN.
+Production-ready SaaS application for vpnVPN with multi-tier pricing, device management, and admin panel.
 
-- App Router, TypeScript (strict), TailwindCSS.
-- User dashboard (`/dashboard`) for subscription status, device management, and server selection.
-- Admin panel (`/admin`) for fleet monitoring, node token management, and proxy pool inspection.
+Features
 
-Authentication & billing (Auth.js + Stripe)
-
-- Auth providers: GitHub, Google, email (magic link).
-- Sessions/Users via Prisma (Postgres).
-- Stripe subscription checkout, billing portal, and webhooks to keep `Subscription` records in sync.
+- **tRPC Backend**: End-to-end type-safe API with automatic validation and caching
+- **Multi-Tier Pricing**: Basic ($5), Pro ($12), Enterprise ($29) with different device limits
+- **Authentication**: NextAuth.js with GitHub, Google, and Email (magic link) providers
+- **Stripe Integration**: Subscription management, checkout, billing portal, and webhooks
+- **Email Notifications**: Resend for transactional emails (welcome, subscription, security alerts)
+- **Device Management**: Add, view, revoke devices with server selection
+- **Admin Panel**: Token management, server provisioning, fleet monitoring
+- **Control Plane Integration**: Real-time server metrics and peer management
+- **Tech Stack**: Next.js App Router, tRPC, React Query, TypeScript (strict), TailwindCSS, Prisma, PostgreSQL
 
 Environment variables (see `env.local.example` for local dev)
 
@@ -27,7 +29,11 @@ Environment variables (see `env.local.example` for local dev)
 - Stripe:
   - `STRIPE_SECRET_KEY`
   - `STRIPE_WEBHOOK_SECRET`
-  - `STRIPE_PRICE_ID`
+  - `STRIPE_PRICE_ID_BASIC`
+  - `STRIPE_PRICE_ID_PRO`
+  - `STRIPE_PRICE_ID_ENTERPRISE`
+- Resend (Email):
+  - `RESEND_API_KEY`
 - Control plane (browser + server):
   - `NEXT_PUBLIC_API_BASE_URL` (base URL of the AWS control-plane HTTP API)
   - `CONTROL_PLANE_API_URL` (server-side base URL for control-plane calls)

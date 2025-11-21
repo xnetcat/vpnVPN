@@ -119,3 +119,6 @@ impl VpnNode {
 }
 
 pub static VPN_NODE: OnceCell<Arc<VpnNode>> = OnceCell::new();
+
+#[cfg(test)]
+mod tests;

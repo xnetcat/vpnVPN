@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requirePaidUser } from "@/lib/requirePaidUser";
 import { redirect } from "next/navigation";
+import ManageBillingButton from "@/components/ManageBillingButton";
 
 export default async function AccountPage() {
   const gate = await requirePaidUser();
@@ -37,15 +38,9 @@ export default async function AccountPage() {
             </div>
           </div>
         </div>
-        <form action="/api/billing/portal" method="POST" className="mt-6">
-          <button
-            type="submit"
-            className="rounded-md bg-gray-900 px-4 py-2 text-white hover:bg-black"
-            aria-label="Manage billing"
-          >
-            Manage billing
-          </button>
-        </form>
+        <div className="mt-6">
+          <ManageBillingButton />
+        </div>
       </div>
     </main>
   );

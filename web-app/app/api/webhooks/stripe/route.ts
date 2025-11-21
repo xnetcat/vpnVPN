@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 import { revokePeersForUser } from "@/lib/controlPlane";
+import { sendEmail } from "@/lib/email";
+import { getTierFromPriceId, getTierConfig } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +51,7 @@ export async function POST(req: Request) {
         );
         const priceId = sub.items?.data?.[0]?.price?.id as string | undefined;
         const status = sub.status as string;
+        const tier = priceId ? getTierFromPriceId(priceId) : "basic";
         const currentPeriodEnd = sub.current_period_end
           ? new Date(sub.current_period_end * 1000)
           : null;
@@ -67,6 +70,7 @@ export async function POST(req: Request) {
             update: {
               status,
               priceId: priceId ?? "",
+              tier,
               currentPeriodEnd: currentPeriodEnd ?? undefined,
               userId: user.id,
             },
@@ -75,6 +79,7 @@ export async function POST(req: Request) {
               stripeSubscriptionId: subscriptionId,
               priceId: priceId ?? "",
               status,
+              tier,
               currentPeriodEnd: currentPeriodEnd ?? undefined,
             },
           });
@@ -90,6 +95,22 @@ export async function POST(req: Request) {
                 error: e,
               });
             }
+          } else if (user.email) {
+            // Send subscription active email
+            const tierConfig = getTierConfig(tier);
+            await sendEmail({
+              to: user.email,
+              template: "subscription_active",
+              data: {
+                name: user.name,
+                plan: tierConfig.name,
+                deviceLimit: tierConfig.deviceLimit.toString(),
+                nextBillingDate: currentPeriodEnd?.toLocaleDateString(),
+                dashboardUrl: `${
+                  process.env.NEXTAUTH_URL || "http://localhost:3000"
+                }/dashboard`,
+              },
+            });
           }
         }
         break;
@@ -104,6 +125,7 @@ export async function POST(req: Request) {
           | string
           | undefined;
         const status = subObj.status as string;
+        const tier = priceId ? getTierFromPriceId(priceId) : "basic";
         const currentPeriodEnd = subObj.current_period_end
           ? new Date(subObj.current_period_end * 1000)
           : null;
@@ -116,6 +138,7 @@ export async function POST(req: Request) {
             update: {
               status,
               priceId: priceId ?? "",
+              tier,
               currentPeriodEnd: currentPeriodEnd ?? undefined,
               userId: user.id,
             },
@@ -124,6 +147,7 @@ export async function POST(req: Request) {
               stripeSubscriptionId: subscriptionId,
               priceId: priceId ?? "",
               status,
+              tier,
               currentPeriodEnd: currentPeriodEnd ?? undefined,
             },
           });
@@ -141,6 +165,20 @@ export async function POST(req: Request) {
                   error: e,
                 }
               );
+            }
+
+            // Send cancellation email
+            if (user.email && event.type === "customer.subscription.deleted") {
+              await sendEmail({
+                to: user.email,
+                template: "subscription_cancelled",
+                data: {
+                  name: user.name,
+                  pricingUrl: `${
+                    process.env.NEXTAUTH_URL || "http://localhost:3000"
+                  }/pricing`,
+                },
+              });
             }
           }
         }
