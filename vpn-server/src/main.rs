@@ -44,6 +44,18 @@ struct RunArgs {
     /// Admin API port
     #[arg(long, env = "ADMIN_PORT", default_value_t = 8080)]
     admin_port: u16,
+
+    /// Optional static peer public key for local/docker tests
+    #[arg(long, env = "STATIC_PEER_PUBLIC_KEY")]
+    static_peer_public_key: Option<String>,
+
+    /// Optional static peer allowed IPs (comma-separated, e.g. 10.8.0.2/32,10.8.0.3/32)
+    #[arg(long, env = "STATIC_PEER_ALLOWED_IPS")]
+    static_peer_allowed_ips: Option<String>,
+
+    /// Optional static peer endpoint (host:port) for local/docker tests
+    #[arg(long, env = "STATIC_PEER_ENDPOINT")]
+    static_peer_endpoint: Option<String>,
 }
 
 #[tokio::main]
@@ -129,6 +141,31 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
     node.start_all();
     let node_arc = std::sync::Arc::new(node);
     let _ = vpn::VPN_NODE.set(node_arc.clone());
+
+    // Optional static peer for local/docker tests (bypasses control plane peer sync)
+    if let Some(static_pk) = args.static_peer_public_key.clone() {
+        let allowed_raw = args
+            .static_peer_allowed_ips
+            .clone()
+            .unwrap_or_else(|| "10.8.0.2/32".to_string());
+        let allowed_ips: Vec<String> = allowed_raw
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        let static_peer = vpn::PeerSpec {
+            public_key: Some(static_pk),
+            preshared_key: None,
+            allowed_ips,
+            endpoint: args.static_peer_endpoint.clone(),
+        };
+
+        match node_arc.apply_peers(&[static_peer]) {
+            Ok(_) => info!("applied_static_peer_configuration"),
+            Err(e) => error!(error = ?e, "static_peer_apply_failed"),
+        }
+    }
 
     // Client initialization
     let cp_client = std::sync::Arc::new(crate::client::ControlPlaneClient::new(
@@ -229,10 +266,18 @@ async fn run_admin(port: u16) {
         axum::Json(statuses)
     }
 
+    async fn pubkey() -> axum::Json<Option<String>> {
+        let pk = crate::vpn::VPN_NODE
+            .get()
+            .and_then(|n| n.get_public_key());
+        axum::Json(pk)
+    }
+
     let app = Router::new()
         .route("/health", get(health))
         .route("/metrics", get(metrics))
-        .route("/status", get(status));
+        .route("/status", get(status))
+        .route("/pubkey", get(pubkey));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     axum::serve(TcpListener::bind(addr).await.unwrap(), app)

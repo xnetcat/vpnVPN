@@ -18,16 +18,6 @@ cd "$(dirname "$0")"
 
 log "Stopping local VPN services..."
 
-# Stop mock API
-if [ -f .mock-api.pid ]; then
-    PID=$(cat .mock-api.pid)
-    if kill -0 "$PID" 2>/dev/null; then
-        kill "$PID"
-        log "Stopped mock API (PID: $PID)"
-    fi
-    rm .mock-api.pid
-fi
-
 # Stop VPN server
 if [ -f .vpn-server.pid ]; then
     PID=$(cat .vpn-server.pid)
@@ -39,7 +29,6 @@ if [ -f .vpn-server.pid ]; then
 fi
 
 # Kill any remaining processes
-pkill -f "node.*mock-api/index.js" 2>/dev/null && log "Cleaned up remaining mock API processes"
 sudo pkill -f "vpn-server run" 2>/dev/null && log "Cleaned up remaining VPN server processes"
 
 log "Local services stopped"

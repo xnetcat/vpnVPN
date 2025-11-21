@@ -1,38 +1,31 @@
 services:
-  # LocalStack for AWS control plane emulation
-  localstack:
-    image: localstack/localstack:3
-    environment:
-      - SERVICES=lambda,dynamodb,apigateway,cloudwatch,logs
-      - DEBUG=0
-    ports:
-      - "4566:4566"
-    networks:
-      - vpn-net
-
   # VPN Node (Rust Server)
   vpn-node:
     platform: linux/amd64
     build:
       context: ../vpn-server
       dockerfile: Dockerfile
+    command: ["run"]
     cap_add:
       - NET_ADMIN
     devices:
       - "/dev/net/tun:/dev/net/tun"
     environment:
-      - API_URL=http://control-plane:8080
-      - VPN_TOKEN=dev-token
+      # For dockerized local tests we don't rely on the control plane.
+      # These can be dummy values.
+      - API_URL=http://dummy-control-plane
+      - VPN_TOKEN=dummy-token
       - LISTEN_UDP_PORT=51820
       - ADMIN_PORT=9090
       - RUST_LOG=info
       - VPN_PROTOCOLS=wireguard
       - DISABLE_CLOUDWATCH_METRICS=1
+      # Static peer for docker test client
+      - STATIC_PEER_PUBLIC_KEY=${VPN_TEST_CLIENT_PUBLIC_KEY}
+      - STATIC_PEER_ALLOWED_IPS=10.8.0.2/32
     ports:
       - "51820:51820/udp"
       - "9090:9090" # Admin/Metrics port
-    depends_on:
-      - control-plane
     networks:
       - vpn-net
     volumes:
@@ -61,28 +54,63 @@ services:
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/vpnvpn
       - NEXTAUTH_SECRET=supersecret
       - NEXTAUTH_URL=http://localhost:3000
-      - NEXT_PUBLIC_API_BASE_URL=http://control-plane:8080
-      - CONTROL_PLANE_API_URL=http://control-plane:8080
-      - CONTROL_PLANE_API_KEY=dev-web-api-key
+      # In dockerized test flow, the web app is optional and disabled by default.
+      # When enabled, point these at your real control plane.
+      - NEXT_PUBLIC_API_BASE_URL=${CONTROL_PLANE_API_URL:-https://example-control-plane}
+      - CONTROL_PLANE_API_URL=${CONTROL_PLANE_API_URL:-https://example-control-plane}
+      - CONTROL_PLANE_API_KEY=${CONTROL_PLANE_API_KEY:-dummy-key}
     ports:
       - "3000:3000"
     depends_on:
       - postgres
-      - control-plane
     networks:
       - vpn-net
 
-  # Minimal Control Plane (for local development)
-  control-plane:
-    image: node:20-alpine
-    working_dir: /app
-    command: ["node", "index.js"]
-    volumes:
-      - ../local/mock-api:/app
-    environment:
-      - PORT=8080
-    ports:
-      - "8080:8080"
+  # Dockerized VPN test client that connects to vpn-node and verifies connectivity.
+  vpn-test-client:
+    build:
+      context: ../vpn-server
+      dockerfile: Dockerfile
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "
+      set -e;
+      if [ -z \"${VPN_TEST_CLIENT_PRIVATE_KEY}\" ] || [ -z \"${VPN_TEST_CLIENT_PUBLIC_KEY}\" ]; then
+        echo 'VPN_TEST_CLIENT_PRIVATE_KEY and VPN_TEST_CLIENT_PUBLIC_KEY must be set in the environment for vpn-test-client';
+        exit 1;
+      fi;
+      echo '[vpn-test-client] Waiting for vpn-node admin endpoint...';
+      until curl -sf http://vpn-node:9090/health > /dev/null; do
+        sleep 1;
+      done;
+      SERVER_PUB=$(curl -sf http://vpn-node:9090/pubkey | tr -d '\"');
+      echo \"[vpn-test-client] Server public key: $$SERVER_PUB\";
+      mkdir -p /etc/wireguard;
+      echo \"${VPN_TEST_CLIENT_PRIVATE_KEY}\" > /etc/wireguard/client.key;
+      chmod 600 /etc/wireguard/client.key;
+      cat <<EOF > /etc/wireguard/wg0.conf
+      [Interface]
+      PrivateKey = ${VPN_TEST_CLIENT_PRIVATE_KEY}
+      Address = 10.8.0.2/32
+
+      [Peer]
+      PublicKey = $$SERVER_PUB
+      AllowedIPs = 10.8.0.0/24
+      Endpoint = vpn-node:51820
+      PersistentKeepalive = 15
+      EOF
+      echo '[vpn-test-client] Bringing up WireGuard interface...';
+      wg-quick up wg0;
+      echo '[vpn-test-client] Pinging server (10.8.0.1)...';
+      ping -c 3 10.8.0.1;
+      echo '[vpn-test-client] VPN connectivity verified.';
+      "
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - "/dev/net/tun:/dev/net/tun"
+    depends_on:
+      - vpn-node
     networks:
       - vpn-net
 
