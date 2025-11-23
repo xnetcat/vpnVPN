@@ -30,3 +30,5 @@ yarn-error.log*
 pnpm-debug.log*
 
 
+/.turbo
+/apps/desktop/.turbo

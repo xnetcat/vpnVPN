@@ -1,0 +1,24 @@
+{
+  "name": "vpnvpn-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "bun@1.1.38",
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "format": "turbo run format",
+    "docker:build": "turbo run docker:build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.8.0",
+    "turbo": "^2.1.2",
+    "typescript": "^5.6.3"
+  }
+}

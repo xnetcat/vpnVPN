@@ -2,7 +2,7 @@ services:
   # VPN Node (Rust Server)
   vpn-node:
     build:
-      context: ../vpn-server
+      context: ../apps/vpn-server
       dockerfile: Dockerfile
     command: ["run"]
     cap_add:
@@ -10,9 +10,7 @@ services:
     devices:
       - "/dev/net/tun:/dev/net/tun"
     environment:
-      # For dockerized local tests we don't rely on the control plane.
-      # These can be dummy values.
-      - API_URL=http://dummy-control-plane
+      - API_URL=http://control-plane:4000
       - VPN_TOKEN=dummy-token
       - LISTEN_UDP_PORT=51820
       - ADMIN_PORT=9090
@@ -42,20 +40,45 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
+  # Control Plane Service
+  control-plane:
+    build:
+      context: ..
+      dockerfile: services/control-plane/Dockerfile
+    environment:
+      - PORT=4000
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/vpnvpn
+      - CONTROL_PLANE_API_KEY=${CONTROL_PLANE_API_KEY:-dev-control-plane-key}
+    depends_on:
+      - postgres
+    networks:
+      - vpn-net
+
+  # Metrics Service
+  metrics:
+    build:
+      context: ..
+      dockerfile: services/metrics/Dockerfile
+    environment:
+      - PORT=4100
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/vpnvpn
+    depends_on:
+      - postgres
+    networks:
+      - vpn-net
+
   # Web App
   web-app:
     build:
-      context: ../web-app
+      context: ../apps/web
       dockerfile: Dockerfile
     environment:
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/vpnvpn
       - NEXTAUTH_SECRET=supersecret
       - NEXTAUTH_URL=http://localhost:3000
-      # In dockerized test flow, the web app is optional and disabled by default.
-      # When enabled, point these at your real control plane.
-      - NEXT_PUBLIC_API_BASE_URL=${CONTROL_PLANE_API_URL:-https://example-control-plane}
-      - CONTROL_PLANE_API_URL=${CONTROL_PLANE_API_URL:-https://example-control-plane}
-      - CONTROL_PLANE_API_KEY=${CONTROL_PLANE_API_KEY:-dummy-key}
+      - NEXT_PUBLIC_API_BASE_URL=http://control-plane:4000
+      - CONTROL_PLANE_API_URL=http://control-plane:4000
+      - CONTROL_PLANE_API_KEY=${CONTROL_PLANE_API_KEY:-dev-control-plane-key}
     ports:
       - "3000:3000"
     depends_on:
@@ -66,7 +89,7 @@ services:
   # Dockerized VPN test client that connects to vpn-node and verifies connectivity.
   vpn-test-client:
     build:
-      context: ../vpn-server
+      context: ../apps/vpn-server
       dockerfile: Dockerfile
     entrypoint: ["/bin/sh", "-c"]
     command: |
