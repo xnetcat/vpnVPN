@@ -5,6 +5,9 @@ pnpm-lock.yaml
 yarn.lock
 package-lock.json
 
+# turbo
+.turbo/
+
 # Rust
 target/
 Cargo.lock
@@ -29,6 +32,5 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-
-/.turbo
-/apps/desktop/.turbo
+# turbo
+.turbo/
