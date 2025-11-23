@@ -8,9 +8,9 @@
     "dev": "bun run dev:web & bun run dev:tauri",
     "build:web": "vite build",
     "build:tauri": "tauri build",
-    "build": "bun run build:web && bun run build:tauri",
+    "build": "bun run build:web",
     "preview": "vite preview",
-    "test": "vitest",
+    "test": "vitest run",
     "lint": "biome lint . && cd src-tauri && cargo fmt --check",
     "format": "biome format . && cd src-tauri && cargo fmt"
   },

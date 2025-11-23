@@ -34,7 +34,7 @@ describe("control-plane service", () => {
       },
     });
 
-    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).toBe(401);
   });
 
   it("accepts valid addPeer requests", async () => {

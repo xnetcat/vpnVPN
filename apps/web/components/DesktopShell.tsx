@@ -2,8 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc/client";
-import * as nacl from "tweetnacl";
-import * as util from "tweetnacl-util";
 import {
   buildWireGuardConfig,
   buildOpenVpnConfig,
@@ -156,12 +154,7 @@ export default function DesktopShell() {
     setConfig(null);
 
     try {
-      const keyPair = nacl.box.keyPair();
-      const publicKey = util.encodeBase64(keyPair.publicKey);
-      const privateKey = util.encodeBase64(keyPair.secretKey);
-
       const result = await deviceMutation.mutateAsync({
-        publicKey,
         name: `Desktop • ${selectedServer.region}`,
         serverId: selectedServer.id,
       });
@@ -169,7 +162,7 @@ export default function DesktopShell() {
       let cfg: string;
       if (protocol === "wireguard") {
         cfg = buildWireGuardConfig({
-          privateKey,
+          privateKey: result.privateKey,
           assignedIp: result.assignedIp,
         });
       } else if (protocol === "openvpn") {

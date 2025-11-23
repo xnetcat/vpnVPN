@@ -3,9 +3,8 @@ import cors from "@fastify/cors";
 import { z } from "zod";
 import { prisma } from "@vpnvpn/db";
 
-const apiKey = process.env.CONTROL_PLANE_API_KEY;
-
 function requireApiKey(headers: Record<string, any>) {
+  const apiKey = process.env.CONTROL_PLANE_API_KEY;
   if (!apiKey) {
     throw new Error("CONTROL_PLANE_API_KEY not configured");
   }

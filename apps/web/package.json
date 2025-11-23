@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "biome lint .",
     "format": "biome format .",
-    "test": "vitest",
+    "test": "vitest run",
     "docker:build": "docker build -t vpnvpn/web -f Dockerfile ."
   },
   "dependencies": {
