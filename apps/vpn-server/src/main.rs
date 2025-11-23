@@ -93,16 +93,6 @@ fn run_doctor() -> bool {
         }
     }
 
-    // CloudWatch can be disabled; just log what will happen.
-    let cw_disabled = std::env::var("DISABLE_CLOUDWATCH_METRICS")
-        .map(|v| v == "1")
-        .unwrap_or(false);
-    if cw_disabled {
-        info!(target: "doctor", "cloudwatch_metrics_disabled_by_env");
-    } else {
-        info!(target: "doctor", "cloudwatch_metrics_enabled");
-    }
-
     info!(target: "doctor", "doctor_checks_passed");
     true
 }
@@ -212,7 +202,7 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
         }
     });
 
-    // Periodic sampler to update metrics
+    // Periodic sampler to update in-process Prometheus metrics
     tokio::spawn(async move {
         use metrics::*;
         loop {
@@ -222,7 +212,6 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
                 for st in &statuses {
                     total_active += st.active_sessions;
                     record_active_sessions_for(&st.protocol, st.active_sessions);
-                    // record per protocol transfer totals as increments; compute deltas here is heavy; we let cloudwatch compute deltas via stored last values
                     record_transfer_for(&st.protocol, "egress", st.egress_bytes);
                     record_transfer_for(&st.protocol, "ingress", st.ingress_bytes);
                 }
@@ -231,8 +220,6 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         }
     });
-
-    metrics::cloudwatch::start_publisher_task().await;
 
     let admin_server = tokio::spawn(run_admin(args.admin_port));
 

@@ -2,10 +2,11 @@
 
 ## Setup commands
 
-- **Frontend:**
+- **Frontend & Desktop:**
   - Install deps (monorepo): `bun install`
-  - Start full local stack: `bun run dev` (Docker: web, control-plane, metrics, vpn-server)
+  - Start full local stack + desktop app: `bun run dev` (Docker: web, control-plane, metrics, vpn-server + local Tauri desktop)
   - Start web app only: `cd apps/web && bun run dev`
+  - Start desktop app only: `cd apps/desktop && bun run dev`
   - Run tests: `bun run test` or `cd apps/web && bun run test`
   - Lint: `bun run lint` or `cd apps/web && bun run lint`
 - **Infra (Control Plane):**

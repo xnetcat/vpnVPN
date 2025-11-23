@@ -1,5 +1,3 @@
-pub mod cloudwatch;
-
 use once_cell::sync::Lazy;
 use prometheus::{
     Encoder, IntCounter, IntCounterVec, IntGauge, IntGaugeVec, Opts, Registry, TextEncoder,

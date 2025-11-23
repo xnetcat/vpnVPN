@@ -9,7 +9,9 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "cd local && docker compose up --build",
+    "dev:stack": "cd local && docker compose up --build -d",
+    "dev:desktop": "cd apps/desktop && bun run dev",
+    "dev": "bun run dev:stack && bun run dev:desktop",
     "test:local": "bash ./local/test-flow.sh",
     "test:local:e2e": "bun test local/local-flow.test.ts",
     "dev:turbo": "turbo run dev --parallel",
