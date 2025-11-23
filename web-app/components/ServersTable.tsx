@@ -1,18 +1,26 @@
 "use client";
 
-import type { Server } from "./page";
 import { useMemo, useState } from "react";
 
+export type ServerRow = {
+  id: string;
+  region: string;
+  country?: string;
+  status: string;
+  sessions: number;
+  cpu?: number;
+  lastSeen?: string;
+};
+
 type Props = {
-  servers: Server[];
+  servers: ServerRow[];
 };
 
 const statusOptions = ["all", "online", "offline", "unknown"] as const;
 
 export default function ServersTable({ servers }: Props) {
   const [search, setSearch] = useState("");
-  const [status, setStatus] =
-    useState<(typeof statusOptions)[number]>("all");
+  const [status, setStatus] = useState<(typeof statusOptions)[number]>("all");
 
   const filtered = useMemo(() => {
     return servers.filter((s) => {
@@ -20,9 +28,7 @@ export default function ServersTable({ servers }: Props) {
         !search ||
         s.id.toLowerCase().includes(search.toLowerCase()) ||
         s.region.toLowerCase().includes(search.toLowerCase()) ||
-        (s.country ?? "")
-          .toLowerCase()
-          .includes(search.toLowerCase());
+        (s.country ?? "").toLowerCase().includes(search.toLowerCase());
 
       const matchesStatus =
         status === "all" ? true : s.status.toLowerCase() === status;
@@ -89,18 +95,12 @@ export default function ServersTable({ servers }: Props) {
           <tbody className="divide-y divide-gray-100">
             {filtered.map((s) => (
               <tr key={s.id} className="hover:bg-gray-50">
-                <td className="px-4 py-2 text-sm">
-                  {s.country ?? "—"}
-                </td>
+                <td className="px-4 py-2 text-sm">{s.country ?? "—"}</td>
                 <td className="px-4 py-2 text-sm">{s.region}</td>
-                <td className="px-4 py-2 text-sm capitalize">
-                  {s.status}
-                </td>
+                <td className="px-4 py-2 text-sm capitalize">{s.status}</td>
                 <td className="px-4 py-2 text-sm">{s.sessions}</td>
                 <td className="px-4 py-2 text-sm">
-                  {typeof s.cpu === "number"
-                    ? `${s.cpu.toFixed(1)}%`
-                    : "—"}
+                  {typeof s.cpu === "number" ? `${s.cpu.toFixed(1)}%` : "—"}
                 </td>
                 <td className="px-4 py-2 text-sm font-mono text-gray-500">
                   {s.id}
@@ -123,6 +123,3 @@ export default function ServersTable({ servers }: Props) {
     </div>
   );
 }
-
-
-

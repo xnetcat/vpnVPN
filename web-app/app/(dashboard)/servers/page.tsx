@@ -2,19 +2,9 @@ import { requirePaidUser } from "@/lib/requirePaidUser";
 import { redirect } from "next/navigation";
 import { createContext } from "@/lib/trpc/init";
 import { appRouter } from "@/lib/trpc/routers/_app";
-import ServersTable from "./serversTable";
+import ServersTable, { type ServerRow } from "@/components/ServersTable";
 
-export type Server = {
-  id: string;
-  region: string;
-  country?: string;
-  status: string;
-  sessions: number;
-  cpu?: number;
-  lastSeen?: string;
-};
-
-async function getServers(): Promise<Server[]> {
+async function getServers(): Promise<ServerRow[]> {
   const ctx = await createContext();
   const caller = appRouter.createCaller(ctx);
   const servers = await caller.servers.list();

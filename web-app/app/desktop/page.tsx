@@ -1,6 +1,6 @@
 import { requirePaidUser } from "@/lib/requirePaidUser";
 import { redirect } from "next/navigation";
-import DesktopShell from "./desktopShell";
+import DesktopShell from "@/components/DesktopShell";
 
 export default async function DesktopPage() {
   const gate = await requirePaidUser();

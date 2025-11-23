@@ -29,7 +29,7 @@ describe("Proxies Router", () => {
   });
 
   describe("proxies.list", () => {
-    it("should list proxies for paid users", async () => {
+    it("should list proxies for paid users sorted by latency", async () => {
       const { getSession } = await import("@/lib/auth");
       vi.mocked(getSession).mockResolvedValue(mockSession);
 
@@ -52,6 +52,15 @@ describe("Proxies Router", () => {
             score: 10,
             country: "US",
           },
+          {
+            proxyId: "p2",
+            type: "http",
+            ip: "5.6.7.8",
+            port: 8080,
+            latency: 50,
+            score: 5,
+            country: "DE",
+          },
         ],
       } as any);
 
@@ -62,12 +71,11 @@ describe("Proxies Router", () => {
       const caller = appRouter.createCaller(ctx);
       const result = await caller.proxies.list();
 
-      expect(result).toHaveLength(1);
-      expect(result[0].ip).toBe("1.2.3.4");
-      expect(result[0].country).toBe("US");
+      expect(result).toHaveLength(2);
+      // Sorted by latency ascending, so the DE proxy comes first.
+      expect(result[0].ip).toBe("5.6.7.8");
+      expect(result[0].country).toBe("DE");
+      expect(result[1].ip).toBe("1.2.3.4");
     });
   });
 });
-
-
-

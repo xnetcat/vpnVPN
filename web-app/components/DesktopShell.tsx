@@ -1,11 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc/client";
 import * as nacl from "tweetnacl";
 import * as util from "tweetnacl-util";
+import {
+  buildWireGuardConfig,
+  buildOpenVpnConfig,
+  buildIkev2Config,
+} from "@/lib/desktopConfig";
 
 type ViewState = "disconnected" | "connecting" | "connected";
+type Protocol = "wireguard" | "openvpn" | "ikev2";
 
 type MapServer = {
   id: string;
@@ -14,33 +20,6 @@ type MapServer = {
   status: string;
   sessions: number;
 };
-
-const WG_ENDPOINT = process.env.NEXT_PUBLIC_WG_ENDPOINT || "";
-const WG_SERVER_PUBLIC_KEY = process.env.NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY || "";
-
-function buildWireGuardConfig(params: {
-  privateKey: string;
-  assignedIp: string;
-}) {
-  const endpoint = WG_ENDPOINT;
-  const serverPublicKey = WG_SERVER_PUBLIC_KEY;
-
-  return [
-    "[Interface]",
-    "Name = vpnvpn-desktop",
-    `PrivateKey = ${params.privateKey}`,
-    `Address = ${params.assignedIp}`,
-    "DNS = 1.1.1.1",
-    "",
-    "[Peer]",
-    serverPublicKey
-      ? `PublicKey = ${serverPublicKey}`
-      : "# PublicKey = <server-public-key>",
-    "AllowedIPs = 0.0.0.0/0, ::/0",
-    endpoint ? `Endpoint = ${endpoint}` : "# Endpoint = <hostname:51820>",
-    "",
-  ].join("\n");
-}
 
 // Deterministically place a server "pin" on the map using a hash of its id.
 function positionForServer(id: string): { top: string; left: string } {
@@ -59,16 +38,19 @@ function isDesktopShell(): boolean {
   return Boolean(anyWin.__TAURI__?.core?.invoke);
 }
 
-async function applyVpnConfig(config: string): Promise<void> {
+async function applyVpnConfig(
+  protocol: Protocol,
+  config: string
+): Promise<void> {
   if (!isDesktopShell()) return;
   const anyWin = window as any;
-  await anyWin.__TAURI__.core.invoke("apply_wireguard_config", { config });
+  await anyWin.__TAURI__.core.invoke("apply_vpn_config", { protocol, config });
 }
 
-async function disconnectVpn(): Promise<void> {
+async function disconnectVpn(protocol: Protocol): Promise<void> {
   if (!isDesktopShell()) return;
   const anyWin = window as any;
-  await anyWin.__TAURI__.core.invoke("disconnect_wireguard");
+  await anyWin.__TAURI__.core.invoke("disconnect_vpn", { protocol });
 }
 
 export default function DesktopShell() {
@@ -79,6 +61,12 @@ export default function DesktopShell() {
   const [status, setStatus] = useState<ViewState>("disconnected");
   const [config, setConfig] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [protocol, setProtocol] = useState<Protocol>("wireguard");
+  const [autoConnect, setAutoConnect] = useState(false);
+  const [hasAttemptedAutoConnect, setHasAttemptedAutoConnect] = useState(false);
+  const [wgQuickPath, setWgQuickPath] = useState("");
+  const [openvpnPath, setOpenvpnPath] = useState("");
+  const [wireguardCliPath, setWireguardCliPath] = useState("");
 
   const servers: MapServer[] = useMemo(
     () => serversQuery.data ?? [],
@@ -93,6 +81,73 @@ export default function DesktopShell() {
       await utils.device.list.invalidate();
     },
   });
+
+  // Hydrate protocol/auto-connect from local desktop settings file when running in Tauri
+  useEffect(() => {
+    if (!isDesktopShell()) return;
+    const anyWin = window as any;
+
+    (async () => {
+      try {
+        const s = (await anyWin.__TAURI__.core.invoke(
+          "get_desktop_settings"
+        )) as {
+          preferred_protocol?: Protocol;
+          auto_connect?: boolean;
+          wg_quick_path?: string | null;
+          openvpn_path?: string | null;
+          wireguard_cli_path?: string | null;
+        };
+
+        if (s.preferred_protocol) {
+          setProtocol(s.preferred_protocol);
+        }
+        if (typeof s.auto_connect === "boolean") {
+          setAutoConnect(s.auto_connect);
+        }
+        setWgQuickPath(s.wg_quick_path ?? "");
+        setOpenvpnPath(s.openvpn_path ?? "");
+        setWireguardCliPath(s.wireguard_cli_path ?? "");
+      } catch (e) {
+        // Fallback to defaults if config file cannot be read.
+        // eslint-disable-next-line no-console
+        console.error("Failed to load desktop settings from file", e);
+      }
+    })();
+  }, []);
+
+  // Persist protocol / auto-connect / paths to local settings file when changed in Tauri
+  useEffect(() => {
+    if (!isDesktopShell()) return;
+    const anyWin = window as any;
+    void anyWin.__TAURI__.core
+      .invoke("update_desktop_settings", {
+        preferredProtocol: protocol,
+        autoConnect,
+        wgQuickPath,
+        openvpnPath,
+        wireguardCliPath,
+      })
+      .catch((e: unknown) =>
+        // eslint-disable-next-line no-console
+        console.error("Failed to update desktop settings file", e)
+      );
+  }, [protocol, autoConnect, wgQuickPath, openvpnPath, wireguardCliPath]);
+
+  // Auto-connect once if enabled and we have a selected server
+  useEffect(() => {
+    if (
+      !autoConnect ||
+      hasAttemptedAutoConnect ||
+      !selectedServer ||
+      status !== "disconnected"
+    ) {
+      return;
+    }
+    setHasAttemptedAutoConnect(true);
+    void handleConnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoConnect, hasAttemptedAutoConnect, selectedServer, status]);
 
   const handleConnect = async () => {
     if (!selectedServer) return;
@@ -111,17 +166,31 @@ export default function DesktopShell() {
         serverId: selectedServer.id,
       });
 
-      const wgConfig = buildWireGuardConfig({
-        privateKey,
-        assignedIp: result.assignedIp,
-      });
+      let cfg: string;
+      if (protocol === "wireguard") {
+        cfg = buildWireGuardConfig({
+          privateKey,
+          assignedIp: result.assignedIp,
+        });
+      } else if (protocol === "openvpn") {
+        cfg = buildOpenVpnConfig({
+          assignedIp: result.assignedIp,
+          serverName: selectedServer.region,
+        });
+      } else {
+        cfg = buildIkev2Config({
+          serverName: selectedServer.region,
+        });
+      }
 
-      setConfig(wgConfig);
+      setConfig(cfg);
       try {
-        await applyVpnConfig(wgConfig);
+        await applyVpnConfig(protocol, cfg);
       } catch (e) {
         console.error("Failed to apply VPN config via Tauri", e);
-        setError("Connected, but failed to apply VPN settings locally.");
+        setError(
+          "Config generated, but failed to apply VPN settings locally. You may need to import it manually."
+        );
       }
       setStatus("connected");
     } catch (e: any) {
@@ -131,17 +200,21 @@ export default function DesktopShell() {
   };
 
   const handleDisconnect = () => {
-    // From the desktop UI perspective, disconnect just clears current config.
-    // The underlying credentials are revoked server-side whenever a new
-    // device is registered (single active peer invariant).
     setConfig(null);
     setStatus("disconnected");
-    void disconnectVpn().catch((e) =>
+    void disconnectVpn(protocol).catch((e) =>
       console.error("Failed to disconnect VPN via Tauri", e)
     );
   };
 
   const isConnecting = status === "connecting";
+
+  const protocolLabel =
+    protocol === "wireguard"
+      ? "WireGuard"
+      : protocol === "openvpn"
+        ? "OpenVPN"
+        : "IKEv2 / IPsec";
 
   return (
     <main className="flex min-h-[calc(100vh-65px)] bg-slate-950 text-slate-50">
@@ -209,11 +282,54 @@ export default function DesktopShell() {
           </ul>
         </div>
 
-        <div className="mt-4 border-t border-slate-800 pt-3 text-xs text-slate-500">
+        <div className="mt-4 border-t border-slate-800 pt-3 text-xs text-slate-500 space-y-2">
           <p>
             Signed in via your browser session. Billing and account settings
             live in the main dashboard.
           </p>
+          {isDesktopShell() && (
+            <p className="mt-1">
+              If you are not signed in, you will be prompted to log in using the
+              embedded browser before connecting.
+            </p>
+          )}
+          {isDesktopShell() && (
+            <div className="space-y-1 pt-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Executable paths
+              </div>
+              <label className="block text-[11px] text-slate-400">
+                WireGuard (wg-quick)
+                <input
+                  type="text"
+                  value={wgQuickPath}
+                  onChange={(e) => setWgQuickPath(e.target.value)}
+                  placeholder="wg-quick"
+                  className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </label>
+              <label className="block text-[11px] text-slate-400">
+                OpenVPN
+                <input
+                  type="text"
+                  value={openvpnPath}
+                  onChange={(e) => setOpenvpnPath(e.target.value)}
+                  placeholder="openvpn / openvpn.exe"
+                  className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </label>
+              <label className="block text-[11px] text-slate-400">
+                WireGuard CLI (Windows)
+                <input
+                  type="text"
+                  value={wireguardCliPath}
+                  onChange={(e) => setWireguardCliPath(e.target.value)}
+                  placeholder="wireguard.exe"
+                  className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </label>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -308,7 +424,7 @@ export default function DesktopShell() {
           {/* Config + logs */}
           <div className="flex w-full max-w-xl flex-col border-t border-slate-800 bg-slate-950 px-4 py-4 lg:border-t-0">
             <h2 className="mb-2 text-sm font-semibold text-slate-100">
-              Current configuration
+              Current configuration ({protocolLabel})
             </h2>
             {config ? (
               <textarea
@@ -320,7 +436,7 @@ export default function DesktopShell() {
               <p className="mb-4 text-xs text-slate-400">
                 Click{" "}
                 <span className="font-semibold text-slate-100">Connect</span> to
-                generate a WireGuard configuration for this device. Previous
+                generate a VPN configuration for this device. Previous
                 credentials are revoked automatically so only one active peer
                 exists per account.
               </p>
@@ -332,11 +448,18 @@ export default function DesktopShell() {
               </div>
             )}
 
-            <div className="mt-4 text-[11px] text-slate-500">
+            <div className="mt-4 space-y-2 text-[11px] text-slate-500">
               <p>
                 The desktop client never sends your private key to the backend.
                 Keys are generated locally; only the public key and allocated IP
                 are registered with the control plane.
+              </p>
+              <p>
+                Some protocols (for example IKEv2 / IPsec on certain platforms)
+                may require you to import the generated configuration manually
+                into your OS VPN settings. System tools like WireGuard and
+                OpenVPN must be installed on this device for automatic
+                connection management.
               </p>
             </div>
           </div>

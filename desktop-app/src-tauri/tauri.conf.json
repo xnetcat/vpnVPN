@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "identifier": "com.vpnvpn.desktop",
   "build": {
-    "beforeDevCommand": "pnpm --dir ../desktop-app dev",
-    "beforeBuildCommand": "pnpm --dir ../desktop-app build",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build",
     "devUrl": "http://localhost:5173",
-    "distDir": "../desktop-app/dist"
+    "frontendDist": "../dist"
   },
   "app": {
     "withGlobalTauri": true,
@@ -21,10 +21,6 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
-    "identifier": "com.vpnvpn.desktop"
+    "targets": "all"
   }
 }
-
-
-

@@ -34,7 +34,15 @@ export const proxiesRouter = router({
 
     const data = await res.json();
 
-    const proxies = (data || []).map((item: any) => ({
+    const proxies: {
+      proxyId: string;
+      type: string;
+      ip: string;
+      port: number;
+      latency?: number;
+      score?: number;
+      country?: string;
+    }[] = (data || []).map((item: any) => ({
       proxyId: item.proxyId ?? `${item.ip}:${item.port}`,
       type: item.type ?? "unknown",
       ip: item.ip,

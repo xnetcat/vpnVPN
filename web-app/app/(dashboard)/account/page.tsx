@@ -1,8 +1,9 @@
-import { prisma } from "@/lib/prisma";
 import { requirePaidUser } from "@/lib/requirePaidUser";
 import { redirect } from "next/navigation";
 import ManageBillingButton from "@/components/ManageBillingButton";
 import { revalidatePath } from "next/cache";
+import { createContext } from "@/lib/trpc/init";
+import { appRouter } from "@/lib/trpc/routers/_app";
 
 export default async function AccountPage() {
   const gate = await requirePaidUser();
@@ -12,65 +13,36 @@ export default async function AccountPage() {
     );
   }
 
-  const [sub, user, notifications] = await Promise.all([
-    prisma.subscription.findFirst({
-      where: { userId: gate.userId },
-      orderBy: { updatedAt: "desc" },
-    }),
-    prisma.user.findUnique({
-      where: { id: gate.userId },
-      select: { name: true, email: true },
-    }),
-    prisma.notificationPreferences.findUnique({
-      where: { userId: gate.userId },
-    }),
-  ]);
+  const ctx = await createContext();
+  const caller = appRouter.createCaller(ctx);
+  const account = await caller.account.get();
 
   async function updateProfile(formData: FormData) {
     "use server";
-    const gateInner = await requirePaidUser();
-    if (!gateInner.ok) {
-      redirect(
-        gateInner.reason === "unauthenticated"
-          ? "/api/auth/signin"
-          : "/pricing"
-      );
-    }
 
-    const name = (formData.get("name") as string | null)?.trim() || null;
+    const nameRaw = (formData.get("name") as string | null) ?? "";
+    const name = nameRaw.trim() || null;
 
-    await prisma.user.update({
-      where: { id: gateInner.userId },
-      data: { name },
-    });
+    const innerCtx = await createContext();
+    const innerCaller = appRouter.createCaller(innerCtx);
+    await innerCaller.account.updateProfile({ name });
 
     revalidatePath("/account");
   }
 
   async function updateNotifications(formData: FormData) {
     "use server";
-    const gateInner = await requirePaidUser();
-    if (!gateInner.ok) {
-      redirect(
-        gateInner.reason === "unauthenticated"
-          ? "/api/auth/signin"
-          : "/pricing"
-      );
-    }
 
     const marketing = formData.get("marketing") === "on";
     const transactional = formData.get("transactional") === "on";
     const security = formData.get("security") === "on";
 
-    await prisma.notificationPreferences.upsert({
-      where: { userId: gateInner.userId },
-      update: { marketing, transactional, security },
-      create: {
-        userId: gateInner.userId,
-        marketing,
-        transactional,
-        security,
-      },
+    const innerCtx = await createContext();
+    const innerCaller = appRouter.createCaller(innerCtx);
+    await innerCaller.account.updateNotifications({
+      marketing,
+      transactional,
+      security,
     });
 
     revalidatePath("/account");
@@ -88,20 +60,24 @@ export default async function AccountPage() {
             <div>
               <div className="text-sm text-gray-500">Plan</div>
               <div className="text-lg font-medium">
-                {sub?.tier ? sub.tier.toUpperCase() : "Unknown"}
+                {account.subscription?.tier
+                  ? account.subscription.tier.toUpperCase()
+                  : "Unknown"}
               </div>
             </div>
             <div>
               <div className="text-sm text-gray-500">Status</div>
               <div className="text-lg font-medium capitalize">
-                {sub?.status ?? "unknown"}
+                {account.subscription?.status ?? "unknown"}
               </div>
             </div>
             <div>
               <div className="text-sm text-gray-500">Renews</div>
               <div className="text-lg font-medium">
-                {sub?.currentPeriodEnd
-                  ? new Date(sub.currentPeriodEnd).toLocaleDateString()
+                {account.subscription?.currentPeriodEnd
+                  ? new Date(
+                      account.subscription.currentPeriodEnd
+                    ).toLocaleDateString()
                   : "—"}
               </div>
             </div>
@@ -121,7 +97,7 @@ export default async function AccountPage() {
             <input
               type="text"
               name="name"
-              defaultValue={user?.name ?? ""}
+              defaultValue={account.user?.name ?? ""}
               placeholder="Your name"
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
@@ -131,7 +107,7 @@ export default async function AccountPage() {
               Email
             </label>
             <div className="mt-1 text-sm text-gray-600">
-              {user?.email ?? "Not set"}
+              {account.user?.email ?? "Not set"}
             </div>
             <p className="mt-1 text-xs text-gray-500">
               Email is managed by your identity provider (GitHub, Google, or
@@ -155,7 +131,9 @@ export default async function AccountPage() {
             <input
               type="checkbox"
               name="marketing"
-              defaultChecked={notifications?.marketing ?? true}
+              defaultChecked={
+                account.notificationPreferences?.marketing ?? true
+              }
               className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />
             <span>
@@ -169,7 +147,9 @@ export default async function AccountPage() {
             <input
               type="checkbox"
               name="transactional"
-              defaultChecked={notifications?.transactional ?? true}
+              defaultChecked={
+                account.notificationPreferences?.transactional ?? true
+              }
               className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />
             <span>
@@ -183,7 +163,7 @@ export default async function AccountPage() {
             <input
               type="checkbox"
               name="security"
-              defaultChecked={notifications?.security ?? true}
+              defaultChecked={account.notificationPreferences?.security ?? true}
               className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />
             <span>
@@ -206,7 +186,3 @@ export default async function AccountPage() {
     </main>
   );
 }
-
-
-
-
