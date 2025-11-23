@@ -3,16 +3,17 @@
 ## Setup commands
 
 - **Frontend:**
-  - Install deps: `cd web-app && pnpm install`
-  - Start dev server: `cd web-app && pnpm dev`
-  - Run tests: `cd web-app && pnpm test`
-  - Lint: `cd web-app && pnpm lint`
+  - Install deps (monorepo): `bun install`
+  - Start full local stack: `bun run dev` (Docker: web, control-plane, metrics, vpn-server)
+  - Start web app only: `cd apps/web && bun run dev`
+  - Run tests: `bun run test` or `cd apps/web && bun run test`
+  - Lint: `bun run lint` or `cd apps/web && bun run lint`
 - **Infra (Control Plane):**
   - Deploy: `cd infra/pulumi && pulumi up`
-  - Install deps: `cd infra/pulumi && pnpm install`
+  - Install deps: `cd infra/pulumi && bun install`
 - **VPN Server (Rust):**
-  - Build: `cd vpn-server && cargo build`
-  - Run: `cd vpn-server && cargo run -- --help`
+  - Build: `cd apps/vpn-server && cargo build`
+  - Run: `cd apps/vpn-server && cargo run -- --help`
 
 ## Deployment
 
@@ -84,9 +85,9 @@
 
 ## Testing instructions
 
-- **Frontend:** `cd web-app && pnpm test` (Vitest).
-- **Rust:** `cd vpn-server && cargo test`.
-- **Integration:** Use `local/test-flow.sh` to verify full system flow (Signup -> Connect) using the local Docker Compose stack.
+- **Frontend:** `cd apps/web && bun run test` (Vitest).
+- **Rust:** `cd apps/vpn-server && cargo test`.
+- **Integration:** `bun run test:local` to verify full system flow (Signup -> Connect) using the local Docker Compose stack.
 
 ## Development Workflow
 

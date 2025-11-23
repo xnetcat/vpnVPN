@@ -1,12 +1,12 @@
 # vpnVPN Desktop (Tauri)
 
 This directory contains the multi‑platform desktop shell for vpnVPN.  
-The desktop app is intentionally **thin** – it embeds the existing `web-app`
+The desktop app is intentionally **thin** – it embeds the existing Next.js web app
 desktop experience (`/desktop`) instead of duplicating UI and business logic.
 
 The flow is:
 
-1. `web-app` exposes a rich desktop UI at `/desktop` (served from
+1. `apps/web` exposes a rich desktop UI at `/desktop` (served from
    `app.domain.com` in production, `http://localhost:3000/desktop` locally).
 2. The Tauri app opens that URL inside a native window.
 3. All authentication, billing, device registration, and VPN credential
@@ -17,11 +17,12 @@ The flow is:
 1. **Start the web app** (and local services):
 
    ```bash
-   # In project root
-   cd web-app
-   pnpm install
-   pnpm dev
-   # The app serves http://localhost:3000, including /desktop
+   # In project root (monorepo)
+   bun install
+   bun run dev            # Docker: full stack (web, control-plane, metrics, vpn-server)
+   # Or run web app only
+   cd apps/web
+   bun run dev            # The app serves http://localhost:3000, including /desktop
    ```
 
    Make sure your local control plane / VPN services are running via
@@ -31,13 +32,13 @@ The flow is:
 2. **Start the desktop app**:
 
    ```bash
-   cd desktop-app
+   cd apps/desktop
 
    # Optional: override the embedded URL (defaults to http://localhost:3000/desktop)
    export VITE_VPNVPN_DESKTOP_URL="http://localhost:3000/desktop"
 
-   pnpm install
-   pnpm tauri:dev
+   bun install
+   bun run dev
    ```
 
    The Tauri window should open and display the `/desktop` route from the web
@@ -54,10 +55,10 @@ The flow is:
 2. Build the desktop bundles:
 
    ```bash
-   cd desktop-app
+   cd apps/desktop
    export VITE_VPNVPN_DESKTOP_URL="https://app.domain.com/desktop"
-   pnpm install
-   pnpm tauri:build
+   bun install
+   bun run build
    ```
 
 Tauri will produce native installers / bundles for macOS, Windows, and Linux.

@@ -70,8 +70,8 @@ services:
   # Web App
   web-app:
     build:
-      context: ../apps/web
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: apps/web/Dockerfile
     environment:
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/vpnvpn
       - NEXTAUTH_SECRET=supersecret

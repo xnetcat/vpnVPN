@@ -44,11 +44,16 @@ Environment variables (see `env.local.example` for local dev)
 
 Local development
 
-1. `cd web-app`
-2. `pnpm install`
-3. Ensure Postgres is running and `DATABASE_URL` points to it.
-4. `pnpm prisma:generate`
-5. `pnpm dev`
+1. From repo root:
+   ```bash
+   bun install
+   bun run dev        # Docker: full stack (web, control-plane, metrics, vpn-server)
+   ```
+2. Or run just the web app:
+   ```bash
+   cd apps/web
+   bun run dev
+   ```
 
 To test Stripe webhooks locally:
 
@@ -58,8 +63,8 @@ To test Stripe webhooks locally:
 
 Vercel setup
 
-- Create a Vercel project pointing to `web-app`.
-- Build command: `pnpm build`
-- Install command: `pnpm install`
+- Create a Vercel project pointing to `apps/web`.
+- Build command: `bun run build`
+- Install command: `bun install`
 - Output directory: `.next`
 - Configure all environment variables above in the Vercel dashboard (no `.env` committed).
