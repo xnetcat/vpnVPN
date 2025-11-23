@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev:web": "vite",
+    "dev:web": "vite --port 5173 --strictPort",
     "dev:tauri": "tauri dev --no-dev-server",
     "dev": "bun run dev:web & bun run dev:tauri",
     "build:web": "vite build",

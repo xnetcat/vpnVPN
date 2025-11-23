@@ -36,7 +36,8 @@ COPY --from=builder /app/apps/web/public ./public
 RUN mkdir .next && chown nextjs:nodejs .next
 
 # Use Next.js standalone output from the web app
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
+# Copy the contents of .next/standalone so that server.js ends up at /app/server.js
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone/ ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./.next/static
 
 USER nextjs

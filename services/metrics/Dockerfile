@@ -9,6 +9,10 @@ COPY packages ./packages
 
 RUN bun install --frozen-lockfile
 
+# Ensure Prisma client is generated for the shared DB package
+ENV DATABASE_URL="postgresql://localhost:5432/placeholder"
+RUN cd packages/db && bun run build
+
 WORKDIR /app/services/metrics
 RUN bun run build
 
