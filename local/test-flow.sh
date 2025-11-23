@@ -32,8 +32,8 @@ else
   log "Using VPN_TEST_CLIENT_* keys from environment."
 fi
 
-log "Building Docker images for postgres, web-app, and vpn-node (streaming build logs)..."
-docker compose build postgres web-app vpn-node
+log "Building Docker images for web-app and vpn-node (streaming build logs, cached on subsequent runs)..."
+docker compose build web-app vpn-node
 
 log "Bringing up core stack (postgres, web-app, vpn-node) in Docker..."
 docker compose up -d postgres web-app vpn-node

@@ -3,17 +3,14 @@
 FROM rust:1.88-bullseye AS builder
 WORKDIR /src
 
-# Limit parallel compilation to reduce peak memory usage when building heavy AWS crates.
-ENV CARGO_BUILD_JOBS=1
-
 COPY Cargo.toml Cargo.lock ./
 COPY . .
 RUN cargo build --release --locked
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:bullseye-slim AS runtime
 WORKDIR /
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    iproute2 iptables wireguard-tools wireguard-go openvpn strongswan openssl ca-certificates \
+    iproute2 iptables iputils-ping curl wireguard-tools openvpn strongswan openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /src/target/release/vpn-server /usr/local/bin/vpn-server
 USER root

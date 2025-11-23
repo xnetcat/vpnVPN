@@ -27,8 +27,6 @@ services:
       - "9090:9090" # Admin/Metrics port
     networks:
       - vpn-net
-    volumes:
-      - ./vpn-data:/etc/wireguard
 
   # Postgres Database
   postgres:
@@ -71,39 +69,41 @@ services:
       context: ../vpn-server
       dockerfile: Dockerfile
     entrypoint: ["/bin/sh", "-c"]
-    command: >
-      "
-      set -e;
-      if [ -z \"${VPN_TEST_CLIENT_PRIVATE_KEY}\" ] || [ -z \"${VPN_TEST_CLIENT_PUBLIC_KEY}\" ]; then
-        echo 'VPN_TEST_CLIENT_PRIVATE_KEY and VPN_TEST_CLIENT_PUBLIC_KEY must be set in the environment for vpn-test-client';
-        exit 1;
-      fi;
-      echo '[vpn-test-client] Waiting for vpn-node admin endpoint...';
-      until curl -sf http://vpn-node:9090/health > /dev/null; do
-        sleep 1;
-      done;
-      SERVER_PUB=$(curl -sf http://vpn-node:9090/pubkey | tr -d '\"');
-      echo \"[vpn-test-client] Server public key: $$SERVER_PUB\";
-      mkdir -p /etc/wireguard;
-      echo \"${VPN_TEST_CLIENT_PRIVATE_KEY}\" > /etc/wireguard/client.key;
-      chmod 600 /etc/wireguard/client.key;
-      cat <<EOF > /etc/wireguard/wg0.conf
+    command: |
+      set -e
+      if [ -z "${VPN_TEST_CLIENT_PRIVATE_KEY}" ] || [ -z "${VPN_TEST_CLIENT_PUBLIC_KEY}" ]; then
+        echo 'VPN_TEST_CLIENT_PRIVATE_KEY and VPN_TEST_CLIENT_PUBLIC_KEY must be set in the environment for vpn-test-client'
+        exit 1
+      fi
+
+      echo '[vpn-test-client] Waiting for vpn-node admin endpoint...'
+      until curl -sf http://vpn-node:9090/health >/dev/null 2>&1; do
+        sleep 1
+      done
+
+      SERVER_PUB=$(curl -sf http://vpn-node:9090/pubkey | tr -d '"')
+      echo "[vpn-test-client] Server public key: $SERVER_PUB"
+
+      mkdir -p /etc/wireguard
+      chmod 700 /etc/wireguard
+
+      cat <<EOF >/etc/wireguard/wg0.conf
       [Interface]
       PrivateKey = ${VPN_TEST_CLIENT_PRIVATE_KEY}
       Address = 10.8.0.2/32
 
       [Peer]
-      PublicKey = $$SERVER_PUB
+      PublicKey = $SERVER_PUB
       AllowedIPs = 10.8.0.0/24
       Endpoint = vpn-node:51820
       PersistentKeepalive = 15
       EOF
-      echo '[vpn-test-client] Bringing up WireGuard interface...';
-      wg-quick up wg0;
-      echo '[vpn-test-client] Pinging server (10.8.0.1)...';
-      ping -c 3 10.8.0.1;
-      echo '[vpn-test-client] VPN connectivity verified.';
-      "
+
+      echo '[vpn-test-client] Bringing up WireGuard interface...'
+      wg-quick up wg0
+      echo '[vpn-test-client] Pinging server (10.8.0.1)...'
+      ping -c 3 10.8.0.1
+      echo '[vpn-test-client] VPN connectivity verified.'
     cap_add:
       - NET_ADMIN
     devices:
