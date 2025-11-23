@@ -53,7 +53,7 @@ export default async function AdminUsersPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 bg-white">
-            {users.map((user) => {
+            {users.map((user: (typeof users)[number]) => {
               const sub = user.subscriptions[0];
               return (
                 <tr key={user.id} className="hover:bg-gray-50">
