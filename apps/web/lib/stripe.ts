@@ -11,4 +11,3 @@ export const stripe = new Stripe(stripeSecretKey || "sk_test_placeholder", {
   // Match the default API version expected by the installed Stripe SDK.
   apiVersion: "2024-06-20",
 });
-

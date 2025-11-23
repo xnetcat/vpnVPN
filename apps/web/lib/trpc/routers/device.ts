@@ -27,7 +27,7 @@ export const deviceRouter = router({
       z.object({
         name: z.string().min(1),
         serverId: z.string().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const { name, serverId } = input;

@@ -9,7 +9,7 @@ export const billingRouter = router({
     .input(
       z.object({
         priceId: z.string().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       if (!process.env.STRIPE_SECRET_KEY) {
@@ -102,4 +102,3 @@ export const billingRouter = router({
     return { url: portal.url };
   }),
 });
-

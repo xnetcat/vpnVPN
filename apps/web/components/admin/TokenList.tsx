@@ -16,7 +16,8 @@ export default function TokenList() {
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const utils = trpc.useUtils();
 
-  const { data: tokens = [], isLoading: loading } = trpc.admin.listTokens.useQuery();
+  const { data: tokens = [], isLoading: loading } =
+    trpc.admin.listTokens.useQuery();
 
   const revokeMutation = trpc.admin.revokeToken.useMutation({
     onSuccess: () => {
@@ -44,13 +45,17 @@ export default function TokenList() {
   };
 
   if (loading) {
-    return <div className="text-center py-8 text-gray-500">Loading tokens...</div>;
+    return (
+      <div className="text-center py-8 text-gray-500">Loading tokens...</div>
+    );
   }
 
   if (tokens.length === 0) {
     return (
       <div className="rounded-lg border bg-white p-12 text-center shadow-sm">
-        <p className="text-gray-500">No tokens created yet. Create one to register new servers.</p>
+        <p className="text-gray-500">
+          No tokens created yet. Create one to register new servers.
+        </p>
       </div>
     );
   }
@@ -138,4 +143,3 @@ export default function TokenList() {
     </div>
   );
 }
-

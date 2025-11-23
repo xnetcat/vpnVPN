@@ -36,7 +36,7 @@ describe("Email utilities", () => {
       expect.objectContaining({
         to: "user@test.com",
         subject: "Welcome to vpnVPN",
-      })
+      }),
     );
   });
 
@@ -59,7 +59,7 @@ describe("Email utilities", () => {
       expect.objectContaining({
         to: "user@test.com",
         subject: "Your vpnVPN Subscription is Active",
-      })
+      }),
     );
   });
 
@@ -79,7 +79,7 @@ describe("Email utilities", () => {
       expect.objectContaining({
         to: "user@test.com",
         subject: "Your vpnVPN Subscription Has Been Cancelled",
-      })
+      }),
     );
   });
 
@@ -100,7 +100,7 @@ describe("Email utilities", () => {
       expect.objectContaining({
         to: "user@test.com",
         subject: "New Device Added to Your vpnVPN Account",
-      })
+      }),
     );
   });
 
@@ -121,13 +121,13 @@ describe("Email utilities", () => {
       expect.objectContaining({
         to: "user@test.com",
         subject: "Device Removed from Your vpnVPN Account",
-      })
+      }),
     );
   });
 
   it("should handle missing API key gracefully", async () => {
     process.env.RESEND_API_KEY = "";
-    
+
     // Re-import to get new instance without API key
     vi.resetModules();
     const { sendEmail } = await import("@/lib/email");
@@ -138,11 +138,10 @@ describe("Email utilities", () => {
         to: "user@test.com",
         template: "welcome",
         data: { name: "Test" },
-      })
+      }),
     ).resolves.toBeUndefined();
 
     // Restore
     process.env.RESEND_API_KEY = "re_test_123";
   });
 });
-

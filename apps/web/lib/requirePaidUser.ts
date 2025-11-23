@@ -36,7 +36,7 @@ export const gateApiOr = async () => {
 };
 
 export const checkDeviceLimit = async (
-  userId: string
+  userId: string,
 ): Promise<{ canAdd: boolean; current: number; limit: number }> => {
   const gate = await requirePaidUser();
   if (!gate.ok) {

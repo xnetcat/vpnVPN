@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "biome lint . && cd src-tauri && cargo fmt --check",
-    "format": "biome format . && cd src-tauri && cargo fmt"
+    "format": "biome format --write . && cd src-tauri && cargo fmt"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

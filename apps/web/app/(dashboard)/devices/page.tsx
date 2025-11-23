@@ -21,7 +21,7 @@ export default async function DevicesPage() {
   const gate = await requirePaidUser();
   if (!gate.ok) {
     redirect(
-      gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing"
+      gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing",
     );
   }
 
@@ -84,7 +84,10 @@ export default async function DevicesPage() {
                     {new Date(device.createdAt).toLocaleDateString()}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                    <RevokeDeviceButton deviceId={device.id} deviceName={device.name} />
+                    <RevokeDeviceButton
+                      deviceId={device.id}
+                      deviceName={device.name}
+                    />
                   </td>
                 </tr>
               ))}
@@ -95,4 +98,3 @@ export default async function DevicesPage() {
     </main>
   );
 }
-

@@ -21,5 +21,3 @@ export async function requireAdmin(): Promise<AdminGateResult> {
 
   return { ok: true, userId };
 }
-
-

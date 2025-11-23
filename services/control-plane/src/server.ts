@@ -118,5 +118,3 @@ export async function buildServer() {
 
   return fastify;
 }
-
-

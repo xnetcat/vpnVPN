@@ -13,7 +13,7 @@ export default function SubscribeButton({
   isPopular: boolean;
 }) {
   const router = useRouter();
-  
+
   const createCheckout = trpc.billing.createCheckoutSession.useMutation({
     onSuccess: (data) => {
       window.location.href = data.url;
@@ -42,4 +42,3 @@ export default function SubscribeButton({
     </button>
   );
 }
-

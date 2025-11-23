@@ -62,4 +62,3 @@ export function getTierFromPriceId(priceId: string): Tier {
 export function getTierConfig(tier: Tier): TierConfig {
   return TIERS[tier];
 }
-

@@ -1,7 +1,8 @@
 import { router, paidProcedure } from "../init";
 import { TRPCError } from "@trpc/server";
 
-const base = process.env.CONTROL_PLANE_API_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
+const base =
+  process.env.CONTROL_PLANE_API_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
 const apiKey = process.env.CONTROL_PLANE_API_KEY;
 
 export const serversRouter = router({
@@ -47,4 +48,3 @@ export const serversRouter = router({
     return servers;
   }),
 });
-

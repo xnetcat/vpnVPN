@@ -43,7 +43,9 @@ export default async function AdminPage() {
     <main className="mx-auto max-w-6xl p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold mb-1">Admin Panel</h1>
-        <p className="text-sm text-gray-500">Manage servers, tokens, and system configuration</p>
+        <p className="text-sm text-gray-500">
+          Manage servers, tokens, and system configuration
+        </p>
       </div>
 
       {/* Quick Actions */}
@@ -116,7 +118,8 @@ export default async function AdminPage() {
             <h3 className="font-semibold">System Status</h3>
           </div>
           <p className="text-sm text-gray-600">
-            {nodes.filter((n) => n.status === "online").length} / {nodes.length} servers online
+            {nodes.filter((n) => n.status === "online").length} / {nodes.length}{" "}
+            servers online
           </p>
         </div>
       </div>
@@ -147,9 +150,7 @@ export default async function AdminPage() {
               <tr key={n.id} className="hover:bg-gray-50">
                 <td className="px-4 py-2 text-sm">{n.id}</td>
                 <td className="px-4 py-2 text-sm">{n.status}</td>
-                <td className="px-4 py-2 text-sm">
-                  {n.lastSeen ?? "—"}
-                </td>
+                <td className="px-4 py-2 text-sm">{n.lastSeen ?? "—"}</td>
                 <td className="px-4 py-2 text-sm">
                   {typeof n.activeSessions === "number"
                     ? n.activeSessions
@@ -173,5 +174,3 @@ export default async function AdminPage() {
     </main>
   );
 }
-
-

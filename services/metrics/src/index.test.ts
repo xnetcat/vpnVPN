@@ -35,9 +35,7 @@ async function buildServer() {
       await prisma.vpnMetric.create({
         data: {
           serverId: metric.serverId,
-          timestamp: metric.timestamp
-            ? new Date(metric.timestamp)
-            : new Date(),
+          timestamp: metric.timestamp ? new Date(metric.timestamp) : new Date(),
           cpu: metric.cpu,
           memory: metric.memory,
           activePeers: metric.activePeers,
@@ -78,5 +76,3 @@ describe("metrics service", () => {
     expect(prisma.vpnMetric.create).toHaveBeenCalled();
   });
 });
-
-

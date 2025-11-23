@@ -76,7 +76,7 @@ describe("Admin Router", () => {
 
       const caller = appRouter.createCaller(ctx);
       await expect(caller.admin.listServers()).rejects.toThrow(
-        "Admin access required"
+        "Admin access required",
       );
     });
   });
@@ -136,4 +136,3 @@ describe("Admin Router", () => {
     });
   });
 });
-

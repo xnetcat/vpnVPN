@@ -26,7 +26,7 @@ describe("Control Plane Client", () => {
           publicKey: "test-key",
           userId: "user123",
           allowedIps: ["10.8.0.10/32"],
-        })
+        }),
       ).resolves.toBeUndefined();
 
       expect(fetch).toHaveBeenCalledWith(
@@ -36,7 +36,7 @@ describe("Control Plane Client", () => {
           headers: expect.objectContaining({
             "x-api-key": "test-api-key",
           }),
-        })
+        }),
       );
     });
 
@@ -54,7 +54,7 @@ describe("Control Plane Client", () => {
           publicKey: "test-key",
           userId: "user123",
           allowedIps: ["10.8.0.10/32"],
-        })
+        }),
       ).rejects.toThrow("addPeer failed with status 500");
     });
   });
@@ -68,16 +68,14 @@ describe("Control Plane Client", () => {
 
       const { revokePeersForUser } = await import("@/lib/controlPlane");
 
-      await expect(
-        revokePeersForUser("user123")
-      ).resolves.toBeUndefined();
+      await expect(revokePeersForUser("user123")).resolves.toBeUndefined();
 
       expect(fetch).toHaveBeenCalledWith(
         "https://api.test.com/peers/revoke-for-user",
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({ userId: "user123" }),
-        })
+        }),
       );
     });
   });
@@ -92,14 +90,14 @@ describe("Control Plane Client", () => {
       const { revokePeerByPublicKey } = await import("@/lib/controlPlane");
 
       await expect(
-        revokePeerByPublicKey("test-public-key")
+        revokePeerByPublicKey("test-public-key"),
       ).resolves.toBeUndefined();
 
       expect(fetch).toHaveBeenCalledWith(
         expect.stringContaining("/peers/test-public-key"),
         expect.objectContaining({
           method: "DELETE",
-        })
+        }),
       );
     });
   });
@@ -107,7 +105,7 @@ describe("Control Plane Client", () => {
   describe("error handling", () => {
     it("should throw if control plane not configured", async () => {
       process.env.CONTROL_PLANE_API_URL = "";
-      
+
       vi.resetModules();
       const { addPeerForDevice } = await import("@/lib/controlPlane");
 
@@ -116,7 +114,7 @@ describe("Control Plane Client", () => {
           publicKey: "test-key",
           userId: "user123",
           allowedIps: ["10.8.0.10/32"],
-        })
+        }),
       ).rejects.toThrow("Control plane not configured");
 
       // Restore
@@ -124,4 +122,3 @@ describe("Control Plane Client", () => {
     });
   });
 });
-

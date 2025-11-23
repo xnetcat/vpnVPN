@@ -52,7 +52,13 @@ function SignInForm() {
 
 export default function SignInPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-[calc(100vh-65px)] items-center justify-center">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-[calc(100vh-65px)] items-center justify-center">
+          Loading...
+        </div>
+      }
+    >
       <SignInForm />
     </Suspense>
   );

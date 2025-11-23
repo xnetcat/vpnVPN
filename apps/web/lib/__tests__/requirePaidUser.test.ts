@@ -111,4 +111,3 @@ describe("requirePaidUser", () => {
     expect(result.limit).toBe(1);
   });
 });
-

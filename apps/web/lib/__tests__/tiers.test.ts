@@ -46,4 +46,3 @@ describe("Tiers configuration", () => {
     expect(proConfig.deviceLimit).toBe(5);
   });
 });
-

@@ -10,7 +10,7 @@ const FROM_EMAIL = process.env.EMAIL_FROM || "noreply@vpnvpn.com";
 
 if (!resend) {
   console.warn(
-    "[email] RESEND_API_KEY not set. Email notifications will be skipped."
+    "[email] RESEND_API_KEY not set. Email notifications will be skipped.",
   );
 }
 
@@ -142,4 +142,3 @@ export async function sendEmail(context: EmailContext): Promise<void> {
     // Don't throw - email failures shouldn't break the app
   }
 }
-

@@ -54,5 +54,3 @@ describe("control-plane service", () => {
     expect(prisma.vpnPeer.create).toHaveBeenCalled();
   });
 });
-
-

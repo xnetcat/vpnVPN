@@ -7,7 +7,7 @@ buildServer()
     fastify.listen({ port, host: "0.0.0.0" }).then((address) => {
       fastify.log.info(`control-plane listening on ${address}`);
       return undefined;
-    })
+    }),
   )
   .catch((err) => {
     // eslint-disable-next-line no-console

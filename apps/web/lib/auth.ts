@@ -48,7 +48,7 @@ export const authOptions: NextAuthOptions = {
           where: { id: user.id },
         });
         if (!existing) return;
-        
+
         // Create Stripe customer if not exists
         if (!existing.stripeCustomerId && process.env.STRIPE_SECRET_KEY) {
           const customer = await stripe.customers.create({

@@ -32,10 +32,7 @@ export default async function AdminVpnMetricsPage() {
         : 0) || 0,
   }));
 
-  const totalSessions = servers.reduce(
-    (sum, s) => sum + (s.sessions || 0),
-    0
-  );
+  const totalSessions = servers.reduce((sum, s) => sum + (s.sessions || 0), 0);
   const onlineServers = servers.filter((s) => s.status === "online").length;
 
   const byCountry = servers.reduce<Record<string, number>>((acc, s) => {
@@ -96,9 +93,7 @@ export default async function AdminVpnMetricsPage() {
             <tbody className="divide-y divide-gray-100 bg-white">
               {Object.entries(byCountry).map(([country, sessions]) => (
                 <tr key={country}>
-                  <td className="px-4 py-2 text-sm text-gray-700">
-                    {country}
-                  </td>
+                  <td className="px-4 py-2 text-sm text-gray-700">{country}</td>
                   <td className="px-4 py-2 text-sm text-gray-700">
                     {sessions}
                   </td>
@@ -179,6 +174,3 @@ export default async function AdminVpnMetricsPage() {
     </main>
   );
 }
-
-
-

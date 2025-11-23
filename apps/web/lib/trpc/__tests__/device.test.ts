@@ -167,7 +167,7 @@ describe("Device Router", () => {
       await expect(
         caller.device.register({
           name: "New Device",
-        })
+        }),
       ).rejects.toThrow("Device limit reached");
     });
   });
@@ -252,7 +252,7 @@ describe("Device Router", () => {
 
       const caller = appRouter.createCaller(ctx);
       await expect(
-        caller.device.revoke({ deviceId: "device123" })
+        caller.device.revoke({ deviceId: "device123" }),
       ).rejects.toThrow("Unauthorized");
     });
   });

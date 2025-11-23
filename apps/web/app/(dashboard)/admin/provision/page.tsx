@@ -8,7 +8,10 @@ export default async function AdminProvisionPage() {
     redirect(gate.reason === "unauthenticated" ? "/api/auth/signin" : "/");
   }
 
-  const apiUrl = process.env.CONTROL_PLANE_API_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.vpnvpn.com";
+  const apiUrl =
+    process.env.CONTROL_PLANE_API_URL ??
+    process.env.NEXT_PUBLIC_API_BASE_URL ??
+    "https://api.vpnvpn.com";
 
   return (
     <main className="mx-auto max-w-4xl p-6">
@@ -29,14 +32,21 @@ export default async function AdminProvisionPage() {
           <p className="text-sm text-gray-600 mb-4">
             Deploy a VPN server using Docker (requires NET_ADMIN capabilities)
           </p>
-          
+
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-gray-500 uppercase mb-2">
                 1. Create a registration token
               </label>
               <p className="text-sm text-gray-700 mb-2">
-                Go to the <a href="/admin/tokens" className="text-blue-600 hover:underline">Tokens page</a> and create a new token for this server.
+                Go to the{" "}
+                <a
+                  href="/admin/tokens"
+                  className="text-blue-600 hover:underline"
+                >
+                  Tokens page
+                </a>{" "}
+                and create a new token for this server.
               </p>
             </div>
 
@@ -46,7 +56,7 @@ export default async function AdminProvisionPage() {
               </label>
               <div className="relative">
                 <pre className="bg-gray-900 text-green-100 p-4 rounded-md text-xs overflow-x-auto font-mono">
-{`docker run -d \\
+                  {`docker run -d \\
   --name vpnvpn-server \\
   --cap-add NET_ADMIN \\
   --device /dev/net/tun \\
@@ -59,7 +69,11 @@ export default async function AdminProvisionPage() {
                 </pre>
               </div>
               <p className="text-xs text-gray-500 mt-2">
-                Replace <code className="bg-gray-100 px-1 py-0.5 rounded">&lt;YOUR_TOKEN_HERE&gt;</code> with your actual token.
+                Replace{" "}
+                <code className="bg-gray-100 px-1 py-0.5 rounded">
+                  &lt;YOUR_TOKEN_HERE&gt;
+                </code>{" "}
+                with your actual token.
               </p>
             </div>
           </div>
@@ -72,7 +86,8 @@ export default async function AdminProvisionPage() {
             <h2 className="text-lg font-semibold">Binary Deployment</h2>
           </div>
           <p className="text-sm text-gray-600 mb-4">
-            Deploy a VPN server using the compiled binary (Linux, macOS, Windows)
+            Deploy a VPN server using the compiled binary (Linux, macOS,
+            Windows)
           </p>
 
           <div className="space-y-4">
@@ -82,7 +97,7 @@ export default async function AdminProvisionPage() {
               </label>
               <div className="relative">
                 <pre className="bg-gray-900 text-green-100 p-4 rounded-md text-xs overflow-x-auto font-mono">
-{`# Linux
+                  {`# Linux
 curl -L -o vpn-server https://github.com/vpnvpn/vpn-server/releases/latest/download/vpn-server-linux-amd64
 chmod +x vpn-server
 
@@ -99,7 +114,7 @@ chmod +x vpn-server`}
               </label>
               <div className="relative">
                 <pre className="bg-gray-900 text-green-100 p-4 rounded-md text-xs overflow-x-auto font-mono">
-{`sudo ./vpn-server run \\
+                  {`sudo ./vpn-server run \\
   --api-url "${apiUrl}" \\
   --token "<YOUR_TOKEN_HERE>" \\
   --listen-port 51820 \\
@@ -107,7 +122,8 @@ chmod +x vpn-server`}
                 </pre>
               </div>
               <p className="text-xs text-gray-500 mt-2">
-                Note: Requires root/administrator privileges to create network interfaces.
+                Note: Requires root/administrator privileges to create network
+                interfaces.
               </p>
             </div>
           </div>
@@ -130,7 +146,7 @@ chmod +x vpn-server`}
               </label>
               <div className="relative">
                 <pre className="bg-gray-900 text-green-100 p-4 rounded-md text-xs overflow-x-auto font-mono">
-{`sudo tee /etc/systemd/system/vpnvpn.service > /dev/null <<EOF
+                  {`sudo tee /etc/systemd/system/vpnvpn.service > /dev/null <<EOF
 [Unit]
 Description=vpnVPN Server
 After=network.target
@@ -161,16 +177,24 @@ sudo systemctl start vpnvpn`}
 
         {/* Notes */}
         <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
-          <h3 className="text-sm font-semibold text-yellow-900 mb-2">Important Notes</h3>
+          <h3 className="text-sm font-semibold text-yellow-900 mb-2">
+            Important Notes
+          </h3>
           <ul className="text-sm text-yellow-800 space-y-1 list-disc list-inside">
-            <li>Ensure ports 51820 (UDP) and 8080 (TCP) are open in your firewall</li>
-            <li>The server will automatically register with the control plane on startup</li>
+            <li>
+              Ensure ports 51820 (UDP) and 8080 (TCP) are open in your firewall
+            </li>
+            <li>
+              The server will automatically register with the control plane on
+              startup
+            </li>
             <li>Check server logs for any errors during startup</li>
-            <li>Servers will appear in the Admin / Fleet view once registered</li>
+            <li>
+              Servers will appear in the Admin / Fleet view once registered
+            </li>
           </ul>
         </div>
       </div>
     </main>
   );
 }
-

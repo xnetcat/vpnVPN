@@ -6,4 +6,3 @@ describe("desktop App config", () => {
     expect(WEB_URL).toMatch(/^https?:\/\//);
   });
 });
-

@@ -38,7 +38,7 @@ function isDesktopShell(): boolean {
 
 async function applyVpnConfig(
   protocol: Protocol,
-  config: string
+  config: string,
 ): Promise<void> {
   if (!isDesktopShell()) return;
   const anyWin = window as any;
@@ -68,7 +68,7 @@ export default function DesktopShell() {
 
   const servers: MapServer[] = useMemo(
     () => serversQuery.data ?? [],
-    [serversQuery.data]
+    [serversQuery.data],
   );
 
   const selectedServer =
@@ -88,7 +88,7 @@ export default function DesktopShell() {
     (async () => {
       try {
         const s = (await anyWin.__TAURI__.core.invoke(
-          "get_desktop_settings"
+          "get_desktop_settings",
         )) as {
           preferred_protocol?: Protocol;
           auto_connect?: boolean;
@@ -128,7 +128,7 @@ export default function DesktopShell() {
       })
       .catch((e: unknown) =>
         // eslint-disable-next-line no-console
-        console.error("Failed to update desktop settings file", e)
+        console.error("Failed to update desktop settings file", e),
       );
   }, [protocol, autoConnect, wgQuickPath, openvpnPath, wireguardCliPath]);
 
@@ -182,7 +182,7 @@ export default function DesktopShell() {
       } catch (e) {
         console.error("Failed to apply VPN config via Tauri", e);
         setError(
-          "Config generated, but failed to apply VPN settings locally. You may need to import it manually."
+          "Config generated, but failed to apply VPN settings locally. You may need to import it manually.",
         );
       }
       setStatus("connected");
@@ -196,7 +196,7 @@ export default function DesktopShell() {
     setConfig(null);
     setStatus("disconnected");
     void disconnectVpn(protocol).catch((e) =>
-      console.error("Failed to disconnect VPN via Tauri", e)
+      console.error("Failed to disconnect VPN via Tauri", e),
     );
   };
 
@@ -234,7 +234,7 @@ export default function DesktopShell() {
                 servers.find(
                   (s) =>
                     s.country?.toLowerCase().includes(term) ||
-                    s.region.toLowerCase().includes(term)
+                    s.region.toLowerCase().includes(term),
                 ) ?? null;
               if (found) setSelectedId(found.id);
             }}

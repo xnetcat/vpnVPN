@@ -14,5 +14,3 @@ export function allocateDeviceIp(userId: string, deviceId: string): string {
   const host = 10 + (hash[0] % 241); // 10..250
   return `10.8.0.${host}/32`;
 }
-
-

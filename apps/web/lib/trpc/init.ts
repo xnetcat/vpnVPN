@@ -60,7 +60,7 @@ export const paidProcedure = protectedProcedure.use(async (opts) => {
   }
 
   const tier = (subscription.tier || "basic") as "basic" | "pro" | "enterprise";
-  
+
   return opts.next({
     ctx: {
       ...ctx,
@@ -92,4 +92,3 @@ export const adminProcedure = protectedProcedure.use(async (opts) => {
     },
   });
 });
-

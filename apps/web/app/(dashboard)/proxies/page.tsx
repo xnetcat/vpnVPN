@@ -24,7 +24,7 @@ export default async function ProxiesPage() {
   const gate = await requirePaidUser();
   if (!gate.ok) {
     redirect(
-      gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing"
+      gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing",
     );
   }
 
@@ -73,7 +73,3 @@ export default async function ProxiesPage() {
     </main>
   );
 }
-
-
-
-

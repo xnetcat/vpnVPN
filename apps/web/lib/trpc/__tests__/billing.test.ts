@@ -28,7 +28,7 @@ describe("Billing Router", () => {
     it("should create a checkout session", async () => {
       const { getSession } = await import("@/lib/auth");
       const { stripe } = await import("@/lib/stripe");
-      
+
       vi.mocked(getSession).mockResolvedValue(mockSession);
 
       mockPrisma.user.findUnique.mockResolvedValue({
@@ -58,7 +58,7 @@ describe("Billing Router", () => {
     it("should create Stripe customer if not exists", async () => {
       const { getSession } = await import("@/lib/auth");
       const { stripe } = await import("@/lib/stripe");
-      
+
       vi.mocked(getSession).mockResolvedValue(mockSession);
 
       mockPrisma.user.findUnique.mockResolvedValue({
@@ -99,7 +99,7 @@ describe("Billing Router", () => {
     it("should create a portal session", async () => {
       const { getSession } = await import("@/lib/auth");
       const { stripe } = await import("@/lib/stripe");
-      
+
       vi.mocked(getSession).mockResolvedValue(mockSession);
 
       mockPrisma.user.findUnique.mockResolvedValue({
@@ -140,9 +140,8 @@ describe("Billing Router", () => {
 
       const caller = appRouter.createCaller(ctx);
       await expect(caller.billing.createPortalSession()).rejects.toThrow(
-        "No Stripe customer found"
+        "No Stripe customer found",
       );
     });
   });
 });
-

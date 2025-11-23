@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   if (!sig || !webhookSecret) {
     return NextResponse.json(
       { error: "Missing signature/secret" },
-      { status: 400 }
+      { status: 400 },
     );
   }
   const body = await req.text();
@@ -24,12 +24,12 @@ export async function POST(req: Request) {
     event = (await (stripe as any).webhooks.constructEvent(
       body,
       sig,
-      webhookSecret
+      webhookSecret,
     )) as any;
   } catch (err: any) {
     return NextResponse.json(
       { error: `Webhook Error: ${err.message}` },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
         const userId: string | undefined = session.metadata?.userId;
         if (!subscriptionId || !customerId) break;
         const sub = await (stripe as any).subscriptions.retrieve(
-          subscriptionId
+          subscriptionId,
         );
         const priceId = sub.items?.data?.[0]?.price?.id as string | undefined;
         const status = sub.status as string;
@@ -163,7 +163,7 @@ export async function POST(req: Request) {
                 {
                   userId: user.id,
                   error: e,
-                }
+                },
               );
             }
 

@@ -85,9 +85,8 @@ describe("Servers Router", () => {
 
       const caller = appRouter.createCaller(ctx);
       await expect(caller.servers.list()).rejects.toThrow(
-        "Active subscription required"
+        "Active subscription required",
       );
     });
   });
 });
-

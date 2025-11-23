@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { allocateDeviceIp } from "@/lib/networking";
-import {
-  addPeerForDevice,
-  revokePeersForUser,
-} from "@/lib/controlPlane";
+import { addPeerForDevice, revokePeersForUser } from "@/lib/controlPlane";
 import { getTierConfig } from "@/lib/tiers";
 import { getSession } from "@/lib/auth";
 
@@ -16,8 +13,7 @@ type Body = {
 };
 
 const WG_ENDPOINT = process.env.NEXT_PUBLIC_WG_ENDPOINT || "";
-const WG_SERVER_PUBLIC_KEY =
-  process.env.NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY || "";
+const WG_SERVER_PUBLIC_KEY = process.env.NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY || "";
 
 function buildWireGuardConfig(params: {
   privateKey: string;
@@ -68,10 +64,7 @@ export async function POST(req: NextRequest) {
   const privateKey = req.headers.get("x-vpn-private-key");
 
   if (!publicKey || !privateKey) {
-    return NextResponse.json(
-      { error: "missing_keys" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "missing_keys" }, { status: 400 });
   }
 
   const deviceCount = await prisma.device.count({
@@ -84,7 +77,7 @@ export async function POST(req: NextRequest) {
         error: "device_limit",
         message: `Device limit reached (${tierConfig.deviceLimit}). Please upgrade your plan.`,
       },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
@@ -108,11 +101,12 @@ export async function POST(req: NextRequest) {
       serverId,
     });
   } catch (err) {
-    console.error("[desktop] addPeer failed", { err, userId, deviceId: device.id });
-    return NextResponse.json(
-      { error: "control_plane_error" },
-      { status: 500 }
-    );
+    console.error("[desktop] addPeer failed", {
+      err,
+      userId,
+      deviceId: device.id,
+    });
+    return NextResponse.json({ error: "control_plane_error" }, { status: 500 });
   }
 
   const config = buildWireGuardConfig({
@@ -123,6 +117,3 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ config });
 }
-
-
-

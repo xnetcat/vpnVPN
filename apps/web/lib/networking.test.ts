@@ -14,5 +14,3 @@ describe("allocateDeviceIp", () => {
     expect(ip.endsWith("/32")).toBe(true);
   });
 });
-
-

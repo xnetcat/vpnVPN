@@ -40,11 +40,11 @@ async function fetchServerMetrics() {
 
     const total = servers.length;
     const online = servers.filter(
-      (s: (typeof servers)[number]) => s.status === "online"
+      (s: (typeof servers)[number]) => s.status === "online",
     ).length;
     const totalSessions = servers.reduce(
       (sum: number, s: (typeof servers)[number]) => sum + (s.sessions || 0),
-      0
+      0,
     );
 
     return { total, online, totalSessions };
@@ -58,7 +58,7 @@ export default async function DashboardPage() {
   const gate = await requirePaidUser();
   if (!gate.ok) {
     redirect(
-      gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing"
+      gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing",
     );
   }
 

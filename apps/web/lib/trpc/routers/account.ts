@@ -30,7 +30,7 @@ export const accountRouter = router({
     .input(
       z.object({
         name: z.string().trim().min(1).max(255).nullable().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.userId;
@@ -47,7 +47,7 @@ export const accountRouter = router({
         marketing: z.boolean(),
         transactional: z.boolean(),
         security: z.boolean(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.userId;

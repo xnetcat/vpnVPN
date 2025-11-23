@@ -15,13 +15,13 @@ const CONTROL_PLANE_API_KEY = process.env.CONTROL_PLANE_API_KEY;
 
 if (!CONTROL_PLANE_BASE) {
   console.warn(
-    "[controlPlane] CONTROL_PLANE_API_URL or NEXT_PUBLIC_API_BASE_URL is not set. Device registration will fail."
+    "[controlPlane] CONTROL_PLANE_API_URL or NEXT_PUBLIC_API_BASE_URL is not set. Device registration will fail.",
   );
 }
 
 if (!CONTROL_PLANE_API_KEY) {
   console.warn(
-    "[controlPlane] CONTROL_PLANE_API_KEY is not set. Admin/device writes to control plane will fail."
+    "[controlPlane] CONTROL_PLANE_API_KEY is not set. Admin/device writes to control plane will fail.",
   );
 }
 

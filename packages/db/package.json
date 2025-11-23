@@ -6,7 +6,7 @@
     "build": "prisma generate --schema prisma/schema.prisma",
     "lint": "biome lint .",
     "test": "vitest run --passWithNoTests",
-    "format": "biome format ."
+    "format": "biome format --write ."
   },
   "main": "./src/client.ts",
   "module": "./src/client.ts",

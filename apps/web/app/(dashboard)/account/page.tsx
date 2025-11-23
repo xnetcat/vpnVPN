@@ -9,7 +9,7 @@ export default async function AccountPage() {
   const gate = await requirePaidUser();
   if (!gate.ok) {
     redirect(
-      gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing"
+      gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing",
     );
   }
 
@@ -76,7 +76,7 @@ export default async function AccountPage() {
               <div className="text-lg font-medium">
                 {account.subscription?.currentPeriodEnd
                   ? new Date(
-                      account.subscription.currentPeriodEnd
+                      account.subscription.currentPeriodEnd,
                     ).toLocaleDateString()
                   : "—"}
               </div>

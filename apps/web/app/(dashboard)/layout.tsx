@@ -1,11 +1,18 @@
 import Link from "next/link";
-import { LayoutDashboard, Server, Shield, User, ShieldCheck, Smartphone } from "lucide-react";
+import {
+  LayoutDashboard,
+  Server,
+  Shield,
+  User,
+  ShieldCheck,
+  Smartphone,
+} from "lucide-react";
 import { getSession } from "@/lib/auth";
 
 export default async function DashboardLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   const session = await getSession();
   const isAdmin = Boolean((session?.user as any)?.role === "admin");
@@ -62,6 +69,5 @@ export default async function DashboardLayout({
       </aside>
       <main className="flex-1">{children}</main>
     </div>
-  )
+  );
 }
-
