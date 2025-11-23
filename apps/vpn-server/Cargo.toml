@@ -26,9 +26,6 @@ futures = "0.3"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 tracing-appender = "0.2"
 serde_with = { version = "3.8", features = ["chrono"] }
-aws-sdk-autoscaling = "1.20"
-aws-sdk-ssm = "1.20"
-aws-sdk-ec2 = "1.20"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 tokio-util = "0.7"
 sled = "0.34"

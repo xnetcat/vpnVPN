@@ -71,6 +71,3 @@ Tauri will produce native installers / bundles for macOS, Windows, and Linux.
 
 No control‑plane or VPN secrets are stored in the desktop app. All sensitive
 communication stays inside `web-app` (Next.js) and its tRPC backend.
-
-
-

@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "identifier": "com.vpnvpn.desktop",
   "build": {
-    "frontendDist": "../dist"
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173"
   },
   "app": {
     "withGlobalTauri": true,
