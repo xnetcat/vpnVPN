@@ -5,7 +5,7 @@ WORKDIR /src
 
 COPY Cargo.toml Cargo.lock ./
 COPY . .
-RUN cargo build --release --locked
+RUN cargo build --release
 
 FROM debian:bullseye-slim AS runtime
 WORKDIR /
