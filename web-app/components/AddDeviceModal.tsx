@@ -12,6 +12,7 @@ const WG_SERVER_PUBLIC_KEY = process.env.NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY || "";
 type Server = {
   id: string;
   region?: string;
+  country?: string;
   status: string;
   sessions: number;
 };
@@ -137,6 +138,7 @@ export default function AddDeviceModal() {
                 .filter((s: Server) => s.status === "online")
                 .map((server: Server) => (
                   <option key={server.id} value={server.id}>
+                    {server.country ? `${server.country} • ` : ""}
                     {server.region || server.id} - {server.sessions} sessions
                   </option>
                 ))}

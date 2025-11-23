@@ -24,16 +24,16 @@ export default async function HomePage() {
           ) : (
             <>
               <Link
-                href="/pricing"
+                href="/auth/register"
                 className="rounded-md bg-gray-900 px-4 py-2 text-white hover:bg-black"
               >
-                View Pricing
+                Get Started
               </Link>
               <Link
-                href="/auth/signin"
+                href="/pricing"
                 className="rounded-md border px-4 py-2 hover:bg-gray-50"
               >
-                Sign In
+                View Pricing
               </Link>
             </>
           )}

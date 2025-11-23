@@ -1,0 +1,30 @@
+{
+  "productName": "vpnVPN Desktop",
+  "version": "0.1.0",
+  "identifier": "com.vpnvpn.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm --dir ../desktop-app dev",
+    "beforeBuildCommand": "pnpm --dir ../desktop-app build",
+    "devUrl": "http://localhost:5173",
+    "distDir": "../desktop-app/dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "vpnVPN Desktop",
+        "width": 900,
+        "height": 640,
+        "resizable": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "identifier": "com.vpnvpn.desktop"
+  }
+}
+
+
+

@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { router, paidProcedure } from "../init";
 import { TRPCError } from "@trpc/server";
-import { addPeerForDevice, revokePeerByPublicKey } from "@/lib/controlPlane";
+import {
+  addPeerForDevice,
+  revokePeerByPublicKey,
+  revokePeersForUser,
+} from "@/lib/controlPlane";
 import { allocateDeviceIp } from "@/lib/networking";
 import { getTierConfig } from "@/lib/tiers";
 import { sendEmail } from "@/lib/email";
@@ -52,12 +56,17 @@ export const deviceRouter = router({
 
       const assignedIp = allocateDeviceIp(ctx.userId, device.id);
 
-      // Register with control plane
+      // Register with control plane. We first revoke any existing peers for
+      // this user so that only a single active VPN configuration is valid at
+      // any given time.
       try {
+        await revokePeersForUser(ctx.userId);
         await addPeerForDevice({
           publicKey,
           userId: ctx.userId,
           allowedIps: [assignedIp],
+          // Pass through server affinity so the control plane can record it.
+          serverId,
         });
       } catch (err) {
         console.error("[device] control-plane addPeer failed", {

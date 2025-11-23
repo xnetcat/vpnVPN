@@ -4,50 +4,46 @@ import { prisma } from "@/lib/prisma";
 import AddDeviceModal from "@/components/AddDeviceModal";
 import { getTierConfig } from "@/lib/tiers";
 import { Server, Smartphone, Activity } from "lucide-react";
+import { createContext } from "@/lib/trpc/init";
+import { appRouter } from "@/lib/trpc/routers/_app";
 
 async function getDashboardData(userId: string) {
-  const [devices, subscription, servers] = await Promise.all([
-    prisma.device.count({ where: { userId } }),
-    prisma.subscription.findFirst({
-      where: {
-        userId,
-        status: { in: ["active", "trialing"] },
-      },
-    }),
-    fetchServerMetrics(),
-  ]);
+  const [devices, subscription, serversMetrics, latestDevice] =
+    await Promise.all([
+      prisma.device.count({ where: { userId } }),
+      prisma.subscription.findFirst({
+        where: {
+          userId,
+          status: { in: ["active", "trialing"] },
+        },
+      }),
+      fetchServerMetrics(),
+      prisma.device.findFirst({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
 
-  return { devices, subscription, servers };
+  return {
+    devices,
+    subscription,
+    servers: serversMetrics,
+    latestDevice,
+  };
 }
 
 async function fetchServerMetrics() {
   try {
-    const base =
-      process.env.CONTROL_PLANE_API_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
-    const apiKey = process.env.CONTROL_PLANE_API_KEY;
-
-    if (!base || !apiKey) {
-      return { total: 0, online: 0, totalSessions: 0 };
-    }
-
-    const url = `${base.replace(/\/$/, "")}/servers`;
-    const res = await fetch(url, {
-      method: "GET",
-      headers: { "x-api-key": apiKey },
-      cache: "no-store",
-    });
-
-    if (!res.ok) {
-      return { total: 0, online: 0, totalSessions: 0 };
-    }
-
-    const data = await res.json();
-    const servers = data || [];
+    const ctx = await createContext();
+    const caller = appRouter.createCaller(ctx);
+    const servers = await caller.servers.list();
 
     const total = servers.length;
-    const online = servers.filter((s: any) => s.status === "online").length;
+    const online = servers.filter(
+      (s: (typeof servers)[number]) => s.status === "online"
+    ).length;
     const totalSessions = servers.reduce(
-      (sum: number, s: any) => sum + (s.metrics?.sessions || 0),
+      (sum: number, s: (typeof servers)[number]) => sum + (s.sessions || 0),
       0
     );
 
@@ -66,9 +62,8 @@ export default async function DashboardPage() {
     );
   }
 
-  const { devices, subscription, servers } = await getDashboardData(
-    gate.userId
-  );
+  const { devices, subscription, servers, latestDevice } =
+    await getDashboardData(gate.userId);
   const tierConfig = getTierConfig(gate.tier);
 
   return (
@@ -148,6 +143,24 @@ export default async function DashboardPage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Current VPN */}
+      {latestDevice && (
+        <div className="mt-6 rounded-lg border bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold mb-2">
+            Current VPN configuration
+          </h2>
+          <p className="text-sm text-gray-600">
+            Latest device:{" "}
+            <span className="font-medium">{latestDevice.name}</span>{" "}
+            {latestDevice.serverId
+              ? `connected via server ${latestDevice.serverId}`
+              : "(auto-selected server)"}{" "}
+            using a single active set of credentials. Adding a new device or
+            regenerating a config will automatically revoke older credentials.
+          </p>
         </div>
       )}
     </main>

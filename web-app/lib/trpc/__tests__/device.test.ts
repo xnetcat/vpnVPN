@@ -11,6 +11,7 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("@/lib/controlPlane", () => ({
   addPeerForDevice: vi.fn(),
   revokePeerByPublicKey: vi.fn(),
+  revokePeersForUser: vi.fn(),
 }));
 
 vi.mock("@/lib/email", () => ({
@@ -23,7 +24,7 @@ vi.mock("next/cache", () => ({
 
 describe("Device Router", () => {
   const mockSession: Session = {
-    user: { id: "user123", email: "test@test.com", name: "Test User" },
+    user: { id: "user123", email: "test@test.com", name: "Test User" } as any,
     expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
   };
 
@@ -97,8 +98,10 @@ describe("Device Router", () => {
   describe("device.register", () => {
     it("should register a new device", async () => {
       const { getSession } = await import("@/lib/auth");
-      const { addPeerForDevice } = await import("@/lib/controlPlane");
-      
+      const { addPeerForDevice, revokePeersForUser } = await import(
+        "@/lib/controlPlane"
+      );
+
       vi.mocked(getSession).mockResolvedValue(mockSession);
       vi.mocked(addPeerForDevice).mockResolvedValue();
 
@@ -139,6 +142,7 @@ describe("Device Router", () => {
       expect(result.deviceId).toBe("device123");
       expect(result.assignedIp).toBeDefined();
       expect(addPeerForDevice).toHaveBeenCalled();
+      expect(revokePeersForUser).toHaveBeenCalledWith("user123");
     });
 
     it("should enforce device limits", async () => {
@@ -172,7 +176,7 @@ describe("Device Router", () => {
     it("should revoke a device", async () => {
       const { getSession } = await import("@/lib/auth");
       const { revokePeerByPublicKey } = await import("@/lib/controlPlane");
-      
+
       vi.mocked(getSession).mockResolvedValue(mockSession);
       vi.mocked(revokePeerByPublicKey).mockResolvedValue();
 
@@ -253,4 +257,3 @@ describe("Device Router", () => {
     });
   });
 });
-

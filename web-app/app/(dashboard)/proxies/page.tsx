@@ -1,5 +1,7 @@
 import { requirePaidUser } from "@/lib/requirePaidUser";
 import { redirect } from "next/navigation";
+import { createContext } from "@/lib/trpc/init";
+import { appRouter } from "@/lib/trpc/routers/_app";
 
 type ProxyItem = {
   proxyId: string;
@@ -12,27 +14,10 @@ type ProxyItem = {
 };
 
 async function getProxies(): Promise<ProxyItem[]> {
-  const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
-  if (!base) {
-    console.warn("[proxies] NEXT_PUBLIC_API_BASE_URL not set");
-    return [];
-  }
-
-  const url = `${base.replace(/\/$/, "")}/proxies`;
-
-  try {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) {
-      console.error("[proxies] GET /proxies failed", {
-        status: res.status,
-      });
-      return [];
-    }
-    return res.json();
-  } catch (err) {
-    console.error("[proxies] fetch error", { err });
-    return [];
-  }
+  const ctx = await createContext();
+  const caller = appRouter.createCaller(ctx);
+  const proxies = await caller.proxies.list();
+  return proxies;
 }
 
 export default async function ProxiesPage() {
@@ -42,6 +27,7 @@ export default async function ProxiesPage() {
       gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing"
     );
   }
+
   const proxies = await getProxies();
   return (
     <main className="mx-auto max-w-6xl p-6">
@@ -60,6 +46,9 @@ export default async function ProxiesPage() {
                 Type
               </th>
               <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
+                Country
+              </th>
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
                 Latency
               </th>
               <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
@@ -73,6 +62,7 @@ export default async function ProxiesPage() {
                 <td className="px-4 py-2 text-sm">{p.ip}</td>
                 <td className="px-4 py-2 text-sm">{p.port}</td>
                 <td className="px-4 py-2 text-sm">{p.type}</td>
+                <td className="px-4 py-2 text-sm">{p.country ?? "—"}</td>
                 <td className="px-4 py-2 text-sm">{p.latency ?? "—"} ms</td>
                 <td className="px-4 py-2 text-sm">{p.score ?? "—"}</td>
               </tr>

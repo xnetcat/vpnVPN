@@ -18,10 +18,55 @@ export const handler = async (event: AddPeerEvent) => {
   }
 
   const body = JSON.parse(event.body || "{}");
-  const { publicKey, userId, allowedIps } = body;
+  const {
+    publicKey,
+    userId,
+    allowedIps,
+    serverId,
+    country,
+    region,
+  }: {
+    publicKey?: string;
+    userId?: string;
+    allowedIps?: string[];
+    serverId?: string;
+    country?: string;
+    region?: string;
+  } = body;
 
   if (!publicKey || !userId) {
     return { statusCode: 400, body: "Missing publicKey or userId" };
+  }
+
+  // Ensure only one active peer per user by marking existing peers inactive.
+  // We intentionally keep historical rows for auditability.
+  const existing = await ddb
+    .query({
+      TableName: PEERS_TABLE,
+      IndexName: "userId-index",
+      KeyConditionExpression: "userId = :uid",
+      ExpressionAttributeValues: { ":uid": userId },
+    })
+    .promise();
+
+  const items = existing.Items ?? [];
+  if (items.length > 0) {
+    await Promise.all(
+      items.map((item) =>
+        ddb
+          .update({
+            TableName: PEERS_TABLE,
+            Key: { publicKey: (item as any).publicKey },
+            UpdateExpression: "SET #a = :false, revokedAt = :now",
+            ExpressionAttributeNames: { "#a": "active" },
+            ExpressionAttributeValues: {
+              ":false": false,
+              ":now": new Date().toISOString(),
+            },
+          })
+          .promise()
+      )
+    );
   }
 
   await ddb
@@ -33,16 +78,22 @@ export const handler = async (event: AddPeerEvent) => {
         allowedIps: allowedIps || [],
         createdAt: new Date().toISOString(),
         active: true,
+        serverId,
+        country,
+        region,
       },
     })
     .promise();
 
-  console.log("[lambda] add-peer", { userId });
+  console.log("[lambda] add-peer", {
+    userId,
+    serverId,
+    hadPreviousPeers: items.length > 0,
+  });
 
   return {
     statusCode: 200,
     body: JSON.stringify({ status: "peer_added" }),
   };
 };
-
 

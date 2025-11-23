@@ -1,7 +1,9 @@
 import { requireAdmin } from "@/lib/requireAdmin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Server, Key, Settings } from "lucide-react";
+import { Server, Key, Settings, Users, BarChart3 } from "lucide-react";
+import { createContext } from "@/lib/trpc/init";
+import { appRouter } from "@/lib/trpc/routers/_app";
 
 type NodeSummary = {
   id: string;
@@ -12,19 +14,16 @@ type NodeSummary = {
 
 async function fetchNodes(): Promise<NodeSummary[]> {
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/admin/servers`, {
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      console.error("[admin] /api/admin/servers failed", { status: res.status });
-      return [];
-    }
-    const data = (await res.json()) as any[];
-    return data.map((item) => ({
+    const ctx = await createContext();
+    const caller = appRouter.createCaller(ctx);
+    const data = await caller.admin.listServers();
+
+    return (data as any[]).map((item) => ({
       id: item.id ?? "unknown",
       status: item.status ?? "unknown",
       lastSeen: item.lastSeen,
-      activeSessions: item.metrics?.sessions,
+      activeSessions:
+        (item.metrics && item.metrics.sessions) ?? item.activeSessions,
     }));
   } catch (err) {
     console.error("[admin] fetchNodes error", { err });
@@ -48,7 +47,7 @@ export default async function AdminPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <Link
           href="/admin/tokens"
           className="rounded-lg border bg-white p-6 shadow-sm hover:shadow-md transition-shadow"
@@ -76,6 +75,36 @@ export default async function AdminPage() {
           </div>
           <p className="text-sm text-gray-600">
             Deploy new VPN servers to your infrastructure
+          </p>
+        </Link>
+
+        <Link
+          href="/admin/users"
+          className="rounded-lg border bg-white p-6 shadow-sm hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="rounded-lg bg-indigo-100 p-2">
+              <Users className="h-5 w-5 text-indigo-600" />
+            </div>
+            <h3 className="font-semibold">Users</h3>
+          </div>
+          <p className="text-sm text-gray-600">
+            Inspect users, subscriptions, and device counts
+          </p>
+        </Link>
+
+        <Link
+          href="/admin/vpn-metrics"
+          className="rounded-lg border bg-white p-6 shadow-sm hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="rounded-lg bg-orange-100 p-2">
+              <BarChart3 className="h-5 w-5 text-orange-600" />
+            </div>
+            <h3 className="font-semibold">VPN Metrics</h3>
+          </div>
+          <p className="text-sm text-gray-600">
+            View aggregated sessions and load by server and country
           </p>
         </Link>
 

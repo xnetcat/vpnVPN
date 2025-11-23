@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { handler } from "../addPeer";
+import { mockQuery, mockUpdate } from "../../vitest.setup";
 
 describe("addPeer Lambda", () => {
   beforeEach(async () => {
@@ -22,6 +23,9 @@ describe("addPeer Lambda", () => {
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
     expect(body.status).toBe("peer_added");
+    expect(mockQuery).toHaveBeenCalled();
+    // No existing peers by default in the mock, so no updates performed.
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 
   it("should reject invalid API key", async () => {
@@ -51,4 +55,3 @@ describe("addPeer Lambda", () => {
     expect(result.statusCode).toBe(400);
   });
 });
-

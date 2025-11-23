@@ -7,10 +7,7 @@ export default async function SiteHeader() {
   return (
     <header className="border-b bg-white">
       <div className="mx-auto flex max-w-6xl items-center justify-between p-4">
-        <Link
-          href={authed ? "/dashboard" : "/"}
-          className="text-lg font-semibold"
-        >
+        <Link href={authed ? "/dashboard" : "/"} className="text-lg font-semibold">
           vpnVPN
         </Link>
         <nav className="flex items-center gap-4 text-sm">
@@ -56,6 +53,12 @@ export default async function SiteHeader() {
                 className="text-gray-600 hover:text-gray-900"
               >
                 Pricing
+              </Link>
+              <Link
+                href="/auth/register"
+                className="text-gray-600 hover:text-gray-900"
+              >
+                Register
               </Link>
               <Link
                 href="/auth/signin"

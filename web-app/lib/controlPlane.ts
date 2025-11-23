@@ -1,11 +1,12 @@
 "use server";
 
-import { NextResponse } from "next/server";
-
 type AddPeerPayload = {
   publicKey: string;
   userId: string;
   allowedIps: string[];
+  serverId?: string;
+  country?: string;
+  region?: string;
 };
 
 const CONTROL_PLANE_BASE =

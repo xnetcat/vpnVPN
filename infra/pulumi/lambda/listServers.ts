@@ -24,11 +24,46 @@ export const handler = async (event: ListServersEvent) => {
 
   const items = data.Items ?? [];
 
-  console.log("[lambda] list-servers", { count: items.length });
+  const now = Date.now();
+
+  const servers = items.map((item) => {
+    const anyItem = item as any;
+    const lastSeenIso: string | undefined = anyItem.lastSeen;
+    let status = anyItem.status || "unknown";
+
+    if (lastSeenIso) {
+      const lastSeenMs = Date.parse(lastSeenIso);
+      if (Number.isFinite(lastSeenMs)) {
+        const diffMs = now - lastSeenMs;
+        // Consider a server offline if it has not heartbeated in 5 minutes.
+        if (diffMs > 5 * 60 * 1000) {
+          status = "offline";
+        } else if (!status || status === "unknown") {
+          status = "online";
+        }
+      }
+    }
+
+    const metadata = anyItem.metadata || {};
+    const metrics = anyItem.metrics || {};
+
+    return {
+      id: anyItem.id,
+      publicIp: anyItem.publicIp,
+      metadata,
+      metrics,
+      status,
+      lastSeen: lastSeenIso,
+      country: metadata.country,
+      region: metadata.region,
+    };
+  });
+
+  console.log("[lambda] list-servers", { count: servers.length });
 
   return {
     statusCode: 200,
-    body: JSON.stringify(items),
+    body: JSON.stringify(servers),
   };
 };
 

@@ -36,9 +36,11 @@ export const serversRouter = router({
     // Transform control plane data to match expected format
     const servers = (data || []).map((item: any) => ({
       id: item.id || "unknown",
-      region: item.metadata?.region || "unknown",
+      region: item.region || item.metadata?.region || "unknown",
+      country: item.country || item.metadata?.country,
       status: item.status || "unknown",
       sessions: item.metrics?.sessions || 0,
+      cpu: typeof item.metrics?.cpu === "number" ? item.metrics.cpu : undefined,
       lastSeen: item.lastSeen,
     }));
 
