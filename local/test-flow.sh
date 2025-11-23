@@ -14,6 +14,8 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 cd "$LOCAL_DIR"
 
+trap 'log "Tearing down docker stack"; docker compose down -v >/dev/null 2>&1 || true' EXIT
+
 log "=== vpnVPN dockerized local stack ==="
 
 # Ensure wg is available for key generation
@@ -32,11 +34,17 @@ else
   log "Using VPN_TEST_CLIENT_* keys from environment."
 fi
 
-log "Building Docker images for web-app and vpn-node (streaming build logs, cached on subsequent runs)..."
-docker compose build web-app vpn-node
+log "Building Docker images for core stack (web-app, control-plane, metrics, vpn-node)..."
+docker compose build web-app control-plane metrics vpn-node
 
-log "Bringing up core stack (postgres, web-app, vpn-node) in Docker..."
-docker compose up -d postgres web-app vpn-node
+log "Bringing up core stack (postgres, control-plane, metrics, web-app, vpn-node) in Docker..."
+docker compose up -d postgres control-plane metrics web-app vpn-node
+
+log "Waiting for control-plane health on http://localhost:4000/health..."
+until curl -sf http://localhost:4000/health >/dev/null 2>&1; do
+  sleep 1
+done
+log "control-plane is healthy."
 
 log "Waiting for vpn-node admin endpoint on http://localhost:9090/health..."
 until curl -sf http://localhost:9090/health >/dev/null 2>&1; do
@@ -50,10 +58,10 @@ if ! docker compose run --rm vpn-test-client; then
 fi
 
 log "Docker VPN connectivity test passed (vpn-test-client)."
-log "Stack is still running for manual testing."
-log ""
-log "Web App:   http://localhost:3000"
-log "VPN Admin: http://localhost:9090/status"
-log ""
-log "To stop everything, run:"
-echo "  cd \"$LOCAL_DIR\" && docker compose down -v"
+log "Running TypeScript local end-to-end checks..."
+if ! (cd "$ROOT_DIR" && bun run test:local:e2e); then
+  error "TypeScript local E2E tests failed."
+fi
+
+log "All local flow checks passed. Stack has been torn down."
+

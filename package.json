@@ -10,6 +10,7 @@
   ],
   "scripts": {
     "dev": "cd local && docker compose up --build",
+    "test:local": "bash ./local/test-flow.sh",
     "dev:turbo": "turbo run dev --parallel",
     "build": "turbo run build",
     "lint": "turbo run lint",
