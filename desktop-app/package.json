@@ -3,10 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "tauri dev",
-    "build": "tauri build",
     "dev:web": "vite",
+    "dev:tauri": "tauri dev --dev-url http://localhost:5173 --no-dev-server",
+    "dev": "pnpm dev:web & pnpm dev:tauri",
     "build:web": "vite build",
+    "build:tauri": "tauri build",
+    "build": "pnpm build:web && pnpm build:tauri",
     "preview": "vite preview",
     "test": "vitest"
   },
