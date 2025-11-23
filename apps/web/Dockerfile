@@ -8,6 +8,12 @@ COPY packages ./packages
 
 RUN bun install --frozen-lockfile
 
+WORKDIR /app
+
+# Generate Prisma client for the shared DB package so that @prisma/client is available
+ENV DATABASE_URL="postgresql://localhost:5432/placeholder"
+RUN cd packages/db && bun run build
+
 WORKDIR /app/apps/web
 
 # Next.js collects completely anonymous telemetry data about general usage.
