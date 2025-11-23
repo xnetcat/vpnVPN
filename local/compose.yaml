@@ -79,6 +79,8 @@ services:
       - NEXT_PUBLIC_API_BASE_URL=http://control-plane:4000
       - CONTROL_PLANE_API_URL=http://control-plane:4000
       - CONTROL_PLANE_API_KEY=${CONTROL_PLANE_API_KEY:-dev-control-plane-key}
+      - NEXT_PUBLIC_WG_ENDPOINT=localhost:51820
+      - NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY=${WG_SERVER_PUBLIC_KEY:-server-public-key-here}
     ports:
       - "3000:3000"
     depends_on:
