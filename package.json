@@ -11,7 +11,8 @@
   "scripts": {
     "dev:stack": "cd local && docker compose watch",
     "dev:desktop": "cd apps/desktop && bun run dev",
-    "dev": "bun run dev:stack & bun run dev:desktop",
+    "dev:desktop:wait": "sh -c 'echo \"Waiting for web-app on http://localhost:3000...\"; until curl -sSf http://localhost:3000/desktop >/dev/null 2>&1; do sleep 2; done; echo \"web-app is up; starting desktop...\"; cd apps/desktop && bun run dev'",
+    "dev": "bun run dev:stack & bun run dev:desktop:wait",
     "test:local": "bash ./local/test-flow.sh",
     "test:local:e2e": "bun test local/local-flow.test.ts",
     "db:generate": "cd packages/db && bun run build",
