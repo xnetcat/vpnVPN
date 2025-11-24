@@ -91,99 +91,101 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const onlineCount = nodes.filter((n) => n.status === "online").length;
 
   return (
-    <main className="mx-auto max-w-6xl p-6">
+    <main className="mx-auto max-w-6xl p-6 text-slate-50">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold mb-1">Admin Panel</h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="mb-1 text-2xl font-semibold text-slate-50">
+          Admin Panel
+        </h1>
+        <p className="text-sm text-slate-400">
           Manage servers, tokens, and system configuration
         </p>
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
         <Link
           href="/admin/tokens"
-          className="rounded-lg border bg-white p-6 shadow-sm hover:shadow-md transition-shadow"
+          className="rounded-lg border border-slate-800 bg-slate-900/80 p-6 shadow-sm shadow-slate-900/40 transition-shadow hover:shadow-md"
         >
           <div className="flex items-center gap-3 mb-2">
-            <div className="rounded-lg bg-blue-100 p-2">
-              <Key className="h-5 w-5 text-blue-600" />
+            <div className="rounded-lg bg-emerald-500/10 p-2">
+              <Key className="h-5 w-5 text-emerald-400" />
             </div>
-            <h3 className="font-semibold">Server Tokens</h3>
+            <h3 className="font-semibold text-slate-50">Server Tokens</h3>
           </div>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-slate-400">
             Manage registration tokens for VPN servers
           </p>
         </Link>
 
         <Link
           href="/admin/provision"
-          className="rounded-lg border bg-white p-6 shadow-sm hover:shadow-md transition-shadow"
+          className="rounded-lg border border-slate-800 bg-slate-900/80 p-6 shadow-sm shadow-slate-900/40 transition-shadow hover:shadow-md"
         >
           <div className="flex items-center gap-3 mb-2">
-            <div className="rounded-lg bg-green-100 p-2">
-              <Server className="h-5 w-5 text-green-600" />
+            <div className="rounded-lg bg-sky-500/10 p-2">
+              <Server className="h-5 w-5 text-sky-400" />
             </div>
-            <h3 className="font-semibold">Provision Server</h3>
+            <h3 className="font-semibold text-slate-50">Provision Server</h3>
           </div>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-slate-400">
             Deploy new VPN servers to your infrastructure
           </p>
         </Link>
 
         <Link
           href="/admin/users"
-          className="rounded-lg border bg-white p-6 shadow-sm hover:shadow-md transition-shadow"
+          className="rounded-lg border border-slate-800 bg-slate-900/80 p-6 shadow-sm shadow-slate-900/40 transition-shadow hover:shadow-md"
         >
           <div className="flex items-center gap-3 mb-2">
-            <div className="rounded-lg bg-indigo-100 p-2">
-              <Users className="h-5 w-5 text-indigo-600" />
+            <div className="rounded-lg bg-indigo-500/10 p-2">
+              <Users className="h-5 w-5 text-indigo-400" />
             </div>
-            <h3 className="font-semibold">Users</h3>
+            <h3 className="font-semibold text-slate-50">Users</h3>
           </div>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-slate-400">
             Inspect users, subscriptions, and device counts
           </p>
         </Link>
 
         <Link
           href="/admin/vpn-metrics"
-          className="rounded-lg border bg-white p-6 shadow-sm hover:shadow-md transition-shadow"
+          className="rounded-lg border border-slate-800 bg-slate-900/80 p-6 shadow-sm shadow-slate-900/40 transition-shadow hover:shadow-md"
         >
           <div className="flex items-center gap-3 mb-2">
-            <div className="rounded-lg bg-orange-100 p-2">
-              <BarChart3 className="h-5 w-5 text-orange-600" />
+            <div className="rounded-lg bg-orange-500/10 p-2">
+              <BarChart3 className="h-5 w-5 text-orange-400" />
             </div>
-            <h3 className="font-semibold">VPN Metrics</h3>
+            <h3 className="font-semibold text-slate-50">VPN Metrics</h3>
           </div>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-slate-400">
             View aggregated sessions and load by server and country
           </p>
         </Link>
 
-        <div className="rounded-lg border bg-white p-6 shadow-sm">
+        <div className="rounded-lg border border-slate-800 bg-slate-900/80 p-6 shadow-sm shadow-slate-900/40">
           <div className="flex items-center gap-3 mb-2">
-            <div className="rounded-lg bg-purple-100 p-2">
-              <Settings className="h-5 w-5 text-purple-600" />
+            <div className="rounded-lg bg-purple-500/10 p-2">
+              <Settings className="h-5 w-5 text-purple-400" />
             </div>
-            <h3 className="font-semibold">System Status</h3>
+            <h3 className="font-semibold text-slate-50">System Status</h3>
           </div>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-slate-400">
             {onlineCount} / {nodes.length} servers online
           </p>
         </div>
       </div>
 
       <div className="mb-4">
-        <h2 className="text-xl font-semibold">Server Fleet</h2>
+        <h2 className="text-xl font-semibold text-slate-50">Server Fleet</h2>
       </div>
-      <form className="mb-3 flex flex-wrap items-center gap-3 text-sm text-gray-600">
+      <form className="mb-3 flex flex-wrap items-center gap-3 text-sm text-slate-400">
         <label className="flex items-center gap-2">
           <span>Status</span>
           <select
             name="status"
             defaultValue={statusFilter}
-            className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
+            className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-50"
           >
             <option value="all">All</option>
             <option value="online">Online</option>
@@ -197,7 +199,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           <select
             name="region"
             defaultValue={regionFilter}
-            className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
+            className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-50"
           >
             <option value="all">All</option>
             {allRegions.map((r) => (
@@ -215,35 +217,35 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             name="q"
             defaultValue={q}
             placeholder="ID, country, region…"
-            className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm"
+            className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-50"
           />
         </label>
 
         <button
           type="submit"
-          className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
+          className="rounded-md bg-emerald-500 px-3 py-1.5 text-sm font-medium text-slate-950 hover:bg-emerald-400"
         >
           Apply
         </button>
       </form>
 
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900/80 shadow-sm shadow-slate-900/40">
+        <table className="min-w-full divide-y divide-slate-800">
+          <thead className="bg-slate-900/80">
             <tr>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
+              <th className="px-4 py-2 text-left text-sm font-medium text-slate-400">
                 ID
               </th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
+              <th className="px-4 py-2 text-left text-sm font-medium text-slate-400">
                 Status
               </th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
+              <th className="px-4 py-2 text-left text-sm font-medium text-slate-400">
                 Last Seen
               </th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
+              <th className="px-4 py-2 text-left text-sm font-medium text-slate-400">
                 Active Sessions
               </th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
+              <th className="px-4 py-2 text-left text-sm font-medium text-slate-400">
                 Region
               </th>
               <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
@@ -251,26 +253,34 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-slate-800">
             {filteredNodes.map((n) => (
-              <tr key={n.id} className="hover:bg-gray-50">
-                <td className="px-4 py-2 text-sm">{n.id}</td>
-                <td className="px-4 py-2 text-sm">{n.status}</td>
-                <td className="px-4 py-2 text-sm">{n.lastSeen ?? "—"}</td>
-                <td className="px-4 py-2 text-sm">
+              <tr key={n.id} className="hover:bg-slate-800/80">
+                <td className="px-4 py-2 text-sm text-slate-100">{n.id}</td>
+                <td className="px-4 py-2 text-sm text-slate-300">
+                  {n.status}
+                </td>
+                <td className="px-4 py-2 text-sm text-slate-300">
+                  {n.lastSeen ?? "—"}
+                </td>
+                <td className="px-4 py-2 text-sm text-slate-300">
                   {typeof n.activeSessions === "number"
                     ? n.activeSessions
                     : "—"}
                 </td>
-                <td className="px-4 py-2 text-sm">{n.region ?? "—"}</td>
-                <td className="px-4 py-2 text-sm">{n.country ?? "—"}</td>
+                <td className="px-4 py-2 text-sm text-slate-300">
+                  {n.region ?? "—"}
+                </td>
+                <td className="px-4 py-2 text-sm text-slate-300">
+                  {n.country ?? "—"}
+                </td>
               </tr>
             ))}
             {filteredNodes.length === 0 && (
               <tr>
                 <td
                   colSpan={6}
-                  className="px-4 py-6 text-center text-sm text-gray-500"
+                  className="px-4 py-6 text-center text-sm text-slate-400"
                 >
                   No nodes match the current filters.
                 </td>

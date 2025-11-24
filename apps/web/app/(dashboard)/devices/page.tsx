@@ -29,11 +29,11 @@ export default async function DevicesPage() {
   const canAddDevice = devices.length < gate.deviceLimit;
 
   return (
-    <main className="mx-auto max-w-6xl p-6">
+    <main className="mx-auto max-w-6xl p-6 text-slate-50">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Devices</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-semibold text-slate-50">Devices</h1>
+          <p className="mt-1 text-sm text-slate-400">
             {devices.length} of {gate.deviceLimit} devices. Each device is a VPN
             client: either the vpnVPN desktop app or a custom WireGuard
             configuration connected to your account.
@@ -47,8 +47,8 @@ export default async function DevicesPage() {
       </div>
 
       {devices.length === 0 ? (
-        <div className="rounded-lg border bg-white p-12 text-center shadow-sm">
-          <p className="text-gray-500 mb-4">
+        <div className="rounded-lg border border-slate-800 bg-slate-900/80 p-12 text-center shadow-sm shadow-slate-900/40">
+          <p className="mb-4 text-slate-400">
             No devices connected yet. Add your first device to get started.
           </p>
           <AddDeviceModal
@@ -58,40 +58,40 @@ export default async function DevicesPage() {
           />
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+        <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900/80 shadow-sm shadow-slate-900/40">
+          <table className="min-w-full divide-y divide-slate-800">
+            <thead className="bg-slate-900/80">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-400">
                   Name
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-400">
                   Public Key
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-400">
                   Server
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-400">
                   Added
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-400">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 bg-white">
+            <tbody className="divide-y divide-slate-800 bg-slate-900/80">
               {devices.map((device: (typeof devices)[number]) => (
-                <tr key={device.id} className="hover:bg-gray-50">
-                  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                <tr key={device.id} className="hover:bg-slate-800/80">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-50">
                     {device.name}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm font-mono text-gray-500">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm font-mono text-slate-400">
                     {maskPublicKey(device.publicKey)}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-400">
                     {device.serverId || "Auto"}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-400">
                     {new Date(device.createdAt).toLocaleDateString()}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
