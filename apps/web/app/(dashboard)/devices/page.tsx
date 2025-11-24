@@ -21,11 +21,12 @@ export default async function DevicesPage() {
   const gate = await requirePaidUser();
   if (!gate.ok) {
     redirect(
-      gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing",
+      gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing"
     );
   }
 
   const devices = await getUserDevices(gate.userId);
+  const canAddDevice = devices.length < gate.deviceLimit;
 
   return (
     <main className="mx-auto max-w-6xl p-6">
@@ -36,7 +37,11 @@ export default async function DevicesPage() {
             {devices.length} of {gate.deviceLimit} devices
           </p>
         </div>
-        <AddDeviceModal />
+        <AddDeviceModal
+          canAdd={canAddDevice}
+          current={devices.length}
+          limit={gate.deviceLimit}
+        />
       </div>
 
       {devices.length === 0 ? (
@@ -44,7 +49,11 @@ export default async function DevicesPage() {
           <p className="text-gray-500 mb-4">
             No devices connected yet. Add your first device to get started.
           </p>
-          <AddDeviceModal />
+          <AddDeviceModal
+            canAdd={canAddDevice}
+            current={devices.length}
+            limit={gate.deviceLimit}
+          />
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
