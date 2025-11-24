@@ -62,9 +62,17 @@ export default function DesktopShell() {
   const [protocol, setProtocol] = useState<Protocol>("wireguard");
   const [autoConnect, setAutoConnect] = useState(false);
   const [hasAttemptedAutoConnect, setHasAttemptedAutoConnect] = useState(false);
+  const [wgServerPublicKey, setWgServerPublicKey] = useState<string>("");
   const [wgQuickPath, setWgQuickPath] = useState("");
   const [openvpnPath, setOpenvpnPath] = useState("");
   const [wireguardCliPath, setWireguardCliPath] = useState("");
+
+  // Discover vpn-node WireGuard public key via tRPC when not provided by env.
+  const pubkeyQuery = trpc.desktop.serverPubkey.useQuery(undefined, {
+    enabled:
+      !process.env.NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY && !wgServerPublicKey,
+    refetchOnWindowFocus: false,
+  });
 
   const servers: MapServer[] = useMemo(
     () => serversQuery.data ?? [],
@@ -79,6 +87,18 @@ export default function DesktopShell() {
       await utils.device.list.invalidate();
     },
   });
+
+  useEffect(() => {
+    if (wgServerPublicKey) return;
+    const envPk = process.env.NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY;
+    if (envPk) {
+      setWgServerPublicKey(envPk);
+      return;
+    }
+    if (pubkeyQuery.data?.publicKey) {
+      setWgServerPublicKey(pubkeyQuery.data.publicKey);
+    }
+  }, [wgServerPublicKey, pubkeyQuery.data?.publicKey]);
 
   // Ensure the desktop deep link handler is installed and listen for deep links.
   useEffect(() => {
@@ -111,7 +131,7 @@ export default function DesktopShell() {
               await fetch(next);
               // After completing the callback, navigate to the desktop shell
               // which should now have a valid session in this webview.
-              window.location.href = "/desktop";
+              window.location.href = "/desktop?desktop=1";
             } catch (err) {
               // eslint-disable-next-line no-console
               console.error("[desktop] failed to complete email callback", err);
@@ -256,6 +276,7 @@ export default function DesktopShell() {
         cfg = buildWireGuardConfig({
           privateKey: result.privateKey,
           assignedIp: result.assignedIp,
+          serverPublicKeyOverride: wgServerPublicKey || undefined,
         });
       } else if (protocol === "openvpn") {
         cfg = buildOpenVpnConfig({

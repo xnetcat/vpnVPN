@@ -1,5 +1,6 @@
 export const WEB_URL =
-  import.meta.env.VITE_VPNVPN_DESKTOP_URL ?? "http://localhost:3000/desktop";
+  import.meta.env.VITE_VPNVPN_DESKTOP_URL ??
+  "http://localhost:3000/desktop?desktop=1";
 
 export default function App() {
   return (

@@ -1,9 +1,13 @@
 export function buildWireGuardConfig(params: {
   privateKey: string;
   assignedIp: string;
+  serverPublicKeyOverride?: string;
 }) {
   const endpoint = process.env.NEXT_PUBLIC_WG_ENDPOINT || "";
-  const serverPublicKey = process.env.NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY || "";
+  const serverPublicKey =
+    params.serverPublicKeyOverride ||
+    process.env.NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY ||
+    "";
 
   return [
     "[Interface]",

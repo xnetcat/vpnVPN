@@ -173,4 +173,20 @@ model VpnMetric {
   @@index([serverId, timestamp])
 }
 
+// Short-lived desktop login codes used to link the vpnVPN desktop app without
+// relying on OS-level deep link handling.
+model DesktopLoginCode {
+  id         String   @id @default(cuid())
+  email      String
+  code       String
+  url        String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([email, code])
+  @@index([expiresAt])
+}
+
+
 

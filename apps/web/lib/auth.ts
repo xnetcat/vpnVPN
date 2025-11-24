@@ -4,7 +4,8 @@ import GitHubProvider from "next-auth/providers/github";
 import GoogleProvider from "next-auth/providers/google";
 import EmailProvider from "next-auth/providers/email";
 import { getServerSession } from "next-auth";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@vpnvpn/db";
+import { createDesktopCode } from "@/lib/desktopCodes";
 import { stripe } from "@/lib/stripe";
 
 export const authOptions: NextAuthOptions = {
@@ -31,6 +32,7 @@ export const authOptions: NextAuthOptions = {
           // deep link that wraps the NextAuth callback URL so the Tauri app can
           // complete the email login inside the embedded webview.
           let desktopUrl: string | undefined;
+          let desktopCode: string | undefined;
           try {
             const parsed = new URL(url);
             const callbackUrlParam = parsed.searchParams.get("callbackUrl");
@@ -41,6 +43,11 @@ export const authOptions: NextAuthOptions = {
             if (isDesktopFlow) {
               const wrapped = encodeURIComponent(url);
               desktopUrl = `vpnvpn://auth/email-callback?next=${wrapped}`;
+
+              // Also create a short-lived 6-digit desktop login code so the
+              // user can connect the desktop app without relying on OS-level
+              // deep link handling.
+              desktopCode = await createDesktopCode(identifier, url);
             }
           } catch {
             // If URL parsing fails, skip desktop deep-link and fall back to normal link.
@@ -53,6 +60,7 @@ export const authOptions: NextAuthOptions = {
             data: {
               url,
               desktopUrl,
+              desktopCode,
             },
           });
         } catch (error) {

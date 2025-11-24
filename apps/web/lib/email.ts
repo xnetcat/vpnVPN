@@ -48,6 +48,7 @@ function buildEmailContent(template: EmailTemplate, data: Record<string, any>) {
     case "magic_link": {
       const url = data.url as string;
       const desktopUrl = (data.desktopUrl as string | undefined) || "";
+      const desktopCode = (data.desktopCode as string | undefined) || "";
       const host = (() => {
         try {
           return new URL(url).host;
@@ -60,6 +61,28 @@ function buildEmailContent(template: EmailTemplate, data: Record<string, any>) {
         }
       })();
 
+      // Desktop flows: send a code-only email, no clickable magic link.
+      if (desktopCode) {
+        return {
+          subject: "Your vpnVPN desktop sign-in code",
+          html: `
+            <h1>Your vpnVPN desktop sign-in code</h1>
+            <p>Hi ${data.name || "there"},</p>
+            <p>Use the code below to sign in to the vpnVPN desktop app:</p>
+            <p style="margin:24px 0;font-size:24px;font-weight:700;letter-spacing:0.25em;text-align:center;">
+              ${desktopCode}
+            </p>
+            <p>This code expires in 15 minutes and can only be used once.</p>
+            <p>If you did not request this, you can safely ignore this email.</p>
+            <p>Best regards,<br>The vpnVPN Team</p>
+          `,
+          text: `Your vpnVPN desktop sign-in code\n\nHi ${
+            data.name || "there"
+          },\n\nUse the code below to sign in to the vpnVPN desktop app:\n\n${desktopCode}\n\nThis code expires in 15 minutes and can only be used once.\nIf you did not request this, you can safely ignore this email.\n\nBest regards,\nThe vpnVPN Team`,
+        };
+      }
+
+      // Web flows: keep standard magic-link email.
       return {
         subject: "Sign in to vpnVPN",
         html: `
@@ -71,29 +94,12 @@ function buildEmailContent(template: EmailTemplate, data: Record<string, any>) {
               Sign in
             </a>
           </p>
-          ${
-            desktopUrl
-              ? `
-          <p>If you're signing in from the vpnVPN desktop app, you can open the app directly:</p>
-          <p style="margin: 16px 0;">
-            <a href="${desktopUrl}" style="background-color:#059669;color:#ffffff;padding:8px 16px;border-radius:9999px;text-decoration:none;font-weight:500;display:inline-block;">
-              Open in desktop app
-            </a>
-          </p>
-          <p style="font-size:12px;color:#6b7280;">If this button does not work, copy and paste this link into your browser: <code style="font-family:monospace;">${desktopUrl}</code></p>
-          `
-              : ""
-          }
           <p>If the button does not work, copy and paste this URL into your browser:</p>
           <p><a href="${url}">${url}</a></p>
           <p>This magic link will expire shortly. If you did not request this, you can safely ignore this email.</p>
           <p>Best regards,<br>The vpnVPN Team</p>
         `,
-        text: `Sign in to vpnVPN\n\nHi ${data.name || "there"},\n\nOpen the link below to securely sign in to your vpnVPN account on ${host}.\n\n${url}\n\n${
-          desktopUrl
-            ? `If you are signing in from the vpnVPN desktop app, you can also use this link:\n\n${desktopUrl}\n\n`
-            : ""
-        }This magic link will expire shortly. If you did not request this, you can safely ignore this email.\n\nBest regards,\nThe vpnVPN Team`,
+        text: `Sign in to vpnVPN\n\nHi ${data.name || "there"},\n\nOpen the link below to securely sign in to your vpnVPN account on ${host}.\n\n${url}\n\nThis magic link will expire shortly. If you did not request this, you can safely ignore this email.\n\nBest regards,\nThe vpnVPN Team`,
       };
     }
 
