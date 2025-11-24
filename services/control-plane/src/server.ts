@@ -123,8 +123,9 @@ export async function buildServer() {
   });
 
   // Fetch peers for vpn-server nodes.
-  // For now, this returns all active peers regardless of server; in a multi-node
-  // setup you can extend this to filter by serverId or token.
+  // In a multi-node setup, we return peers for the requesting server plus any
+  // unpinned peers (serverId null). The server identity is provided via the
+  // `id` query param and authenticated by the bearer token.
   fastify.get("/server/peers", async (req, reply) => {
     try {
       const auth = (req.headers.authorization ||
@@ -142,8 +143,20 @@ export async function buildServer() {
         return reply.code(401).send({ error: "Invalid or revoked token" });
       }
 
+      const query = (req.query || {}) as { id?: string };
+      const serverId = query.id;
+
+      const where: Parameters<typeof prisma.vpnPeer.findMany>[0]["where"] = {
+        active: true,
+        ...(serverId
+          ? {
+              OR: [{ serverId }, { serverId: null }],
+            }
+          : {}),
+      };
+
       const peers = await prisma.vpnPeer.findMany({
-        where: { active: true },
+        where,
         orderBy: { createdAt: "asc" },
       });
 
@@ -157,7 +170,10 @@ export async function buildServer() {
         })),
       };
 
-      req.log.info({ count: payload.peers.length }, "server_peers_listed");
+      req.log.info(
+        { count: payload.peers.length, serverId: serverId ?? null },
+        "server_peers_listed"
+      );
       return reply.code(200).send(payload);
     } catch (err: any) {
       req.log.error({ err }, "listServerPeers failed");

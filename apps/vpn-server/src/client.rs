@@ -9,6 +9,7 @@ pub struct ControlPlaneClient {
     client: Client,
     base_url: String,
     auth_token: String,
+    server_id: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -28,21 +29,17 @@ struct PeersResponse {
 }
 
 impl ControlPlaneClient {
-    pub fn new(base_url: String, auth_token: String) -> Self {
+    pub fn new(base_url: String, auth_token: String, server_id: String) -> Self {
         Self {
             client: Client::new(),
             base_url: base_url.trim_end_matches('/').to_string(),
             auth_token,
+            server_id,
         }
     }
 
     pub async fn register(&self, public_key: &str, listen_port: u16) -> Result<()> {
         let url = format!("{}/server/register", self.base_url);
-
-        // Prefer explicit SERVER_ID, fall back to container/host name, then a static default.
-        let id = std::env::var("SERVER_ID")
-            .or_else(|_| std::env::var("HOSTNAME"))
-            .unwrap_or_else(|_| "vpn-node".to_string());
 
         // Optional metadata: region / country from env if available.
         let mut meta = serde_json::Map::new();
@@ -54,7 +51,7 @@ impl ControlPlaneClient {
         }
 
         let req = RegisterRequest {
-            id,
+            id: self.server_id.clone(),
             public_key: public_key.to_string(),
             listen_port,
             metadata: if meta.is_empty() {
@@ -86,7 +83,7 @@ impl ControlPlaneClient {
     }
 
     pub async fn fetch_peers(&self) -> Result<Vec<PeerSpec>> {
-        let url = format!("{}/server/peers", self.base_url);
+        let url = format!("{}/server/peers?id={}", self.base_url, self.server_id);
         debug!(%url, "fetching_peers");
 
         let resp = self

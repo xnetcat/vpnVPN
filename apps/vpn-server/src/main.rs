@@ -162,9 +162,14 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
     }
 
     // Client initialization
+    let server_id = env::var("SERVER_ID")
+        .or_else(|_| env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "vpn-node".to_string());
+
     let cp_client = std::sync::Arc::new(crate::client::ControlPlaneClient::new(
         args.api_url.clone(),
         args.token.clone(),
+        server_id.clone(),
     ));
 
     // Registration (fail fast if we cannot talk to the control plane)
