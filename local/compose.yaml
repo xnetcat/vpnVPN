@@ -35,6 +35,8 @@ services:
       watch:
         - path: ../apps/vpn-server
           action: rebuild
+        - path: ../.env
+          action: rebuild
 
   # Postgres Database
   postgres:
@@ -74,6 +76,8 @@ services:
           action: rebuild
         - path: ../packages
           action: rebuild
+        - path: ../.env
+          action: rebuild
 
   # Metrics Service
   metrics:
@@ -94,6 +98,8 @@ services:
         - path: ../services/metrics
           action: rebuild
         - path: ../packages
+          action: rebuild
+        - path: ../.env
           action: rebuild
 
   # Web App
@@ -125,6 +131,8 @@ services:
         - path: ../apps/web/.env
           action: rebuild
         - path: ../packages
+          action: rebuild
+        - path: ../.env
           action: rebuild
 
   # Dockerized VPN test client that connects to vpn-node and verifies connectivity.
