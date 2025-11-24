@@ -20,7 +20,17 @@ FROM node:20-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Install OpenSSL for Prisma query engine
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+# Copy built app and dependencies (including Prisma client + engines)
 COPY --from=builder /app/services/control-plane/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+
+# Fail fast at build time if Prisma client/engine cannot be loaded
+RUN DATABASE_URL="postgresql://placeholder:5432/vpnvpn" node -e "require('@prisma/client'); console.log('Prisma client OK in control-plane image')"
 
 EXPOSE 4000
 

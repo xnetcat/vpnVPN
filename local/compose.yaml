@@ -12,6 +12,10 @@ services:
     environment:
       - API_URL=http://control-plane:4000
       - VPN_TOKEN=dummy-token
+      - SERVER_ID=vpn-node-1
+      - VPN_REGION=local
+      - VPN_COUNTRY=local
+      - METRICS_URL=http://metrics:4100/metrics/vpn
       - LISTEN_UDP_PORT=51820
       - ADMIN_PORT=9090
       - RUST_LOG=info

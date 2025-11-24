@@ -162,24 +162,33 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
         args.token.clone(),
     ));
 
-    // Registration
+    // Registration (fail fast if we cannot talk to the control plane)
     if let Some(pubkey) = node_arc.get_public_key() {
         let client = cp_client.clone();
         let listen_port = args.listen_port;
-        tokio::spawn(async move {
-            // Simple retry loop for registration
-            loop {
-                match client.register(&pubkey, listen_port).await {
-                    Ok(_) => break,
-                    Err(e) => {
-                        error!(error = ?e, "registration_failed_retrying");
-                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        const MAX_ATTEMPTS: u32 = 12; // ~1 minute of retries
+        let mut attempts: u32 = 0;
+
+        loop {
+            attempts += 1;
+            match client.register(&pubkey, listen_port).await {
+                Ok(_) => {
+                    info!("successfully_registered_with_control_plane");
+                    break;
+                }
+                Err(e) => {
+                    error!(error = ?e, attempt = attempts, "registration_failed_retrying");
+                    if attempts >= MAX_ATTEMPTS {
+                        error!("registration_failed_max_retries; exiting vpn-node");
+                        return Err(1);
                     }
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                 }
             }
-        });
+        }
     } else {
-        warn!("no_public_key_found_skipping_registration");
+        warn!("no_public_key_found; cannot register with control plane");
+        return Err(1);
     }
 
     // Peer Sync Loop
@@ -220,6 +229,39 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         }
     });
+
+    // Optional metrics ingestion to external metrics service
+    if let Ok(metrics_url) = std::env::var("METRICS_URL") {
+        let server_id = std::env::var("SERVER_ID")
+            .or_else(|_| std::env::var("HOSTNAME"))
+            .unwrap_or_else(|_| "vpn-node".to_string());
+        let region = std::env::var("VPN_REGION").ok();
+
+        let client = reqwest::Client::new();
+        tokio::spawn(async move {
+            loop {
+                if let Some(node) = vpn::VPN_NODE.get() {
+                    let statuses = node.collect_status();
+                    let mut total_active = 0usize;
+                    for st in &statuses {
+                        total_active += st.active_sessions;
+                    }
+
+                    let body = serde_json::json!({
+                        "serverId": server_id,
+                        "activePeers": total_active,
+                        "region": region,
+                    });
+
+                    if let Err(e) = client.post(&metrics_url).json(&body).send().await {
+                        error!(error=?e, "metrics_publish_failed");
+                    }
+                }
+
+                tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+            }
+        });
+    }
 
     let admin_server = tokio::spawn(run_admin(args.admin_port));
 

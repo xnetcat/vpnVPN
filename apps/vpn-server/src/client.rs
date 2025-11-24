@@ -13,10 +13,11 @@ pub struct ControlPlaneClient {
 
 #[derive(Debug, Serialize)]
 struct RegisterRequest {
+    id: String,
     public_key: String,
     listen_port: u16,
-    // We might send IP if we know it, or let CP infer it.
-    // For now, let's assume we just send key/port.
+    // Optional metadata about the node (region/country, etc.)
+    metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -35,9 +36,30 @@ impl ControlPlaneClient {
 
     pub async fn register(&self, public_key: &str, listen_port: u16) -> Result<()> {
         let url = format!("{}/server/register", self.base_url);
+
+        // Prefer explicit SERVER_ID, fall back to container/host name, then a static default.
+        let id = std::env::var("SERVER_ID")
+            .or_else(|_| std::env::var("HOSTNAME"))
+            .unwrap_or_else(|_| "vpn-node".to_string());
+
+        // Optional metadata: region / country from env if available.
+        let mut meta = serde_json::Map::new();
+        if let Ok(region) = std::env::var("VPN_REGION") {
+            meta.insert("region".to_string(), serde_json::Value::String(region));
+        }
+        if let Ok(country) = std::env::var("VPN_COUNTRY") {
+            meta.insert("country".to_string(), serde_json::Value::String(country));
+        }
+
         let req = RegisterRequest {
+            id,
             public_key: public_key.to_string(),
             listen_port,
+            metadata: if meta.is_empty() {
+                None
+            } else {
+                Some(serde_json::Value::Object(meta))
+            },
         };
 
         info!(%url, ?req, "registering_with_control_plane");
