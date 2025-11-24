@@ -9,6 +9,8 @@ services:
       - NET_ADMIN
     devices:
       - "/dev/net/tun:/dev/net/tun"
+    env_file:
+      - ../.env
     environment:
       - API_URL=http://control-plane:4000
       - VPN_TOKEN=dummy-token
@@ -29,6 +31,10 @@ services:
       - "9090:9090" # Admin/Metrics port
     networks:
       - vpn-net
+    develop:
+      watch:
+        - path: ../apps/vpn-server
+          action: rebuild
 
   # Postgres Database
   postgres:
@@ -50,6 +56,8 @@ services:
     build:
       context: ..
       dockerfile: services/control-plane/Dockerfile
+    env_file:
+      - ../.env
     environment:
       - PORT=4000
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/vpnvpn
@@ -60,12 +68,20 @@ services:
       - postgres
     networks:
       - vpn-net
+    develop:
+      watch:
+        - path: ../services/control-plane
+          action: rebuild
+        - path: ../packages
+          action: rebuild
 
   # Metrics Service
   metrics:
     build:
       context: ..
       dockerfile: services/metrics/Dockerfile
+    env_file:
+      - ../.env
     environment:
       - PORT=4100
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/vpnvpn
@@ -73,12 +89,20 @@ services:
       - postgres
     networks:
       - vpn-net
+    develop:
+      watch:
+        - path: ../services/metrics
+          action: rebuild
+        - path: ../packages
+          action: rebuild
 
   # Web App
   web-app:
     build:
       context: ..
       dockerfile: apps/web/Dockerfile
+    env_file:
+      - ../.env
     environment:
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/vpnvpn
       - NEXTAUTH_SECRET=supersecret
@@ -94,6 +118,14 @@ services:
       - postgres
     networks:
       - vpn-net
+    develop:
+      watch:
+        - path: ../apps/web
+          action: rebuild
+        - path: ../apps/web/.env
+          action: rebuild
+        - path: ../packages
+          action: rebuild
 
   # Dockerized VPN test client that connects to vpn-node and verifies connectivity.
   vpn-test-client:

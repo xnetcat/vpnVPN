@@ -122,6 +122,52 @@ export async function buildServer() {
     }
   });
 
+  // Fetch peers for vpn-server nodes.
+  // For now, this returns all active peers regardless of server; in a multi-node
+  // setup you can extend this to filter by serverId or token.
+  fastify.get("/server/peers", async (req, reply) => {
+    try {
+      const auth = (req.headers.authorization ||
+        // @ts-expect-error legacy casing
+        (req.headers as any).Authorization) as string | undefined;
+      if (!auth || !auth.toLowerCase().startsWith("bearer ")) {
+        return reply.code(401).send({ error: "Missing bearer token" });
+      }
+      const token = auth.slice(7).trim();
+
+      const vpnToken = await prisma.vpnToken.findUnique({
+        where: { token },
+      });
+      if (!vpnToken || !vpnToken.active) {
+        return reply.code(401).send({ error: "Invalid or revoked token" });
+      }
+
+      const peers = await prisma.vpnPeer.findMany({
+        where: { active: true },
+        orderBy: { createdAt: "asc" },
+      });
+
+      // Shape into the snake_case PeerSpec expected by vpn-server.
+      const payload = {
+        peers: peers.map((p) => ({
+          public_key: p.publicKey,
+          preshared_key: null as string | null,
+          allowed_ips: p.allowedIps,
+          endpoint: null as string | null,
+        })),
+      };
+
+      req.log.info({ count: payload.peers.length }, "server_peers_listed");
+      return reply.code(200).send(payload);
+    } catch (err: any) {
+      req.log.error({ err }, "listServerPeers failed");
+      const status = err.statusCode ?? 500;
+      return reply
+        .code(status)
+        .send({ error: err.message ?? "Internal Error" });
+    }
+  });
+
   fastify.get("/servers", async (req, reply) => {
     try {
       requireApiKey(req.headers as any);
@@ -209,7 +255,7 @@ export async function buildServer() {
 
       req.log.info(
         { userId: body.userId, serverId: body.serverId },
-        "addPeer persisted",
+        "addPeer persisted"
       );
 
       return reply.code(204).send();

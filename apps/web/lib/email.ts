@@ -151,6 +151,14 @@ export async function sendEmail(context: EmailContext): Promise<void> {
       template: context.template,
       to: context.to,
     });
+
+    // For magic links we want the caller (NextAuth) to know this is a hard failure
+    // so the frontend can surface an error instead of pretending success.
+    if (context.template === "magic_link") {
+      throw new Error(
+        "RESEND_API_KEY is not configured; cannot send magic link"
+      );
+    }
     return;
   }
 
@@ -175,6 +183,12 @@ export async function sendEmail(context: EmailContext): Promise<void> {
       to: context.to,
       error,
     });
-    // Don't throw - email failures shouldn't break the app
+    // Propagate failures for magic link emails so auth can fail visibly;
+    // keep other templates as soft-fail to avoid breaking non-critical flows.
+    if (context.template === "magic_link") {
+      throw error instanceof Error
+        ? error
+        : new Error("Failed to send magic link email");
+    }
   }
 }
