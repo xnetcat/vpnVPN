@@ -38,7 +38,7 @@ function isDesktopShell(): boolean {
 
 async function applyVpnConfig(
   protocol: Protocol,
-  config: string,
+  config: string
 ): Promise<void> {
   if (!isDesktopShell()) return;
   const anyWin = window as any;
@@ -68,7 +68,7 @@ export default function DesktopShell() {
 
   const servers: MapServer[] = useMemo(
     () => serversQuery.data ?? [],
-    [serversQuery.data],
+    [serversQuery.data]
   );
 
   const selectedServer =
@@ -80,6 +80,98 @@ export default function DesktopShell() {
     },
   });
 
+  // Ensure the desktop deep link handler is installed and listen for deep links.
+  useEffect(() => {
+    if (!isDesktopShell()) return;
+
+    const anyWin = window as any;
+    const deepLink = anyWin.__TAURI__?.deepLink;
+    if (!deepLink) return;
+
+    const scheme = "vpnvpn";
+
+    const handleDeepLink = async (url: string) => {
+      // eslint-disable-next-line no-console
+      console.log("[desktop] received deep link:", url);
+
+      try {
+        const parsed = new URL(url);
+
+        // Magic link email callback from the browser: the NextAuth URL is passed
+        // as the `next` query parameter so we can complete the email login flow
+        // inside the embedded webview.
+        if (
+          parsed.hostname === "auth" &&
+          parsed.pathname === "/email-callback" &&
+          parsed.searchParams.has("next")
+        ) {
+          const next = parsed.searchParams.get("next");
+          if (next) {
+            try {
+              await fetch(next);
+              // After completing the callback, navigate to the desktop shell
+              // which should now have a valid session in this webview.
+              window.location.href = "/desktop";
+            } catch (err) {
+              // eslint-disable-next-line no-console
+              console.error("[desktop] failed to complete email callback", err);
+            }
+          }
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("[desktop] failed to parse deep link URL", err);
+      }
+    };
+
+    (async () => {
+      try {
+        // On Windows/Linux, check if we're the default handler; if not, register.
+        if (typeof deepLink.isRegistered === "function") {
+          try {
+            const installed = await deepLink.isRegistered(scheme);
+            if (!installed && typeof deepLink.register === "function") {
+              await deepLink.register(scheme);
+            }
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error("[desktop] deep-link registration check failed", err);
+          }
+        }
+
+        // Handle the URL that launched the app (if any).
+        if (typeof deepLink.getCurrent === "function") {
+          try {
+            const urls = (await deepLink.getCurrent()) as string[] | null;
+            if (urls && urls.length > 0) {
+              await handleDeepLink(urls[urls.length - 1]);
+            }
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error("[desktop] failed to read current deep link", err);
+          }
+        }
+
+        // Listen for new deep links while the app is running (macOS and
+        // Windows/Linux when single-instance integration is enabled).
+        if (typeof deepLink.onOpenUrl === "function") {
+          try {
+            await deepLink.onOpenUrl(async (urls: string[]) => {
+              if (!urls || urls.length === 0) return;
+              await handleDeepLink(urls[urls.length - 1]);
+            });
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error("[desktop] failed to subscribe to deep links", err);
+          }
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("[desktop] deep-link init failed", err);
+      }
+    })();
+  }, []);
+
   // Hydrate protocol/auto-connect from local desktop settings file when running in Tauri
   useEffect(() => {
     if (!isDesktopShell()) return;
@@ -88,7 +180,7 @@ export default function DesktopShell() {
     (async () => {
       try {
         const s = (await anyWin.__TAURI__.core.invoke(
-          "get_desktop_settings",
+          "get_desktop_settings"
         )) as {
           preferred_protocol?: Protocol;
           auto_connect?: boolean;
@@ -128,7 +220,7 @@ export default function DesktopShell() {
       })
       .catch((e: unknown) =>
         // eslint-disable-next-line no-console
-        console.error("Failed to update desktop settings file", e),
+        console.error("Failed to update desktop settings file", e)
       );
   }, [protocol, autoConnect, wgQuickPath, openvpnPath, wireguardCliPath]);
 
@@ -182,7 +274,7 @@ export default function DesktopShell() {
       } catch (e) {
         console.error("Failed to apply VPN config via Tauri", e);
         setError(
-          "Config generated, but failed to apply VPN settings locally. You may need to import it manually.",
+          "Config generated, but failed to apply VPN settings locally. You may need to import it manually."
         );
       }
       setStatus("connected");
@@ -196,7 +288,7 @@ export default function DesktopShell() {
     setConfig(null);
     setStatus("disconnected");
     void disconnectVpn(protocol).catch((e) =>
-      console.error("Failed to disconnect VPN via Tauri", e),
+      console.error("Failed to disconnect VPN via Tauri", e)
     );
   };
 
@@ -234,7 +326,7 @@ export default function DesktopShell() {
                 servers.find(
                   (s) =>
                     s.country?.toLowerCase().includes(term) ||
-                    s.region.toLowerCase().includes(term),
+                    s.region.toLowerCase().includes(term)
                 ) ?? null;
               if (found) setSelectedId(found.id);
             }}

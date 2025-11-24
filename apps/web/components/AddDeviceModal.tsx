@@ -79,7 +79,12 @@ export default function AddDeviceModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg">
-        <h2 className="mb-4 text-xl font-semibold">Add New Device</h2>
+        <h2 className="mb-2 text-xl font-semibold">Add New Device</h2>
+        <p className="mb-4 text-xs text-gray-500">
+          A device is a VPN client. Use this to create a WireGuard config for a
+          custom client (router, phone, laptop). The vpnVPN desktop app will
+          register its own device when you click Connect.
+        </p>
 
         <div className="space-y-4">
           <div>

@@ -9,7 +9,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:stack": "cd local && docker compose build web-app control-plane metrics vpn-node && docker compose up -d postgres control-plane metrics web-app vpn-node && docker compose watch",
+    "dev:stack": "cd local && docker compose build web-app control-plane metrics vpn-node && docker compose up -d postgres control-plane metrics web-app vpn-node && (docker compose watch || echo \"[dev:stack] docker compose watch failed (likely another watch is running); containers are up with latest images.\")",
     "dev:desktop": "cd apps/desktop && bun run dev",
     "dev:desktop:wait": "sh -c 'echo \"Waiting for web-app on http://localhost:3000...\"; until curl -sSf http://localhost:3000/desktop >/dev/null 2>&1; do sleep 2; done; echo \"web-app is up; starting desktop...\"; cd apps/desktop && bun run dev'",
     "dev:stripe": "sh -c 'if command -v stripe >/dev/null 2>&1; then echo \"Starting Stripe listener (loading .env)...\"; set -a; [ -f .env ] && . .env; set +a; if [ -n \"$STRIPE_SECRET_KEY\" ]; then echo \"Using STRIPE_SECRET_KEY from .env for Stripe CLI\"; stripe listen --api-key \"$STRIPE_SECRET_KEY\" --forward-to http://localhost:3000/api/webhooks/stripe; else echo \"[dev] STRIPE_SECRET_KEY not set in .env; starting stripe listen without explicit --api-key\"; stripe listen --forward-to http://localhost:3000/api/webhooks/stripe; fi; else echo \"[dev] Stripe CLI not installed; skipping stripe listen\"; fi'",

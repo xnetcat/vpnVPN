@@ -27,12 +27,32 @@ export const authOptions: NextAuthOptions = {
       from: process.env.EMAIL_FROM,
       async sendVerificationRequest({ identifier, url }) {
         try {
+          // For desktop flows (callbackUrl -> /desktop), also include a vpnvpn://
+          // deep link that wraps the NextAuth callback URL so the Tauri app can
+          // complete the email login inside the embedded webview.
+          let desktopUrl: string | undefined;
+          try {
+            const parsed = new URL(url);
+            const callbackUrlParam = parsed.searchParams.get("callbackUrl");
+            const isDesktopFlow =
+              callbackUrlParam &&
+              decodeURIComponent(callbackUrlParam).includes("/desktop");
+
+            if (isDesktopFlow) {
+              const wrapped = encodeURIComponent(url);
+              desktopUrl = `vpnvpn://auth/email-callback?next=${wrapped}`;
+            }
+          } catch {
+            // If URL parsing fails, skip desktop deep-link and fall back to normal link.
+          }
+
           const { sendEmail } = await import("@/lib/email");
           await sendEmail({
             to: identifier,
             template: "magic_link",
             data: {
               url,
+              desktopUrl,
             },
           });
         } catch (error) {

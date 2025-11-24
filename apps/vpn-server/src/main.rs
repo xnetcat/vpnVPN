@@ -248,8 +248,25 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
         let region = std::env::var("VPN_REGION").ok();
 
         let client = reqwest::Client::new();
+
+        // System information snapshot used to derive CPU and memory usage.
+        let mut sys = sysinfo::System::new_all();
+
         tokio::spawn(async move {
             loop {
+                // Refresh basic system metrics
+                sys.refresh_cpu();
+                sys.refresh_memory();
+
+                let cpu = sys.global_cpu_info().cpu_usage() as f64;
+                let total_mem = sys.total_memory() as f64;
+                let used_mem = sys.used_memory() as f64;
+                let mem_ratio = if total_mem > 0.0 {
+                    (used_mem / total_mem).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+
                 if let Some(node) = vpn::VPN_NODE.get() {
                     let statuses = node.collect_status();
                     let mut total_active = 0usize;
@@ -261,6 +278,8 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
                         "serverId": server_id,
                         "activePeers": total_active,
                         "region": region,
+                        "cpu": cpu,
+                        "memory": mem_ratio,
                     });
 
                     if let Err(e) = client.post(&metrics_url).json(&body).send().await {

@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use tauri_plugin_deep_link::DeepLinkExt;
 
 #[derive(Serialize)]
 struct Health {
@@ -319,6 +320,18 @@ mod tests {
 #[cfg(not(test))]
 fn main() {
     tauri::Builder::default()
+        // Deep link plugin registers the `vpnvpn://` scheme on all desktop OSes.
+        .plugin(tauri_plugin_deep_link::init())
+        .setup(|app| {
+            // On Linux and Windows, ensure the statically configured schemes are
+            // registered for the current executable (handy in dev and portable builds).
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                app.deep_link().register_all()?;
+            }
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             health_check,
             get_desktop_settings,

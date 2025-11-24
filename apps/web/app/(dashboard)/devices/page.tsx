@@ -33,8 +33,10 @@ export default async function DevicesPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Devices</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {devices.length} of {gate.deviceLimit} devices
+          <p className="mt-1 text-sm text-gray-500">
+            {devices.length} of {gate.deviceLimit} devices. Each device is a VPN
+            client: either the vpnVPN desktop app or a custom WireGuard
+            configuration connected to your account.
           </p>
         </div>
         <AddDeviceModal

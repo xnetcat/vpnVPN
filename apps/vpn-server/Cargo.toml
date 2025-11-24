@@ -31,3 +31,4 @@ base64 = "0.22"
 rand = "0.8"
 x25519-dalek = { version = "2.0", features = ["serde"] }
 clap = { version = "4.4", features = ["derive", "env"] }
+sysinfo = "0.30"

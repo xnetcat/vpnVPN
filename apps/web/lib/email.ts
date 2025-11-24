@@ -47,6 +47,7 @@ function buildEmailContent(template: EmailTemplate, data: Record<string, any>) {
 
     case "magic_link": {
       const url = data.url as string;
+      const desktopUrl = (data.desktopUrl as string | undefined) || "";
       const host = (() => {
         try {
           return new URL(url).host;
@@ -70,12 +71,29 @@ function buildEmailContent(template: EmailTemplate, data: Record<string, any>) {
               Sign in
             </a>
           </p>
+          ${
+            desktopUrl
+              ? `
+          <p>If you're signing in from the vpnVPN desktop app, you can open the app directly:</p>
+          <p style="margin: 16px 0;">
+            <a href="${desktopUrl}" style="background-color:#059669;color:#ffffff;padding:8px 16px;border-radius:9999px;text-decoration:none;font-weight:500;display:inline-block;">
+              Open in desktop app
+            </a>
+          </p>
+          <p style="font-size:12px;color:#6b7280;">If this button does not work, copy and paste this link into your browser: <code style="font-family:monospace;">${desktopUrl}</code></p>
+          `
+              : ""
+          }
           <p>If the button does not work, copy and paste this URL into your browser:</p>
           <p><a href="${url}">${url}</a></p>
           <p>This magic link will expire shortly. If you did not request this, you can safely ignore this email.</p>
           <p>Best regards,<br>The vpnVPN Team</p>
         `,
-        text: `Sign in to vpnVPN\n\nHi ${data.name || "there"},\n\nOpen the link below to securely sign in to your vpnVPN account on ${host}.\n\n${url}\n\nThis magic link will expire shortly. If you did not request this, you can safely ignore this email.\n\nBest regards,\nThe vpnVPN Team`,
+        text: `Sign in to vpnVPN\n\nHi ${data.name || "there"},\n\nOpen the link below to securely sign in to your vpnVPN account on ${host}.\n\n${url}\n\n${
+          desktopUrl
+            ? `If you are signing in from the vpnVPN desktop app, you can also use this link:\n\n${desktopUrl}\n\n`
+            : ""
+        }This magic link will expire shortly. If you did not request this, you can safely ignore this email.\n\nBest regards,\nThe vpnVPN Team`,
       };
     }
 
