@@ -12,7 +12,7 @@ type ServerMetric = {
 };
 
 type MetricsPageProps = {
-  searchParams?: { [key: string]: string | string[] | undefined };
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
 export default async function AdminVpnMetricsPage({
@@ -38,12 +38,15 @@ export default async function AdminVpnMetricsPage({
         : 0) || 0,
   }));
 
+  const resolvedSearch =
+    (searchParams && (await searchParams)) || ({} as Record<string, string | string[] | undefined>);
+
   const statusFilter =
-    (searchParams?.status as string | undefined)?.toLowerCase() || "all";
+    (resolvedSearch.status as string | undefined)?.toLowerCase() || "all";
   const countryFilter =
-    (searchParams?.country as string | undefined)?.toLowerCase() || "all";
+    (resolvedSearch.country as string | undefined)?.toLowerCase() || "all";
   const regionFilter =
-    (searchParams?.region as string | undefined)?.toLowerCase() || "all";
+    (resolvedSearch.region as string | undefined)?.toLowerCase() || "all";
 
   const filteredServers = allServers.filter((s) => {
     if (statusFilter !== "all" && s.status.toLowerCase() !== statusFilter) {

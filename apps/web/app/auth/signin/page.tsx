@@ -14,13 +14,48 @@ const providers = [
 
 function SignInForm() {
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+  const rawCallback = searchParams.get("callbackUrl") || "/dashboard";
+
+  const isDesktopParam = searchParams.get("desktop") === "1";
+  const isDesktopShell =
+    typeof window !== "undefined" &&
+    typeof (window as any).__TAURI__?.core?.invoke === "function";
+
+  const defaultCallback =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/desktop`
+      : "/desktop";
+
+  const callbackUrl =
+    isDesktopParam && rawCallback === "/desktop"
+      ? defaultCallback
+      : rawCallback;
 
   const [email, setEmail] = useState("");
   const [magicState, setMagicState] = useState<MagicState>("idle");
   const [magicError, setMagicError] = useState<string | null>(null);
 
-  const handleProviderSignIn = (providerId: string) => {
+  const handleProviderSignIn = async (providerId: string) => {
+    // In the desktop shell, open OAuth flows in the system browser instead of the
+    // embedded webview, so the user gets a full browser login experience.
+    if (isDesktopShell && isDesktopParam) {
+      try {
+        const result = await signIn(providerId, {
+          callbackUrl,
+          redirect: false,
+        });
+        const url = (result as any)?.url as string | undefined;
+        if (url) {
+          const anyWin = window as any;
+          await anyWin.__TAURI__.shell.open(url);
+          return;
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("desktop OAuth sign-in failed", err);
+      }
+    }
+
     void signIn(providerId, { callbackUrl });
   };
 

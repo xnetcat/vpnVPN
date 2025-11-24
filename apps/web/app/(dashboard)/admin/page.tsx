@@ -36,7 +36,7 @@ async function fetchNodes(): Promise<NodeSummary[]> {
 }
 
 type AdminPageProps = {
-  searchParams?: { [key: string]: string | string[] | undefined };
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
 export default async function AdminPage({ searchParams }: AdminPageProps) {
@@ -47,11 +47,14 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
   const nodes = await fetchNodes();
 
+  const resolvedSearch =
+    (searchParams && (await searchParams)) || ({} as Record<string, string | string[] | undefined>);
+
   const statusFilter =
-    (searchParams?.status as string | undefined)?.toLowerCase() || "all";
+    (resolvedSearch.status as string | undefined)?.toLowerCase() || "all";
   const regionFilter =
-    (searchParams?.region as string | undefined)?.toLowerCase() || "all";
-  const q = (searchParams?.q as string | undefined)?.toLowerCase() || "";
+    (resolvedSearch.region as string | undefined)?.toLowerCase() || "all";
+  const q = (resolvedSearch.q as string | undefined)?.toLowerCase() || "";
 
   const filteredNodes = nodes.filter((n) => {
     if (statusFilter !== "all" && n.status.toLowerCase() !== statusFilter) {
@@ -261,7 +264,6 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 </td>
                 <td className="px-4 py-2 text-sm">{n.region ?? "—"}</td>
                 <td className="px-4 py-2 text-sm">{n.country ?? "—"}</td>
-                </td>
               </tr>
             ))}
             {filteredNodes.length === 0 && (

@@ -11,7 +11,20 @@ const providers = [
 
 function RegisterForm() {
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+  const rawCallback = searchParams.get("callbackUrl") || "/dashboard";
+
+  const isDesktopParam = searchParams.get("desktop") === "1";
+  const isDesktopShell =
+    typeof window !== "undefined" &&
+    typeof (window as any).__TAURI__?.core?.invoke === "function";
+
+  const defaultCallback =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/desktop`
+      : "/desktop";
+
+  const callbackUrl =
+    isDesktopParam && rawCallback === "/desktop" ? defaultCallback : rawCallback;
 
   const [email, setEmail] = useState("");
   const [magicState, setMagicState] = useState<
@@ -19,7 +32,24 @@ function RegisterForm() {
   >("idle");
   const [magicError, setMagicError] = useState<string | null>(null);
 
-  const handleProviderSignIn = (providerId: string) => {
+  const handleProviderSignIn = async (providerId: string) => {
+    if (isDesktopShell && isDesktopParam) {
+      try {
+        const result = await signIn(providerId, {
+          callbackUrl,
+          redirect: false,
+        });
+        const url = (result as any)?.url as string | undefined;
+        if (url) {
+          const anyWin = window as any;
+          await anyWin.__TAURI__.shell.open(url);
+          return;
+        }
+      } catch (err) {
+        console.error("desktop OAuth register failed", err);
+      }
+    }
+
     void signIn(providerId, { callbackUrl });
   };
 
@@ -118,7 +148,11 @@ function RegisterForm() {
           <p>
             Already have an account?{" "}
             <a
-              href={`/auth/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+              href={`/auth/signin?callbackUrl=${encodeURIComponent(
+                callbackUrl,
+              )}${
+                isDesktopParam ? "&desktop=1" : ""
+              }`}
               className="font-medium text-blue-600 hover:text-blue-800"
             >
               Sign in

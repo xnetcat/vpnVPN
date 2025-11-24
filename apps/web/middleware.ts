@@ -10,24 +10,42 @@ const protectedPaths = new Set([
   "/admin",
 ]);
 
+// Limit host-based rewrites to our own domains so we don't accidentally
+// rewrite for arbitrary hostnames. Supports both production and staging:
+// - vpnvpn.dev
+// - *.vpnvpn.dev (e.g. admin.vpnvpn.dev, admin.staging.vpnvpn.dev)
+function isOurHost(host: string): boolean {
+  if (!host) return false;
+  if (host.startsWith("localhost:") || host.startsWith("127.0.0.1:")) {
+    return true;
+  }
+  if (host === "vpnvpn.dev") return true;
+  if (host.endsWith(".vpnvpn.dev")) return true;
+  return false;
+}
+
 function rewriteForSubdomains(req: NextRequest): NextResponse | null {
   const url = req.nextUrl.clone();
   const host = req.headers.get("host")?.toLowerCase() ?? "";
   const pathname = url.pathname || "/";
 
-  // dashboard.domain.com -> /dashboard
+  if (!isOurHost(host)) {
+    return null;
+  }
+
+  // dashboard.vpnvpn.dev / dashboard.staging.vpnvpn.dev -> /dashboard
   if (host.startsWith("dashboard.") && pathname === "/") {
     url.pathname = "/dashboard";
     return NextResponse.rewrite(url);
   }
 
-  // admin.domain.com -> /admin
+  // admin.vpnvpn.dev / admin.staging.vpnvpn.dev -> /admin
   if (host.startsWith("admin.") && pathname === "/") {
     url.pathname = "/admin";
     return NextResponse.rewrite(url);
   }
 
-  // app.domain.com -> /desktop (desktop client UI)
+  // app.vpnvpn.dev / app.staging.vpnvpn.dev -> /desktop (desktop client UI)
   if (host.startsWith("app.") && pathname === "/") {
     url.pathname = "/desktop";
     return NextResponse.rewrite(url);

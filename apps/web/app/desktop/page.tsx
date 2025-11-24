@@ -6,7 +6,9 @@ export default async function DesktopPage() {
   const gate = await requirePaidUser();
   if (!gate.ok) {
     redirect(
-      gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing",
+      gate.reason === "unauthenticated"
+        ? "/auth/signin?desktop=1&callbackUrl=/desktop"
+        : "/pricing"
     );
   }
 
