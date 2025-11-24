@@ -11,7 +11,7 @@ export interface TierConfig {
 export const TIERS: Record<Tier, TierConfig> = {
   basic: {
     name: "Basic",
-    price: 5,
+    price: 10,
     priceId: process.env.STRIPE_PRICE_ID_BASIC || "",
     deviceLimit: 1,
     features: [
@@ -23,7 +23,7 @@ export const TIERS: Record<Tier, TierConfig> = {
   },
   pro: {
     name: "Pro",
-    price: 12,
+    price: 30,
     priceId: process.env.STRIPE_PRICE_ID_PRO || "",
     deviceLimit: 5,
     features: [
@@ -36,7 +36,7 @@ export const TIERS: Record<Tier, TierConfig> = {
   },
   enterprise: {
     name: "Enterprise",
-    price: 29,
+    price: 1000,
     priceId: process.env.STRIPE_PRICE_ID_ENTERPRISE || "",
     deviceLimit: 999,
     features: [

@@ -13,7 +13,17 @@ type Server = {
   sessions: number;
 };
 
-export default function AddDeviceModal() {
+type AddDeviceModalProps = {
+  canAdd: boolean;
+  current: number;
+  limit: number;
+};
+
+export default function AddDeviceModal({
+  canAdd,
+  current,
+  limit,
+}: AddDeviceModalProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [name, setName] = useState("");
   const [serverId, setServerId] = useState<string>("");
@@ -34,7 +44,7 @@ export default function AddDeviceModal() {
   });
 
   const handleSubmit = async () => {
-    if (!name) return;
+    if (!name || !canAdd) return;
     setError(null);
     try {
       const result = await registerMutation.mutateAsync({
@@ -56,11 +66,12 @@ export default function AddDeviceModal() {
   if (!isOpen) {
     return (
       <button
-        onClick={() => setIsOpen(true)}
-        className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+        onClick={() => canAdd && setIsOpen(true)}
+        disabled={!canAdd}
+        className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
       >
         <Plus className="h-4 w-4" />
-        Add Device
+        {canAdd ? "Add Device" : "Device limit reached"}
       </button>
     );
   }

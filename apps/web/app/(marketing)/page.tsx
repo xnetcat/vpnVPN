@@ -1,9 +1,87 @@
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
 
+type FleetMetrics = {
+  totalServers: number;
+  onlineServers: number;
+  totalSessions: number;
+  avgCpu: number | null;
+  samples: { region: string; status: string; sessions: number }[];
+};
+
+async function fetchFleetMetrics(): Promise<FleetMetrics | null> {
+  const base =
+    process.env.CONTROL_PLANE_API_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
+  const apiKey = process.env.CONTROL_PLANE_API_KEY;
+
+  if (!base || !apiKey) return null;
+
+  try {
+    const res = await fetch(`${base.replace(/\/$/, "")}/servers`, {
+      method: "GET",
+      headers: { "x-api-key": apiKey },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as any[];
+    if (!Array.isArray(data)) return null;
+
+    const totalServers = data.length;
+    const onlineServers = data.filter(
+      (s) => (s.status ?? "unknown").toLowerCase() === "online",
+    ).length;
+
+    let totalSessions = 0;
+    let cpuSum = 0;
+    let cpuCount = 0;
+
+    for (const s of data) {
+      const sessions =
+        typeof s.metrics?.sessions === "number"
+          ? s.metrics.sessions
+          : typeof s.activeSessions === "number"
+            ? s.activeSessions
+            : 0;
+      totalSessions += sessions;
+      if (typeof s.metrics?.cpu === "number") {
+        cpuSum += s.metrics.cpu;
+        cpuCount += 1;
+      }
+    }
+
+    const samples = data.slice(0, 3).map((s) => ({
+      region: s.region ?? s.metadata?.region ?? "unknown",
+      status: s.status ?? "unknown",
+      sessions:
+        typeof s.metrics?.sessions === "number"
+          ? s.metrics.sessions
+          : typeof s.activeSessions === "number"
+            ? s.activeSessions
+            : 0,
+    }));
+
+    return {
+      totalServers,
+      onlineServers,
+      totalSessions,
+      avgCpu: cpuCount ? cpuSum / cpuCount : null,
+      samples,
+    };
+  } catch (err) {
+    console.error("[landing] failed to fetch fleet metrics", err);
+    return null;
+  }
+}
+
 export default async function HomePage() {
   const session = await getSession();
   const isAuthed = Boolean((session?.user as any)?.id);
+  const metrics = await fetchFleetMetrics();
+
+  const onlineServers = metrics?.onlineServers ?? null;
+  const totalServers = metrics?.totalServers ?? null;
+  const totalSessions = metrics?.totalSessions ?? null;
+  const avgCpu = metrics?.avgCpu ?? null;
 
   return (
     <main className="mx-auto max-w-6xl px-4 pb-16 pt-10 sm:px-6 lg:px-8 lg:pt-16">
@@ -37,7 +115,7 @@ export default async function HomePage() {
                   href="/auth/register"
                   className="inline-flex items-center justify-center rounded-md bg-slate-900 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
                 >
-                  Start free trial
+                  Get started from $10/mo
                 </Link>
                 <Link
                   href="/pricing"
@@ -97,10 +175,12 @@ export default async function HomePage() {
                     Online servers
                   </div>
                   <div className="mt-1 text-lg font-semibold text-slate-900">
-                    12
+                    {onlineServers ?? "—"}
                   </div>
                   <div className="mt-0.5 text-[11px] text-slate-500">
-                    across 5 regions
+                    {totalServers !== null
+                      ? `of ${totalServers} total`
+                      : "live from control plane"}
                   </div>
                 </div>
                 <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
@@ -108,10 +188,10 @@ export default async function HomePage() {
                     Active sessions
                   </div>
                   <div className="mt-1 text-lg font-semibold text-slate-900">
-                    238
+                    {totalSessions ?? "—"}
                   </div>
                   <div className="mt-0.5 text-[11px] text-slate-500">
-                    all protocols
+                    current across all nodes
                   </div>
                 </div>
                 <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
@@ -119,10 +199,10 @@ export default async function HomePage() {
                     Avg. CPU / node
                   </div>
                   <div className="mt-1 text-lg font-semibold text-slate-900">
-                    23%
+                    {avgCpu !== null ? `${Math.round(avgCpu)}%` : "—"}
                   </div>
                   <div className="mt-0.5 text-[11px] text-slate-500">
-                    p95 &lt; 60%
+                    based on reported node metrics
                   </div>
                 </div>
               </div>
@@ -137,27 +217,30 @@ export default async function HomePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
-                    <tr>
-                      <td className="px-3 py-1.5 text-slate-800">eu-central</td>
-                      <td className="px-3 py-1.5 text-emerald-700">Online</td>
-                      <td className="px-3 py-1.5 text-right text-slate-800">
-                        64
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="px-3 py-1.5 text-slate-800">us-east</td>
-                      <td className="px-3 py-1.5 text-emerald-700">Online</td>
-                      <td className="px-3 py-1.5 text-right text-slate-800">
-                        82
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="px-3 py-1.5 text-slate-800">ap-southeast</td>
-                      <td className="px-3 py-1.5 text-amber-600">Draining</td>
-                      <td className="px-3 py-1.5 text-right text-slate-800">
-                        19
-                      </td>
-                    </tr>
+                    {metrics?.samples?.length
+                      ? metrics.samples.map((s) => (
+                          <tr key={s.region + s.status}>
+                            <td className="px-3 py-1.5 text-slate-800">
+                              {s.region}
+                            </td>
+                            <td className="px-3 py-1.5 text-slate-800">
+                              {s.status}
+                            </td>
+                            <td className="px-3 py-1.5 text-right text-slate-800">
+                              {s.sessions}
+                            </td>
+                          </tr>
+                        ))
+                      : (
+                        <tr>
+                          <td
+                            className="px-3 py-2 text-center text-slate-500"
+                            colSpan={3}
+                          >
+                            No servers registered yet.
+                          </td>
+                        </tr>
+                        )}
                   </tbody>
                 </table>
               </div>

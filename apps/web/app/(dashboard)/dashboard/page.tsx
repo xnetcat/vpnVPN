@@ -65,6 +65,7 @@ export default async function DashboardPage() {
   const { devices, subscription, servers, latestDevice } =
     await getDashboardData(gate.userId);
   const tierConfig = getTierConfig(gate.tier);
+  const canAddDevice = devices < tierConfig.deviceLimit;
 
   return (
     <main className="mx-auto max-w-6xl p-6">
@@ -76,7 +77,11 @@ export default async function DashboardPage() {
             devices
           </p>
         </div>
-        <AddDeviceModal />
+        <AddDeviceModal
+          canAdd={canAddDevice}
+          current={devices}
+          limit={tierConfig.deviceLimit}
+        />
       </div>
 
       {/* Key Metrics */}
