@@ -15,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-gray-50 text-gray-900 antialiased">
+      <body className="min-h-screen bg-slate-950 text-slate-50 antialiased">
         <TRPCProvider>
           {/* Header */}
           <SiteHeader />
