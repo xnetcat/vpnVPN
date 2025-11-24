@@ -68,3 +68,6 @@ Vercel setup
 - Install command: `bun install`
 - Output directory: `.next`
 - Configure all environment variables above in the Vercel dashboard (no `.env` committed).
+- For domains:
+  - **Production**: set `NEXTAUTH_URL="https://vpnvpn.dev"`
+  - **Staging/Preview**: set `NEXTAUTH_URL="https://staging.vpnvpn.dev"`

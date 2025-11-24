@@ -209,7 +209,7 @@ export async function buildServer() {
 
       req.log.info(
         { userId: body.userId, serverId: body.serverId },
-        "addPeer persisted"
+        "addPeer persisted",
       );
 
       return reply.code(204).send();

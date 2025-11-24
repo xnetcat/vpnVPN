@@ -7,7 +7,7 @@ desktop experience (`/desktop`) instead of duplicating UI and business logic.
 The flow is:
 
 1. `apps/web` exposes a rich desktop UI at `/desktop` (served from
-   `app.domain.com` in production, `http://localhost:3000/desktop` locally).
+   `vpnvpn.dev` or `staging.vpnvpn.dev` in production/staging, `http://localhost:3000/desktop` locally).
 2. The Tauri app opens that URL inside a native window.
 3. All authentication, billing, device registration, and VPN credential
    management continue to be handled by the Next.js app via tRPC.
@@ -48,7 +48,7 @@ The flow is:
 
 ## Building for production
 
-1. Ensure `web-app` is deployed and reachable at `https://app.domain.com`.
+1. Ensure `web-app` is deployed and reachable at `https://vpnvpn.dev`.
    The `/desktop` route should be available and wired to your production
    control plane.
 
@@ -56,7 +56,7 @@ The flow is:
 
    ```bash
    cd apps/desktop
-   export VITE_VPNVPN_DESKTOP_URL="https://app.domain.com/desktop"
+   export VITE_VPNVPN_DESKTOP_URL="https://vpnvpn.dev/desktop"
    bun install
    bun run build
    ```
@@ -67,7 +67,8 @@ Tauri will produce native installers / bundles for macOS, Windows, and Linux.
 
 - `VITE_VPNVPN_DESKTOP_URL` – URL that the embedded webview should load.
   - **Dev default**: `http://localhost:3000/desktop`
-  - **Prod example**: `https://app.domain.com/desktop`
+  - **Staging example**: `https://staging.vpnvpn.dev/desktop`
+  - **Prod example**: `https://vpnvpn.dev/desktop`
 
 No control‑plane or VPN secrets are stored in the desktop app. All sensitive
 communication stays inside `web-app` (Next.js) and its tRPC backend.

@@ -196,7 +196,8 @@ VPN Nodes (Multi-platform)
 DATABASE_URL="postgresql://..."
 
 # Auth
-NEXTAUTH_URL="https://app.vpnvpn.com"
+NEXTAUTH_URL="https://vpnvpn.dev"        # production
+# For staging: NEXTAUTH_URL="https://staging.vpnvpn.dev"
 NEXTAUTH_SECRET="..."
 GITHUB_ID="..."
 GITHUB_SECRET="..."

@@ -78,7 +78,9 @@ function SignInForm() {
             disabled={magicState === "sending"}
             className="flex w-full items-center justify-center rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
           >
-            {magicState === "sending" ? "Sending magic link..." : "Send magic link"}
+            {magicState === "sending"
+              ? "Sending magic link..."
+              : "Send magic link"}
           </button>
           {magicState === "sent" && (
             <p className="text-xs text-green-600">
@@ -135,5 +137,3 @@ export default function SignInPage() {
     </Suspense>
   );
 }
-
-
