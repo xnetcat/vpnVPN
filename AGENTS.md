@@ -4,7 +4,7 @@
 
 - **Frontend & Desktop:**
   - Install deps (monorepo): `bun install`
-  - Start full local stack + desktop app: `bun run dev` (Docker: web, control-plane, metrics, vpn-server + local Tauri desktop)
+  - Start full local stack + desktop app: `bun run dev` (Docker: web, control-plane, metrics, vpn-server + local Tauri desktop, Stripe listener)
   - Start web app only: `cd apps/web && bun run dev`
   - Start desktop app only: `cd apps/desktop && bun run dev`
   - Run tests: `bun run test` or `cd apps/web && bun run test`
@@ -21,10 +21,11 @@
 - **Frontend:**
   - Hosted on **Vercel**.
   - Environment variables configured in Vercel Dashboard.
-  - Database (Postgres) connection string required.
-- **Backend (Control Plane):**
-  - Hosted on **AWS** (Lambda, API Gateway, DynamoDB).
-  - Deployed via **Pulumi**.
+  - Database (Postgres/Neon) connection string required.
+- **Backend (Control Plane & Metrics):**
+  - Implemented as in-house Bun/TypeScript HTTP services in `services/control-plane` and `services/metrics`.
+  - Backed by Postgres via the shared Prisma schema in `packages/db`.
+  - Deployed as generic containers (AWS is used only as a hosting platform, via Pulumi/ECR/EC2 or ECS).
 - **Data Plane (VPN Nodes):**
   - Infrastructure-agnostic (EC2, VPS, etc.).
   - Deployed via Docker or binary.
@@ -33,10 +34,10 @@
 
 - **General:**
   - Use latest stable versions of all packages.
-  - Prefer `pnpm` for Node.js package management.
+  - Prefer `bun` for Node.js/TypeScript package management.
   - No secrets in code (use environment variables).
 - **Frontend (Next.js):**
-  - **Directory:** `web-app/`
+  - **Directory:** `apps/web/`
   - TypeScript strict mode enabled.
   - React Server Components (RSC) by default.
   - Use `lucide-react` for icons.
@@ -48,10 +49,10 @@
 - **Backend (Pulumi/AWS):**
   - **Directory:** `infra/pulumi/`
   - TypeScript for IaC.
-  - Lambda functions should be small and focused (Node.js 20.x).
-  - DynamoDB for state.
+  - Provisions AWS networking/compute for the Rust `vpn-server` container and observability (AMP/Grafana).
+  - Reads the control-plane URL (`controlPlaneApiUrl` config) instead of creating Lambda/APIGW/DynamoDB resources.
 - **Rust (VPN Server):**
-  - **Directory:** `vpn-server/`
+  - **Directory:** `apps/vpn-server/`
   - `clippy` must pass.
   - `tracing` for structured logging.
   - No PII logging.
@@ -59,7 +60,7 @@
 
 ## Feature Specifications
 
-### SaaS Frontend (`web-app`)
+### SaaS Frontend (`apps/web`)
 
 - **Authentication:** NextAuth.js.
 - **Billing:** Stripe Subscriptions (Monthly/Yearly).

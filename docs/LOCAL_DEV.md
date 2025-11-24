@@ -28,7 +28,24 @@ Use a Neon or local Postgres URL for `DATABASE_URL`. For local Docker Compose, y
 DATABASE_URL="postgresql://postgres:password@postgres:5432/vpnvpn"
 ```
 
-### 4. Run Full Stack with Docker
+### 4. Run Full Stack (recommended)
+
+From the monorepo root:
+
+```bash
+bun run dev
+```
+
+This command:
+
+- Builds and starts the Docker stack in `local/compose.yaml` (Postgres, `control-plane`, `metrics`, `vpn-node`, `web-app`).
+- Starts the Tauri desktop shell pointing at `/desktop`.
+- Starts a local Stripe listener (if the Stripe CLI is installed) using `STRIPE_SECRET_KEY` from `.env`.
+- Watches code and `.env` changes and rebuilds containers as needed.
+
+### 5. Run Docker stack manually
+
+If you prefer to manage Docker directly:
 
 ```bash
 cd local
@@ -43,7 +60,7 @@ This brings up:
 - `apps/vpn-server` as `vpn-node`
 - `apps/web` on port `3000`
 
-### 5. Run Apps/Services Individually
+### 6. Run Apps/Services Individually
 
 In separate terminals:
 
@@ -65,7 +82,7 @@ cd apps/vpn-server
 cargo run -- run
 ```
 
-### 6. Tests
+### 7. Tests
 
 ```bash
 # All JS/TS tests via Turbo
@@ -82,6 +99,9 @@ cd services/metrics && bun run test
 # VPN server
 cd apps/vpn-server
 cargo test
+
+# Full local flow (Dockerized connectivity + TS checks)
+bun run test:local
 ```
 
 

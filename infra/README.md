@@ -1,6 +1,6 @@
 Infrastructure (Pulumi TypeScript)
 
-This package defines the AWS control plane, observability stack, and regional data-plane capacity for vpnVPN.
+This package defines the AWS observability stack and regional data-plane capacity for vpnVPN.
 
 Stacks:
 

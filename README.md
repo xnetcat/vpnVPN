@@ -24,13 +24,12 @@ cd vpnVPN
 # Install dependencies with Bun
 bun install
 
-# (Optional) Start Postgres + control-plane + metrics + vpn-server + web via Docker
-cd local
-docker compose up --build
+# Start the full local stack (Postgres + control-plane + metrics + vpn-node + web)
+# plus the Tauri desktop shell and Stripe listener:
+bun run dev
 
-# Or run dev servers individually
-cd ..
-bun run dev        # Turbo: runs dev for web/desktop/services
+# Or run apps/services individually with Turbo:
+bun run dev:turbo      # turbo run dev --parallel
 ```
 
 See `docs/LOCAL_DEV.md` for full local stack instructions and `docs/ARCHITECTURE.md` for a deeper architecture overview.
