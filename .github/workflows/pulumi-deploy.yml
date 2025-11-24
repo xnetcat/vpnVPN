@@ -12,6 +12,7 @@ env:
   PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
   ECR_REPO_NAME: ${{ secrets.ECR_REPO_NAME }}
   AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+  CONTROL_PLANE_API_URL: ${{ secrets.CONTROL_PLANE_API_URL }}
 
 jobs:
   deploy:
@@ -36,6 +37,11 @@ jobs:
         with:
           node-version: 20
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: "1.1.38"
+
       - name: Install Pulumi CLI
         uses: pulumi/actions@v5
         with:
@@ -43,7 +49,7 @@ jobs:
 
       - name: Install deps
         working-directory: infra/pulumi
-        run: npm ci
+        run: bun install
 
       - name: Pulumi login
         working-directory: infra/pulumi
@@ -60,6 +66,9 @@ jobs:
         run: |
           pulumi config set aws:region $AWS_REGION --stack global
           pulumi config set global:ecrRepoName $ECR_REPO_NAME --stack global
+          if [ -n "${CONTROL_PLANE_API_URL}" ]; then
+            pulumi config set controlPlaneApiUrl "${CONTROL_PLANE_API_URL}" --stack global
+          fi
 
       - name: Pulumi up (global)
         working-directory: infra/pulumi
