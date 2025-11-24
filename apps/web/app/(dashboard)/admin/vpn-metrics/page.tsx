@@ -11,7 +11,13 @@ type ServerMetric = {
   sessions: number;
 };
 
-export default async function AdminVpnMetricsPage() {
+type MetricsPageProps = {
+  searchParams?: { [key: string]: string | string[] | undefined };
+};
+
+export default async function AdminVpnMetricsPage({
+  searchParams,
+}: MetricsPageProps) {
   const gate = await requireAdmin();
   if (!gate.ok) {
     redirect(gate.reason === "unauthenticated" ? "/api/auth/signin" : "/");
@@ -21,7 +27,7 @@ export default async function AdminVpnMetricsPage() {
   const caller = appRouter.createCaller(ctx);
   const raw = (await caller.admin.listServers()) as any[];
 
-  const servers: ServerMetric[] = raw.map((s) => ({
+  const allServers: ServerMetric[] = raw.map((s) => ({
     id: s.id ?? "unknown",
     country: s.country ?? s.metadata?.country,
     region: s.region ?? s.metadata?.region,
@@ -32,14 +38,64 @@ export default async function AdminVpnMetricsPage() {
         : 0) || 0,
   }));
 
-  const totalSessions = servers.reduce((sum, s) => sum + (s.sessions || 0), 0);
-  const onlineServers = servers.filter((s) => s.status === "online").length;
+  const statusFilter =
+    (searchParams?.status as string | undefined)?.toLowerCase() || "all";
+  const countryFilter =
+    (searchParams?.country as string | undefined)?.toLowerCase() || "all";
+  const regionFilter =
+    (searchParams?.region as string | undefined)?.toLowerCase() || "all";
 
-  const byCountry = servers.reduce<Record<string, number>>((acc, s) => {
-    const key = s.country || "Unknown";
-    acc[key] = (acc[key] || 0) + (s.sessions || 0);
-    return acc;
-  }, {});
+  const filteredServers = allServers.filter((s) => {
+    if (statusFilter !== "all" && s.status.toLowerCase() !== statusFilter) {
+      return false;
+    }
+    if (
+      countryFilter !== "all" &&
+      (s.country ?? "").toLowerCase() !== countryFilter
+    ) {
+      return false;
+    }
+    if (
+      regionFilter !== "all" &&
+      (s.region ?? "").toLowerCase() !== regionFilter
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  const totalSessions = filteredServers.reduce(
+    (sum, s) => sum + (s.sessions || 0),
+    0,
+  );
+  const onlineServers = filteredServers.filter(
+    (s) => s.status === "online",
+  ).length;
+
+  const byCountry = filteredServers.reduce<Record<string, number>>(
+    (acc, s) => {
+      const key = s.country || "Unknown";
+      acc[key] = (acc[key] || 0) + (s.sessions || 0);
+      return acc;
+    },
+    {},
+  );
+
+  const allCountries = Array.from(
+    new Set(
+      allServers
+        .map((s) => s.country?.toLowerCase())
+        .filter((c): c is string => Boolean(c)),
+    ),
+  ).sort();
+
+  const allRegions = Array.from(
+    new Set(
+      allServers
+        .map((s) => s.region?.toLowerCase())
+        .filter((r): r is string => Boolean(r)),
+    ),
+  ).sort();
 
   return (
     <main className="mx-auto max-w-6xl p-6 space-y-6">
@@ -50,12 +106,67 @@ export default async function AdminVpnMetricsPage() {
         </p>
       </div>
 
+      <form className="flex flex-wrap items-center gap-3 rounded-lg border bg-white p-4 shadow-sm text-sm text-gray-600">
+        <label className="flex items-center gap-2">
+          <span>Status</span>
+          <select
+            name="status"
+            defaultValue={statusFilter}
+            className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
+          >
+            <option value="all">All</option>
+            <option value="online">Online</option>
+            <option value="offline">Offline</option>
+            <option value="unknown">Unknown</option>
+          </select>
+        </label>
+
+        <label className="flex items-center gap-2">
+          <span>Country</span>
+          <select
+            name="country"
+            defaultValue={countryFilter}
+            className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
+          >
+            <option value="all">All</option>
+            {allCountries.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex items-center gap-2">
+          <span>Region</span>
+          <select
+            name="region"
+            defaultValue={regionFilter}
+            className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
+          >
+            <option value="all">All</option>
+            {allRegions.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <button
+          type="submit"
+          className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
+        >
+          Apply
+        </button>
+      </form>
+
       <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="rounded-lg border bg-white p-6 shadow-sm">
           <div className="text-sm text-gray-500 mb-1">Online servers</div>
           <div className="text-3xl font-bold">{onlineServers}</div>
-          <p className="text-xs text-gray-500 mt-1">
-            of {servers.length} registered servers
+            <p className="text-xs text-gray-500 mt-1">
+              of {filteredServers.length} matched servers
           </p>
         </div>
         <div className="rounded-lg border bg-white p-6 shadow-sm">
@@ -138,7 +249,7 @@ export default async function AdminVpnMetricsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 bg-white">
-              {servers.map((s) => (
+              {filteredServers.map((s) => (
                 <tr key={s.id}>
                   <td className="px-4 py-2 text-sm font-mono text-gray-500">
                     {s.id}
@@ -157,7 +268,7 @@ export default async function AdminVpnMetricsPage() {
                   </td>
                 </tr>
               ))}
-              {servers.length === 0 && (
+              {filteredServers.length === 0 && (
                 <tr>
                   <td
                     colSpan={5}
