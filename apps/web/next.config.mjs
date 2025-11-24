@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: "standalone",
+  // We run `next start` in Docker, so we keep the default output instead of standalone.
   eslint: {
     ignoreDuringBuilds: true,
   },

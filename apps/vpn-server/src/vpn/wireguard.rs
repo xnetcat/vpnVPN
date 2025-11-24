@@ -60,11 +60,11 @@ impl WireGuardBackend {
                 .unwrap_or_default()
                 .trim()
                 .to_string();
-            // Address is configured by the OS network manager; keep only keys/port in wg config
-            let conf = format!(
-                "[Interface]\nPrivateKey = {privkey}\nListenPort = {port}\nSaveConfig = true\n",
-                port = self.listen_port
-            );
+            // Address is configured by the OS network manager; keep only keys/port in wg config.
+            // Note: do not include wg-quick-only directives (like Address/SaveConfig) because we
+            // manage the interface via `wg` and OS tooling.
+            let conf =
+                format!("[Interface]\nPrivateKey = {privkey}\nListenPort = {port}\n", port = self.listen_port);
             fs::write(&conf_path, conf).context("write wg0.conf")?;
         }
         Ok(())
@@ -169,10 +169,8 @@ impl VpnBackend for WireGuardBackend {
     fn apply_peers(&self, peers: &[PeerSpec]) -> Result<()> {
         let privkey = fs::read_to_string(self.key_path())?.trim().to_string();
 
-        let mut conf = format!(
-            "[Interface]\nPrivateKey = {privkey}\nListenPort = {port}\nSaveConfig = false\n",
-            port = self.listen_port
-        );
+        let mut conf =
+            format!("[Interface]\nPrivateKey = {privkey}\nListenPort = {port}\n", port = self.listen_port);
 
         for peer in peers {
             if let Some(pk) = &peer.public_key {

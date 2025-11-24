@@ -29,6 +29,26 @@ const revokeForUserSchema = z.object({
   userId: z.string(),
 });
 
+async function ensureBootstrapToken() {
+  const token = process.env.CONTROL_PLANE_BOOTSTRAP_TOKEN;
+  if (!token) return;
+
+  try {
+    await prisma.vpnToken.upsert({
+      where: { token },
+      update: { active: true },
+      create: {
+        token,
+        label: "local-bootstrap",
+        active: true,
+      },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[control-plane] failed to ensure bootstrap token", err);
+  }
+}
+
 const registerServerSchema = z.object({
   id: z.string(),
   publicKey: z.string(),
@@ -38,6 +58,10 @@ const registerServerSchema = z.object({
 
 export async function buildServer() {
   const fastify = Fastify({ logger: true });
+
+  // For local/dev: ensure a bootstrap VPN token exists so vpn-node can register
+  // using CONTROL_PLANE_BOOTSTRAP_TOKEN / VPN_TOKEN without manual seeding.
+  await ensureBootstrapToken();
 
   await fastify.register(cors, {
     origin: true,
@@ -153,7 +177,9 @@ export async function buildServer() {
     } catch (err: any) {
       req.log.error({ err }, "listServers failed");
       const status = err.statusCode ?? 500;
-      return reply.code(status).send({ error: err.message ?? "Internal Error" });
+      return reply
+        .code(status)
+        .send({ error: err.message ?? "Internal Error" });
     }
   });
 
@@ -183,7 +209,7 @@ export async function buildServer() {
 
       req.log.info(
         { userId: body.userId, serverId: body.serverId },
-        "addPeer persisted",
+        "addPeer persisted"
       );
 
       return reply.code(204).send();

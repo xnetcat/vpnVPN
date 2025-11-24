@@ -21,8 +21,29 @@ export const authOptions: NextAuthOptions = {
       allowDangerousEmailAccountLinking: true,
     }),
     EmailProvider({
-      server: process.env.EMAIL_SERVER,
+      // We use Resend via a custom sendVerificationRequest handler instead of SMTP.
+      // A dummy server value is still required by the provider types.
+      server: process.env.EMAIL_SERVER || "",
       from: process.env.EMAIL_FROM,
+      async sendVerificationRequest({ identifier, url }) {
+        try {
+          const { sendEmail } = await import("@/lib/email");
+          await sendEmail({
+            to: identifier,
+            template: "magic_link",
+            data: {
+              url,
+            },
+          });
+        } catch (error) {
+          console.error("[auth] failed to send magic link email via Resend", {
+            identifier,
+            url,
+            error,
+          });
+          throw new Error("Failed to send magic link email");
+        }
+      },
     }),
   ],
   session: { strategy: "jwt" },

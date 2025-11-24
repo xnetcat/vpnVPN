@@ -14,7 +14,9 @@ pub struct ControlPlaneClient {
 #[derive(Debug, Serialize)]
 struct RegisterRequest {
     id: String,
+    #[serde(rename = "publicKey")]
     public_key: String,
+    #[serde(rename = "listenPort")]
     listen_port: u16,
     // Optional metadata about the node (region/country, etc.)
     metadata: Option<serde_json::Value>,

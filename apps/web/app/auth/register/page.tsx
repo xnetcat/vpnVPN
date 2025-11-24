@@ -2,7 +2,7 @@
 
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 
 const providers = [
   { id: "github", label: "Continue with GitHub" },
@@ -13,8 +13,41 @@ function RegisterForm() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
 
+  const [email, setEmail] = useState("");
+  const [magicState, setMagicState] = useState<
+    "idle" | "sending" | "sent" | "error"
+  >("idle");
+  const [magicError, setMagicError] = useState<string | null>(null);
+
   const handleProviderSignIn = (providerId: string) => {
     void signIn(providerId, { callbackUrl });
+  };
+
+  const handleMagicLinkSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+
+    setMagicState("sending");
+    setMagicError(null);
+    try {
+      const result = await signIn("email", {
+        email,
+        callbackUrl,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setMagicState("error");
+        setMagicError("Failed to send magic link. Please try again.");
+        return;
+      }
+
+      setMagicState("sent");
+    } catch (err) {
+      console.error("magic link register failed", err);
+      setMagicState("error");
+      setMagicError("Something went wrong. Please try again.");
+    }
   };
 
   return (
@@ -24,11 +57,49 @@ function RegisterForm() {
           Create your vpnVPN account
         </h1>
         <p className="mt-2 text-sm text-gray-600">
-          Sign up with your existing identity provider. The first successful
-          sign-in will create your account and link it to billing.
+          Sign up with a one-time magic link sent to your email, or use an
+          existing identity provider. The first successful sign-in will create
+          your account and link it to billing.
         </p>
 
-        <div className="mt-6 space-y-3">
+        <form onSubmit={handleMagicLinkSubmit} className="mt-6 space-y-3">
+          <label className="block text-sm font-medium text-gray-700">
+            Email magic link
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={magicState === "sending"}
+            className="flex w-full items-center justify-center rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+          >
+            {magicState === "sending" ? "Sending magic link..." : "Send magic link"}
+          </button>
+          {magicState === "sent" && (
+            <p className="text-xs text-green-600">
+              Magic link sent. Check your inbox to complete sign-up.
+            </p>
+          )}
+          {magicState === "error" && magicError && (
+            <p className="text-xs text-red-600">{magicError}</p>
+          )}
+        </form>
+
+        <div className="mt-6 flex items-center gap-3">
+          <div className="h-px flex-1 bg-gray-200" />
+          <span className="text-xs uppercase tracking-wide text-gray-400">
+            Or continue with
+          </span>
+          <div className="h-px flex-1 bg-gray-200" />
+        </div>
+
+        <div className="mt-4 space-y-3">
           {providers.map((p) => (
             <button
               key={p.id}

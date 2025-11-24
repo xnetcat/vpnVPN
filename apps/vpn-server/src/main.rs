@@ -132,7 +132,12 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
     let _ = vpn::VPN_NODE.set(node_arc.clone());
 
     // Optional static peer for local/docker tests (bypasses control plane peer sync)
-    if let Some(static_pk) = args.static_peer_public_key.clone() {
+    // Treat empty env/flag as "disabled" so docker default-empty vars don't break WireGuard.
+    if let Some(static_pk) = args
+        .static_peer_public_key
+        .clone()
+        .filter(|pk| !pk.trim().is_empty())
+    {
         let allowed_raw = args
             .static_peer_allowed_ips
             .clone()

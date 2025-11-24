@@ -33,6 +33,7 @@ services:
   # Postgres Database
   postgres:
     image: postgres:15-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
@@ -53,6 +54,8 @@ services:
       - PORT=4000
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/vpnvpn
       - CONTROL_PLANE_API_KEY=${CONTROL_PLANE_API_KEY:-dev-control-plane-key}
+      - PRISMA_MIGRATE_DEPLOY_ON_BOOT=1
+      - CONTROL_PLANE_BOOTSTRAP_TOKEN=${VPN_TOKEN:-dummy-token}
     depends_on:
       - postgres
     networks:

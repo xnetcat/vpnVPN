@@ -16,6 +16,7 @@ if (!resend) {
 
 export type EmailTemplate =
   | "welcome"
+  | "magic_link"
   | "subscription_active"
   | "subscription_cancelled"
   | "device_added"
@@ -42,6 +43,36 @@ function buildEmailContent(template: EmailTemplate, data: Record<string, any>) {
         `,
         text: `Welcome to vpnVPN!\n\nHi ${data.name || "there"},\n\nThank you for signing up! Your account has been created successfully.\n\nTo get started, please subscribe to one of our plans and add your first device.\n\nGo to Dashboard: ${data.dashboardUrl || "https://app.vpnvpn.com/dashboard"}\n\nBest regards,\nThe vpnVPN Team`,
       };
+
+    case "magic_link": {
+      const url = data.url as string;
+      const host = (() => {
+        try {
+          return new URL(url).host;
+        } catch {
+          return "vpnvpn.com";
+        }
+      })();
+
+      return {
+        subject: "Sign in to vpnVPN",
+        html: `
+          <h1>Sign in to vpnVPN</h1>
+          <p>Hi ${data.name || "there"},</p>
+          <p>Click the button below to securely sign in to your vpnVPN account on <strong>${host}</strong>.</p>
+          <p style="margin: 24px 0;">
+            <a href="${url}" style="background-color:#111827;color:#ffffff;padding:10px 18px;border-radius:9999px;text-decoration:none;font-weight:600;display:inline-block;">
+              Sign in
+            </a>
+          </p>
+          <p>If the button does not work, copy and paste this URL into your browser:</p>
+          <p><a href="${url}">${url}</a></p>
+          <p>This magic link will expire shortly. If you did not request this, you can safely ignore this email.</p>
+          <p>Best regards,<br>The vpnVPN Team</p>
+        `,
+        text: `Sign in to vpnVPN\n\nHi ${data.name || "there"},\n\nOpen the link below to securely sign in to your vpnVPN account on ${host}.\n\n${url}\n\nThis magic link will expire shortly. If you did not request this, you can safely ignore this email.\n\nBest regards,\nThe vpnVPN Team`,
+      };
+    }
 
     case "subscription_active":
       return {

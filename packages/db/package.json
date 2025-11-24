@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "prisma generate --schema prisma/schema.prisma",
+    "migrate:dev": "DATABASE_URL=postgresql://postgres:password@localhost:5432/vpnvpn prisma migrate dev --schema prisma/schema.prisma",
     "lint": "biome lint .",
     "test": "vitest run --passWithNoTests",
     "format": "biome format --write ."

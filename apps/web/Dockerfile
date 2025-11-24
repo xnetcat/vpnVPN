@@ -58,7 +58,7 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Use Next.js CLI from the shared node_modules
-CMD ["node", "../node_modules/next/dist/bin/next", "start", "-H", "0.0.0.0", "-p", "3000"]
+# Use Next.js CLI from the shared node_modules (located at /app/node_modules)
+CMD ["node", "../../node_modules/next/dist/bin/next", "start", "-H", "0.0.0.0", "-p", "3000"]
 
 

@@ -1,7 +1,9 @@
 // Prisma schema for Auth.js (NextAuth) + Stripe subscriptions + control plane
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Include Linux ARM64 + OpenSSL 3.0.x engine for Docker runtime, alongside native.
+  binaryTargets = ["native", "linux-arm64-openssl-3.0.x"]
 }
 
 datasource db {
