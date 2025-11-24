@@ -1,5 +1,23 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "DATABASE_URL",
+    "NEXTAUTH_URL",
+    "NEXTAUTH_SECRET",
+    "EMAIL_FROM",
+    "RESEND_API_KEY",
+    "EMAIL_SERVER",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+    "STRIPE_PRICE_ID_BASIC",
+    "STRIPE_PRICE_ID_PRO",
+    "STRIPE_PRICE_ID_ENTERPRISE",
+    "CONTROL_PLANE_API_URL",
+    "CONTROL_PLANE_API_KEY",
+    "NEXT_PUBLIC_API_BASE_URL",
+    "NEXT_PUBLIC_WG_ENDPOINT",
+    "NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY"
+  ],
   "tasks": {
     "docker:build": {
       "dependsOn": ["build"],

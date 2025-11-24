@@ -5,7 +5,7 @@ const port = Number(process.env.PORT ?? 4000);
 buildServer()
   .then((fastify) =>
     fastify.listen({ port, host: "0.0.0.0" }).then((address) => {
-      fastify.log.info(`control-plane listening on ${address}`);
+    fastify.log.info(`control-plane listening on ${address}`);
       return undefined;
     }),
   )

@@ -14,6 +14,8 @@
     "dev": "bun run dev:stack && bun run dev:desktop",
     "test:local": "bash ./local/test-flow.sh",
     "test:local:e2e": "bun test local/local-flow.test.ts",
+    "db:generate": "cd packages/db && bun run build",
+    "postinstall": "bun run db:generate",
     "dev:turbo": "turbo run dev --parallel",
     "build": "turbo run build",
     "lint": "turbo run lint",

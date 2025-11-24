@@ -174,23 +174,23 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
         const MAX_ATTEMPTS: u32 = 12; // ~1 minute of retries
         let mut attempts: u32 = 0;
 
-        loop {
+            loop {
             attempts += 1;
-            match client.register(&pubkey, listen_port).await {
+                match client.register(&pubkey, listen_port).await {
                 Ok(_) => {
                     info!("successfully_registered_with_control_plane");
                     break;
                 }
-                Err(e) => {
+                    Err(e) => {
                     error!(error = ?e, attempt = attempts, "registration_failed_retrying");
                     if attempts >= MAX_ATTEMPTS {
                         error!("registration_failed_max_retries; exiting vpn-node");
                         return Err(1);
                     }
-                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    }
                 }
             }
-        }
     } else {
         warn!("no_public_key_found; cannot register with control plane");
         return Err(1);
