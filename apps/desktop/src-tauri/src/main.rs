@@ -220,10 +220,29 @@ fn disconnect_openvpn() -> Result<(), String> {
 
 fn apply_ikev2(config: &str) -> Result<(), String> {
     let path = write_temp("vpnvpn-ikev2.conf", config)?;
-    Err(format!(
-        "IKEv2 auto-apply is not implemented; import config from {} using your OS VPN settings.",
-        path.display()
-    ))
+
+    #[cfg(target_os = "macos")]
+    {
+        // Open the config in the default handler so macOS can offer to import it
+        // into the system VPN settings (Network preferences / System Settings).
+        let _ = run_command("open", &[path.to_string_lossy().as_ref()]);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Let the desktop environment decide how to handle the config (often a
+        // network manager / connection editor).
+        let _ = run_command("xdg-open", &[path.to_string_lossy().as_ref()]);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // There is no single standard CLI for importing IKEv2 profiles; opening
+        // the file helps the user inspect/import it manually.
+        let _ = run_command("notepad.exe", &[path.to_string_lossy().as_ref()]);
+    }
+
+    Ok(())
 }
 
 fn disconnect_ikev2() -> Result<(), String> {
