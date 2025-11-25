@@ -18,6 +18,11 @@ Next.js 15 SaaS frontend hosted on Vercel.
 
 Tauri desktop client for configuring and connecting to the VPN.
 
+- React + Vite frontend bundled into native app
+- Embeds web app via iframe for authenticated experience
+- Deep link support for `vpnvpn://` protocol
+- Built for macOS, Linux, and Windows
+
 ### `apps/vpn-server`
 
 Rust VPN node binary supporting WireGuard, OpenVPN, and IKEv2.
@@ -33,6 +38,12 @@ Rust VPN node binary supporting WireGuard, OpenVPN, and IKEv2.
 ### `services/control-plane`
 
 Bun + Fastify HTTP API backed by Postgres via `@vpnvpn/db`.
+
+**Deployment Options:**
+
+1. **AWS Lambda + API Gateway** (production)
+2. **Docker container** (self-hosted)
+3. **Direct execution** (development)
 
 **Endpoints:**
 
@@ -50,6 +61,12 @@ Bun + Fastify HTTP API backed by Postgres via `@vpnvpn/db`.
 ### `services/metrics`
 
 Bun + Fastify HTTP API for vpn-server metrics ingestion.
+
+**Deployment Options:**
+
+1. **AWS Lambda + API Gateway** (production)
+2. **Docker container** (self-hosted)
+3. **Direct execution** (development)
 
 **Endpoint:** `POST /metrics/vpn` — accepts CPU, memory, active peers, and region data.
 
@@ -88,9 +105,21 @@ The web app uses tRPC routers to:
 
 Deployed to Vercel with environment variables configured in the Vercel dashboard.
 
-### Control Plane & Metrics
+### Control Plane & Metrics (Lambda)
 
-Deployed as containers (ECS, EC2, Kubernetes, or on-prem). Environment-agnostic.
+Deployed as AWS Lambda functions with API Gateway:
+
+- Bundled with Bun for minimal package size
+- Uses Fastify's `inject()` method for Lambda compatibility
+- Same code runs locally as standalone servers
+
+### Control Plane & Metrics (Self-hosted)
+
+Can also be deployed as containers:
+
+- Docker images available via Dockerfile
+- Requires PostgreSQL database access
+- Environment variables for configuration
 
 ### VPN Server
 
@@ -103,13 +132,75 @@ Deployed via Pulumi to AWS:
 
 Pulumi reads `controlPlaneApiUrl` from config to connect VPN nodes to the control plane.
 
+### Desktop App
+
+Built and distributed via S3:
+
+- Multi-platform builds (macOS, Linux, Windows)
+- Automated builds via GitHub Actions
+- Download links on web app landing page
+
 ### Multi-Environment Support
 
 The same containers can run on:
 
-- AWS (EC2, ECS, EKS)
+- AWS (EC2, ECS, EKS, Lambda)
 - Kubernetes
 - Docker Compose (local development)
 - On-premises servers
 
 No AWS-specific services are required for the control plane or metrics services.
+
+## Data Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                              User                                        │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                    ┌───────────────┼───────────────┐
+                    ▼               ▼               ▼
+            ┌───────────┐   ┌───────────┐   ┌───────────┐
+            │  Web App  │   │  Desktop  │   │ WireGuard │
+            │ (Vercel)  │   │  (Tauri)  │   │  Client   │
+            └───────────┘   └───────────┘   └───────────┘
+                    │               │               │
+                    └───────────────┼───────────────┘
+                                    │
+                    ┌───────────────┼───────────────┐
+                    ▼               ▼               ▼
+            ┌───────────┐   ┌───────────┐   ┌───────────┐
+            │  Control  │   │  Metrics  │   │    NLB    │
+            │   Plane   │   │  Service  │   │           │
+            │ (Lambda)  │   │ (Lambda)  │   │           │
+            └───────────┘   └───────────┘   └───────────┘
+                    │               │               │
+                    └───────────────┼───────────────┘
+                                    │
+                            ┌───────▼───────┐
+                            │   PostgreSQL  │
+                            │    (Neon)     │
+                            └───────────────┘
+                                    ▲
+                                    │
+                            ┌───────┴───────┐
+                            │  VPN Servers  │
+                            │  (EC2 ASG)    │
+                            └───────────────┘
+```
+
+## Security Model
+
+### Authentication Layers
+
+1. **Web App:** NextAuth.js with OAuth providers and magic links
+2. **Control Plane (Web):** API key in `x-api-key` header
+3. **Control Plane (VPN):** Bearer token for node registration
+4. **VPN Protocol:** WireGuard/OpenVPN encryption
+
+### Data Protection
+
+- No traffic logging on VPN nodes
+- Minimal metadata collection (session counts, public keys)
+- End-to-end encryption for all VPN traffic
+- TLS for all API communication

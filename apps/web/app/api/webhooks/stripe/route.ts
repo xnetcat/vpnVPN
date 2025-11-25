@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 import { revokePeersForUser } from "@/lib/controlPlane";
@@ -18,17 +19,13 @@ export async function POST(req: Request) {
   }
   const body = await req.text();
 
-  let event: any;
+  let event: Stripe.Event;
   try {
-    // @ts-ignore Stripe type import provided via devDependency
-    event = (await (stripe as any).webhooks.constructEvent(
-      body,
-      sig,
-      webhookSecret,
-    )) as any;
-  } catch (err: any) {
+    event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
+  } catch (err: unknown) {
+    const error = err as Error;
     return NextResponse.json(
-      { error: `Webhook Error: ${err.message}` },
+      { error: `Webhook Error: ${error.message}` },
       { status: 400 },
     );
   }
@@ -36,21 +33,20 @@ export async function POST(req: Request) {
   try {
     switch (event.type) {
       case "checkout.session.completed": {
-        const session = event.data.object as any; // Checkout.Session
+        const session = event.data.object as Stripe.Checkout.Session;
         const subscriptionId: string | undefined =
           typeof session.subscription === "string"
             ? session.subscription
-            : session.subscription?.id;
-        const customerId: string | undefined = session.customer as
-          | string
-          | undefined;
+            : (session.subscription as Stripe.Subscription | null)?.id;
+        const customerId: string | undefined =
+          typeof session.customer === "string"
+            ? session.customer
+            : undefined;
         const userId: string | undefined = session.metadata?.userId;
         if (!subscriptionId || !customerId) break;
-        const sub = await (stripe as any).subscriptions.retrieve(
-          subscriptionId,
-        );
-        const priceId = sub.items?.data?.[0]?.price?.id as string | undefined;
-        const status = sub.status as string;
+        const sub = await stripe.subscriptions.retrieve(subscriptionId);
+        const priceId = sub.items?.data?.[0]?.price?.id;
+        const status = sub.status;
         const tier = priceId ? getTierFromPriceId(priceId) : "basic";
         const currentPeriodEnd = sub.current_period_end
           ? new Date(sub.current_period_end * 1000)
@@ -118,13 +114,14 @@ export async function POST(req: Request) {
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
-        const subObj = event.data.object as any; // Stripe.Subscription
-        const subscriptionId = subObj.id as string;
-        const customerId = subObj.customer as string;
-        const priceId = subObj.items?.data?.[0]?.price?.id as
-          | string
-          | undefined;
-        const status = subObj.status as string;
+        const subObj = event.data.object as Stripe.Subscription;
+        const subscriptionId = subObj.id;
+        const customerId =
+          typeof subObj.customer === "string"
+            ? subObj.customer
+            : subObj.customer.id;
+        const priceId = subObj.items?.data?.[0]?.price?.id;
+        const status = subObj.status;
         const tier = priceId ? getTierFromPriceId(priceId) : "basic";
         const currentPeriodEnd = subObj.current_period_end
           ? new Date(subObj.current_period_end * 1000)

@@ -26,8 +26,38 @@ export async function buildServer(): Promise<FastifyInstance> {
     origin: true,
   });
 
-  fastify.get("/health", async () => {
-    return { status: "ok" };
+  // Enhanced healthcheck with database connectivity verification
+  fastify.get("/health", async (_req, reply) => {
+    const checks: Record<
+      string,
+      { status: "ok" | "error"; latencyMs?: number; error?: string }
+    > = {};
+
+    // Database connectivity check
+    const dbStart = Date.now();
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      checks.database = { status: "ok", latencyMs: Date.now() - dbStart };
+    } catch (err) {
+      checks.database = {
+        status: "error",
+        latencyMs: Date.now() - dbStart,
+        error: err instanceof Error ? err.message : "Unknown database error",
+      };
+    }
+
+    // Determine overall status
+    const hasError = Object.values(checks).some((c) => c.status === "error");
+    const overallStatus = hasError ? "unhealthy" : "healthy";
+
+    const response = {
+      status: overallStatus,
+      timestamp: new Date().toISOString(),
+      service: "metrics",
+      checks,
+    };
+
+    return reply.code(hasError ? 503 : 200).send(response);
   });
 
   fastify.post("/metrics/vpn", async (req, reply) => {

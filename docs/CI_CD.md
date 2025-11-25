@@ -27,7 +27,7 @@ vpnVPN uses GitHub Actions, Bun/Turborepo, and Pulumi to build, test, and deploy
 
 **Name:** Build and Push Rust Server
 
-**Triggers:** Pushes to `main` that touch `apps/vpn-server/**` or the workflow file itself.
+**Triggers:** Pushes to `main` or `staging` that touch `apps/vpn-server/**` or the workflow file itself.
 
 **Steps:**
 
@@ -38,6 +38,24 @@ vpnVPN uses GitHub Actions, Bun/Turborepo, and Pulumi to build, test, and deploy
 5. Push the image to ECR
 
 **Outputs:** `IMAGE_TAG`, `ECR_URI`
+
+### `.github/workflows/services-deploy.yml`
+
+**Name:** Deploy Services (Control Plane + Metrics)
+
+**Triggers:**
+
+- Pushes to `main` or `staging` that touch `services/**` or `packages/db/**`
+- Manual `workflow_dispatch` with environment selection
+
+**Steps:**
+
+1. Build Lambda-compatible bundles for control-plane and metrics
+2. Package as ZIP files
+3. Upload to S3 Lambda code bucket
+4. Deploy via Pulumi to AWS Lambda + API Gateway
+
+**Outputs:** Control Plane API URL, Metrics API URL
 
 ### `.github/workflows/pulumi-deploy.yml`
 
@@ -53,7 +71,7 @@ vpnVPN uses GitHub Actions, Bun/Turborepo, and Pulumi to build, test, and deploy
 - `AWS_REGION`, `AWS_ACCOUNT_ID`
 - `PULUMI_ACCESS_TOKEN`
 - `ECR_REPO_NAME`, `AWS_ROLE_TO_ASSUME`
-- `CONTROL_PLANE_API_URL`
+- `DATABASE_URL`, `CONTROL_PLANE_API_KEY`
 
 **Steps:**
 
@@ -63,8 +81,32 @@ vpnVPN uses GitHub Actions, Bun/Turborepo, and Pulumi to build, test, and deploy
 4. `bun install` in `infra/pulumi`
 5. `pulumi login`
 6. Ensure `global` and `region-us-east-1` stacks exist
-7. Configure and deploy `global` stack (ECR repo, control-plane URL, observability)
+7. Configure and deploy `global` stack (ECR, S3, Lambda functions, observability)
 8. Configure and deploy `region-us-east-1` stack (VPC, NLB, ASG with vpn-server containers)
+
+### `.github/workflows/desktop-build.yml`
+
+**Name:** Build Desktop App
+
+**Triggers:**
+
+- Pushes to `main` or `staging` that touch `apps/desktop/**`
+- Manual `workflow_dispatch` with environment selection
+
+**Platforms:**
+
+- macOS (ARM64 and x64)
+- Linux (x64)
+- Windows (x64)
+
+**Steps:**
+
+1. Build frontend with Vite (environment-specific URLs)
+2. Build Tauri desktop app for target platform
+3. Upload artifacts to GitHub Actions
+4. Upload to S3 bucket for distribution
+
+**Outputs:** Desktop executables in S3 bucket
 
 ## Architecture
 
@@ -72,15 +114,24 @@ vpnVPN uses GitHub Actions, Bun/Turborepo, and Pulumi to build, test, and deploy
 
 | Component | Implementation | Deployment |
 | --------- | -------------- | ---------- |
-| Control Plane | `services/control-plane` (Bun/Fastify + Postgres) | Container (ECS, EC2, K8s, etc.) |
-| Metrics | `services/metrics` (Bun/Fastify + Postgres) | Container |
+| Control Plane | `services/control-plane` (Bun/Fastify + Postgres) | AWS Lambda + API Gateway |
+| Metrics | `services/metrics` (Bun/Fastify + Postgres) | AWS Lambda + API Gateway |
 | VPN Server | `apps/vpn-server` (Rust) | Container on EC2 ASG via Pulumi |
 | Web App | `apps/web` (Next.js) | Vercel |
-| Desktop | `apps/desktop` (Tauri) | Local builds |
+| Desktop | `apps/desktop` (Tauri) | S3 bucket distribution |
+
+### Lambda Deployment
+
+Control Plane and Metrics services support dual deployment modes:
+
+1. **Lambda Mode:** Services are bundled and deployed as AWS Lambda functions with API Gateway
+2. **Standalone Mode:** Services run as Docker containers or directly with `bun run dev`
+
+The same codebase supports both modes through Fastify's `inject()` method for Lambda.
 
 ### Pulumi Stacks
 
-- **`global`**: ECR repository, control-plane URL config, observability (AMP/Grafana)
+- **`global`**: ECR repository, S3 buckets, Lambda functions, API Gateway, observability (AMP/Grafana)
 - **`region-*`**: VPC, NLB, security groups, EC2 ASG running vpn-server containers
 
 ## Responsibilities by Layer
@@ -95,14 +146,25 @@ vpnVPN uses GitHub Actions, Bun/Turborepo, and Pulumi to build, test, and deploy
 - Produces a versioned Docker image for the vpn-server data-plane
 - Does not deploy; only pushes to ECR
 
+### Services Deploy (Lambda)
+
+- Builds Lambda deployment packages for control-plane and metrics
+- Deploys to AWS Lambda with API Gateway endpoints
+
 ### Infra Deploy (Pulumi)
 
 Provisions and updates:
 
 - ECR repository for vpn-server
+- S3 buckets for Lambda code and desktop releases
+- Lambda functions and API Gateway for control-plane and metrics
 - VPC, NLB, security groups, and ASG for running vpn-server containers
 - AMP/Grafana for observability
-- Reads the control-plane URL from config (does not provision the control-plane service itself)
+
+### Desktop Build
+
+- Builds native desktop apps for macOS, Linux, and Windows
+- Uploads to S3 for distribution via web app download links
 
 ## Required GitHub Secrets
 
@@ -113,7 +175,10 @@ Provisions and updates:
 | `AWS_ROLE_TO_ASSUME` | IAM role ARN for OIDC authentication |
 | `PULUMI_ACCESS_TOKEN` | Pulumi access token for state management |
 | `ECR_REPO_NAME` | ECR repository name (e.g., `vpnvpn/rust-server`) |
-| `CONTROL_PLANE_API_URL` | URL of the deployed control-plane service |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `CONTROL_PLANE_API_KEY` | API key for control plane authentication |
+| `VPN_TOKEN` | Bootstrap token for VPN node registration |
+| `DESKTOP_S3_BUCKET` | S3 bucket for desktop app downloads |
 
 ## Optional GitHub Variables
 
@@ -169,7 +234,7 @@ The recommended way to deploy is using the deployment script:
 
 The script:
 1. Loads environment variables from root `.env`
-2. Deploys global Pulumi stack to us-east-1 (ECR, S3, observability)
+2. Deploys global Pulumi stack to us-east-1 (ECR, S3, Lambda, observability)
 3. Builds and pushes vpn-server Docker image
 4. Deploys VPN nodes to regions defined in `scripts/regions.json`
 5. Builds desktop apps with hardcoded API endpoints
@@ -195,3 +260,21 @@ Edit `scripts/regions.json` to configure VPN node distribution:
 ### Manual Pulumi Commands
 
 For detailed manual Pulumi deployment instructions, see `infra/README.md`.
+
+## CrossGuard Policy Tests
+
+The infrastructure includes CrossGuard policies for security and compliance validation:
+
+```bash
+cd infra/pulumi
+
+# Run with policy enforcement
+pulumi up --policy-pack ./policy
+
+# Policies include:
+# - Required Project tags on all resources
+# - No public S3 buckets (except desktop releases)
+# - Lambda timeout and memory limits
+# - No unrestricted SSH access
+# - ECR scan-on-push enabled
+```

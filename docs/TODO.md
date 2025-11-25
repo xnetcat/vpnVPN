@@ -20,6 +20,7 @@
 - [x] Server selection and status display
 - [x] Admin panel (token management, fleet monitoring, server provisioning)
 - [x] Dashboard with real metrics from control plane
+- [x] Desktop download links with S3 integration
 
 ### Control Plane (`services/control-plane`)
 
@@ -28,6 +29,14 @@
 - [x] Server registration and peer sync endpoints
 - [x] Token-based VPN node authentication
 - [x] API key authentication for web app calls
+- [x] Lambda-compatible deployment (dual-mode: Lambda + standalone)
+
+### Metrics Service (`services/metrics`)
+
+- [x] Bun/Fastify HTTP API
+- [x] Postgres database via Prisma
+- [x] VPN server metrics ingestion
+- [x] Lambda-compatible deployment (dual-mode: Lambda + standalone)
 
 ### VPN Server (`apps/vpn-server`)
 
@@ -37,6 +46,13 @@
 - [x] Admin API endpoints
 - [x] Metrics reporting
 
+### Desktop App (`apps/desktop`)
+
+- [x] Tauri desktop shell with React frontend
+- [x] Environment-specific builds (staging/production)
+- [x] Deep link support (vpnvpn:// protocol)
+- [x] Multi-platform builds (macOS, Linux, Windows)
+
 ### Infrastructure (`infra/pulumi`)
 
 - [x] ECR repository for vpn-server images
@@ -44,6 +60,18 @@
 - [x] VPC with public/private subnets
 - [x] Target-tracking autoscaling
 - [x] Observability (AMP/Grafana)
+- [x] S3 bucket for desktop releases
+- [x] Lambda + API Gateway for control-plane
+- [x] Lambda + API Gateway for metrics service
+
+### CI/CD (`.github/workflows`)
+
+- [x] CI workflow (lint, test, build)
+- [x] Rust build and push to ECR
+- [x] Pulumi deployment (global + regional)
+- [x] Services deployment (Lambda)
+- [x] Desktop build and S3 upload
+- [x] CrossGuard policy tests
 
 ---
 
@@ -53,12 +81,14 @@
 
 - [ ] Configure production Stripe webhooks
 - [ ] Set up production Resend sender domain
-- [ ] Deploy control-plane and metrics services
 - [ ] Create production VPN node tokens
 - [ ] End-to-end production flow test
+- [ ] SSL certificates for custom domains
 
 ### Documentation
 
+- [x] CI/CD documentation
+- [x] Architecture overview
 - [ ] API contract documentation for all endpoints
 - [ ] Secrets management guide (Vercel, AWS)
 - [ ] VPN node deployment runbook
@@ -70,6 +100,7 @@
 - [ ] Usage analytics dashboard
 - [ ] Rate limiting on control-plane endpoints
 - [ ] Backup and disaster recovery procedures
+- [ ] Automated certificate rotation
 
 ---
 
@@ -98,4 +129,20 @@
 
 ### Environment Variables
 
-See `apps/web/env.local.example` and `infra/pulumi/env.example` for required configuration.
+See `env.example` and `apps/web/env.local.example` for required configuration.
+
+### Deployment Commands
+
+```bash
+# Full deployment to staging
+./scripts/deploy.sh staging
+
+# Full deployment to production
+./scripts/deploy.sh production
+
+# Deploy services only (Lambda)
+cd infra/pulumi && pulumi up --stack global
+
+# Deploy VPN nodes only
+cd infra/pulumi && pulumi up --stack region-us-east-1
+```

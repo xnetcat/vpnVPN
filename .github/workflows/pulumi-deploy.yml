@@ -67,11 +67,23 @@ jobs:
 
       - name: Configure global stack
         working-directory: infra/pulumi
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CONTROL_PLANE_API_KEY: ${{ secrets.CONTROL_PLANE_API_KEY }}
+          BOOTSTRAP_TOKEN: ${{ secrets.VPN_TOKEN }}
         run: |
           pulumi config set aws:region $AWS_REGION --stack global
           pulumi config set global:ecrRepoName $ECR_REPO_NAME --stack global
-          if [ -n "${CONTROL_PLANE_API_URL}" ]; then
-            pulumi config set controlPlaneApiUrl "${CONTROL_PLANE_API_URL}" --stack global
+
+          # Configure secrets for Lambda deployment (if deploying services)
+          if [ -n "$DATABASE_URL" ]; then
+            pulumi config set --secret databaseUrl "$DATABASE_URL" --stack global
+          fi
+          if [ -n "$CONTROL_PLANE_API_KEY" ]; then
+            pulumi config set --secret controlPlaneApiKey "$CONTROL_PLANE_API_KEY" --stack global
+          fi
+          if [ -n "$BOOTSTRAP_TOKEN" ]; then
+            pulumi config set --secret bootstrapToken "$BOOTSTRAP_TOKEN" --stack global
           fi
 
       - name: Pulumi up (global)
