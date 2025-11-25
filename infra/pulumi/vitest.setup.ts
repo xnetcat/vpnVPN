@@ -1,48 +1,45 @@
 import { vi } from "vitest";
 
-// Mock AWS SDK before any imports
-const mockPut = vi.fn().mockReturnValue({
-  promise: vi.fn().mockResolvedValue({}),
+// Mock Pulumi runtime for unit tests
+vi.mock("@pulumi/pulumi", async () => {
+  const actual = await vi.importActual("@pulumi/pulumi");
+  return {
+    ...actual,
+    // Mock output for testing
+    output: <T>(val: T) => ({
+      apply: <U>(fn: (v: T) => U) => ({ apply: (f: (v: U) => unknown) => f(fn(val)) }),
+      get: () => val,
+    }),
+    interpolate: (strings: TemplateStringsArray, ...values: unknown[]) => {
+      return {
+        apply: (fn: (v: string) => unknown) =>
+          fn(strings.reduce((acc, str, i) => acc + str + (values[i] ?? ""), "")),
+      };
+    },
+    getStack: () => "test",
+    Config: class MockConfig {
+      private data: Record<string, string> = {};
+      get(key: string) {
+        return this.data[key];
+      }
+      require(key: string) {
+        const val = this.data[key];
+        if (!val) throw new Error(`Missing required config: ${key}`);
+        return val;
+      }
+      getNumber(key: string) {
+        const val = this.data[key];
+        return val ? Number(val) : undefined;
+      }
+      getSecret(key: string) {
+        return this.data[key];
+      }
+      requireSecret(key: string) {
+        return this.require(key);
+      }
+    },
+  };
 });
 
-const mockGet = vi.fn().mockReturnValue({
-  promise: vi.fn().mockResolvedValue({}),
-});
-
-const mockScan = vi.fn().mockReturnValue({
-  promise: vi.fn().mockResolvedValue({ Items: [] }),
-});
-
-const mockQuery = vi.fn().mockReturnValue({
-  promise: vi.fn().mockResolvedValue({ Items: [] }),
-});
-
-const mockUpdate = vi.fn().mockReturnValue({
-  promise: vi.fn().mockResolvedValue({}),
-});
-
-const mockDelete = vi.fn().mockReturnValue({
-  promise: vi.fn().mockResolvedValue({}),
-});
-
-vi.mock("aws-sdk", () => ({
-  DynamoDB: {
-    DocumentClient: vi.fn(() => ({
-      put: mockPut,
-      get: mockGet,
-      scan: mockScan,
-      query: mockQuery,
-      update: mockUpdate,
-      delete: mockDelete,
-    })),
-  },
-}));
-
-// Test environment variables
-process.env.PEERS_TABLE = "test-peers-table";
-process.env.SERVERS_TABLE = "test-servers-table";
-process.env.TOKENS_TABLE = "test-tokens-table";
-process.env.WEB_API_KEY = "test-web-api-key";
-
-export { mockPut, mockGet, mockScan, mockQuery, mockUpdate, mockDelete };
-
+// Test environment
+process.env.NODE_ENV = "test";

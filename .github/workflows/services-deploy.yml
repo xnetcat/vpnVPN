@@ -1,0 +1,143 @@
+name: Deploy Services (Control Plane + Metrics)
+
+on:
+  push:
+    branches: ["main", "staging"]
+    paths:
+      - "services/**"
+      - "packages/db/**"
+      - ".github/workflows/services-deploy.yml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+  PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set environment
+        id: env
+        run: |
+          if [ "${{ github.event.inputs.environment }}" != "" ]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+          else
+            echo "environment=staging" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: "1.1.38"
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build services
+        run: |
+          bun run --cwd services/control-plane build:lambda
+          bun run --cwd services/metrics build:lambda
+
+      - name: Package Lambda deployments
+        run: |
+          # Create deployment packages
+          mkdir -p dist/lambda
+
+          # Package control-plane
+          cd services/control-plane/dist/lambda
+          zip -r ../../../../dist/lambda/control-plane.zip .
+          cd ../../../..
+
+          # Package metrics
+          cd services/metrics/dist/lambda
+          zip -r ../../../../dist/lambda/metrics.zip .
+          cd ../../../..
+
+      - name: Upload to S3
+        run: |
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          S3_BUCKET="${{ secrets.LAMBDA_CODE_BUCKET || 'vpnvpn-lambda-deployments' }}"
+
+          # Upload control-plane
+          aws s3 cp dist/lambda/control-plane.zip \
+            "s3://${S3_BUCKET}/control-plane/${TIMESTAMP}/control-plane.zip"
+          aws s3 cp dist/lambda/control-plane.zip \
+            "s3://${S3_BUCKET}/control-plane/latest/control-plane.zip"
+
+          # Upload metrics
+          aws s3 cp dist/lambda/metrics.zip \
+            "s3://${S3_BUCKET}/metrics/${TIMESTAMP}/metrics.zip"
+          aws s3 cp dist/lambda/metrics.zip \
+            "s3://${S3_BUCKET}/metrics/latest/metrics.zip"
+
+          # Set outputs for Pulumi
+          echo "CONTROL_PLANE_CODE_KEY=control-plane/latest/control-plane.zip" >> $GITHUB_ENV
+          echo "METRICS_CODE_KEY=metrics/latest/metrics.zip" >> $GITHUB_ENV
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Pulumi CLI
+        uses: pulumi/actions@v5
+        with:
+          pulumi-version: latest
+
+      - name: Install Pulumi deps
+        working-directory: infra/pulumi
+        run: bun install
+
+      - name: Pulumi login
+        working-directory: infra/pulumi
+        run: pulumi login
+
+      - name: Deploy via Pulumi
+        working-directory: infra/pulumi
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CONTROL_PLANE_API_KEY: ${{ secrets.CONTROL_PLANE_API_KEY }}
+          BOOTSTRAP_TOKEN: ${{ secrets.VPN_TOKEN }}
+        run: |
+          pulumi stack select global || pulumi stack init global
+
+          # Configure stack
+          pulumi config set aws:region us-east-1
+          pulumi config set --secret databaseUrl "$DATABASE_URL"
+          pulumi config set --secret controlPlaneApiKey "$CONTROL_PLANE_API_KEY"
+          pulumi config set --secret bootstrapToken "$BOOTSTRAP_TOKEN"
+          pulumi config set global:controlPlaneCodeKey "$CONTROL_PLANE_CODE_KEY"
+          pulumi config set global:metricsCodeKey "$METRICS_CODE_KEY"
+
+          # Deploy
+          pulumi up -y --stack global
+
+          # Output API URLs
+          echo "Control Plane URL: $(pulumi stack output controlPlaneApiUrl)"
+          echo "Metrics URL: $(pulumi stack output metricsApiUrl)"
+

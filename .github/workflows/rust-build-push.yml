@@ -2,7 +2,7 @@ name: Build and Push Rust Server
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "staging"]
     paths:
       - "apps/vpn-server/**"
       - ".github/workflows/rust-build-push.yml"

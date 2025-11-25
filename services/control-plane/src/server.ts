@@ -1,20 +1,23 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import { z } from "zod";
 import { prisma } from "@vpnvpn/db";
 
-function requireApiKey(headers: Record<string, any>) {
+function requireApiKey(headers: Record<string, unknown>) {
   const apiKey = process.env.CONTROL_PLANE_API_KEY;
   if (!apiKey) {
     throw new Error("CONTROL_PLANE_API_KEY not configured");
   }
-  const headerKey = headers["x-api-key"] ?? headers["X-API-Key"];
+  const headerKey =
+    (headers["x-api-key"] as string) ?? (headers["X-API-Key"] as string);
   if (headerKey !== apiKey) {
-    const err: any = new Error("Unauthorized");
+    const err: Error & { statusCode?: number } = new Error("Unauthorized");
     err.statusCode = 401;
     throw err;
   }
 }
+
+let cachedServer: FastifyInstance | null = null;
 
 const addPeerSchema = z.object({
   publicKey: z.string(),
@@ -56,11 +59,13 @@ const registerServerSchema = z.object({
   metadata: z.unknown().optional(),
 });
 
-export async function buildServer() {
+export async function buildServer(): Promise<FastifyInstance> {
+  if (cachedServer) {
+    return cachedServer;
+  }
+
   const fastify = Fastify({ logger: true });
 
-  // For local/dev: ensure a bootstrap VPN token exists so vpn-node can register
-  // using CONTROL_PLANE_BOOTSTRAP_TOKEN / VPN_TOKEN without manual seeding.
   await ensureBootstrapToken();
 
   await fastify.register(cors, {
@@ -75,9 +80,7 @@ export async function buildServer() {
   // ----- Server registration & listing -----
   fastify.post("/server/register", async (req, reply) => {
     try {
-      const auth = (req.headers.authorization ||
-        // @ts-expect-error legacy casing
-        (req.headers as any).Authorization) as string | undefined;
+      const auth = req.headers.authorization as string | undefined;
       if (!auth || !auth.toLowerCase().startsWith("bearer ")) {
         return reply.code(401).send({ error: "Missing bearer token" });
       }
@@ -103,22 +106,23 @@ export async function buildServer() {
         update: {
           status: "online",
           lastSeen: now,
-          metadata: body.metadata as any,
+          metadata: body.metadata as object,
         },
         create: {
           id: body.id,
           status: "online",
           lastSeen: now,
-          metadata: body.metadata as any,
+          metadata: body.metadata as object,
         },
       });
 
       req.log.info({ id: server.id }, "server_registered");
       return reply.code(200).send({ status: "registered" });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as Error & { statusCode?: number };
       req.log.error({ err }, "registerServer failed");
-      const status = err.statusCode ?? 400;
-      return reply.code(status).send({ error: err.message ?? "Bad Request" });
+      const status = error.statusCode ?? 400;
+      return reply.code(status).send({ error: error.message ?? "Bad Request" });
     }
   });
 
@@ -128,9 +132,7 @@ export async function buildServer() {
   // `id` query param and authenticated by the bearer token.
   fastify.get("/server/peers", async (req, reply) => {
     try {
-      const auth = (req.headers.authorization ||
-        // @ts-expect-error legacy casing
-        (req.headers as any).Authorization) as string | undefined;
+      const auth = req.headers.authorization as string | undefined;
       if (!auth || !auth.toLowerCase().startsWith("bearer ")) {
         return reply.code(401).send({ error: "Missing bearer token" });
       }
@@ -146,17 +148,13 @@ export async function buildServer() {
       const query = (req.query || {}) as { id?: string };
       const serverId = query.id;
 
-      const where: Parameters<typeof prisma.vpnPeer.findMany>[0]["where"] = {
-        active: true,
-        ...(serverId
+      const peers = await prisma.vpnPeer.findMany({
+        where: serverId
           ? {
+              active: true,
               OR: [{ serverId }, { serverId: null }],
             }
-          : {}),
-      };
-
-      const peers = await prisma.vpnPeer.findMany({
-        where,
+          : { active: true },
         orderBy: { createdAt: "asc" },
       });
 
@@ -172,21 +170,22 @@ export async function buildServer() {
 
       req.log.info(
         { count: payload.peers.length, serverId: serverId ?? null },
-        "server_peers_listed",
+        "server_peers_listed"
       );
       return reply.code(200).send(payload);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as Error & { statusCode?: number };
       req.log.error({ err }, "listServerPeers failed");
-      const status = err.statusCode ?? 500;
+      const status = error.statusCode ?? 500;
       return reply
         .code(status)
-        .send({ error: err.message ?? "Internal Error" });
+        .send({ error: error.message ?? "Internal Error" });
     }
   });
 
   fastify.get("/servers", async (req, reply) => {
     try {
-      requireApiKey(req.headers as any);
+      requireApiKey(req.headers as Record<string, unknown>);
       const now = Date.now();
 
       const servers = await prisma.vpnServer.findMany({
@@ -213,7 +212,7 @@ export async function buildServer() {
           }
         }
 
-        const metadata = (s.metadata as any) || {};
+        const metadata = (s.metadata as Record<string, unknown>) || {};
         const metric = (s.metrics && s.metrics[0]) || null;
 
         return {
@@ -229,26 +228,27 @@ export async function buildServer() {
             : {},
           status,
           lastSeen,
-          country: metadata.country ?? metric?.region,
-          region: metadata.region ?? metric?.region,
+          country: (metadata.country as string) ?? metric?.region,
+          region: (metadata.region as string) ?? metric?.region,
         };
       });
 
       req.log.info({ count: mapped.length }, "list_servers");
       return reply.code(200).send(mapped);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as Error & { statusCode?: number };
       req.log.error({ err }, "listServers failed");
-      const status = err.statusCode ?? 500;
+      const status = error.statusCode ?? 500;
       return reply
         .code(status)
-        .send({ error: err.message ?? "Internal Error" });
+        .send({ error: error.message ?? "Internal Error" });
     }
   });
 
   // ----- Peer endpoints backed by Postgres via Prisma -----
   fastify.post("/peers", async (req, reply) => {
     try {
-      requireApiKey(req.headers as any);
+      requireApiKey(req.headers as Record<string, unknown>);
       const body = addPeerSchema.parse(req.body);
 
       // Mark existing active peers for this user as revoked
@@ -271,20 +271,21 @@ export async function buildServer() {
 
       req.log.info(
         { userId: body.userId, serverId: body.serverId },
-        "addPeer persisted",
+        "addPeer persisted"
       );
 
       return reply.code(204).send();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as Error & { statusCode?: number };
       req.log.error({ err }, "addPeer failed");
-      const status = err.statusCode ?? 400;
-      return reply.code(status).send({ error: err.message ?? "Bad Request" });
+      const status = error.statusCode ?? 400;
+      return reply.code(status).send({ error: error.message ?? "Bad Request" });
     }
   });
 
   fastify.post("/peers/revoke-for-user", async (req, reply) => {
     try {
-      requireApiKey(req.headers as any);
+      requireApiKey(req.headers as Record<string, unknown>);
       const body = revokeForUserSchema.parse(req.body);
 
       await prisma.vpnPeer.updateMany({
@@ -294,16 +295,17 @@ export async function buildServer() {
 
       req.log.info({ userId: body.userId }, "revokePeersForUser persisted");
       return reply.code(204).send();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as Error & { statusCode?: number };
       req.log.error({ err }, "revokePeersForUser failed");
-      const status = err.statusCode ?? 400;
-      return reply.code(status).send({ error: err.message ?? "Bad Request" });
+      const status = error.statusCode ?? 400;
+      return reply.code(status).send({ error: error.message ?? "Bad Request" });
     }
   });
 
   fastify.delete("/peers/:publicKey", async (req, reply) => {
     try {
-      requireApiKey(req.headers as any);
+      requireApiKey(req.headers as Record<string, unknown>);
       const { publicKey } = req.params as { publicKey: string };
 
       await prisma.vpnPeer.update({
@@ -313,12 +315,16 @@ export async function buildServer() {
 
       req.log.info({ publicKey }, "revokePeerByPublicKey persisted");
       return reply.code(204).send();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as Error & { statusCode?: number };
       req.log.error({ err }, "revokePeerByPublicKey failed");
-      const status = err.statusCode ?? 400;
-      return reply.code(status).send({ error: err.message ?? "Bad Request" });
+      const status = error.statusCode ?? 400;
+      return reply.code(status).send({ error: error.message ?? "Bad Request" });
     }
   });
 
+  cachedServer = fastify;
   return fastify;
 }
+
+export { prisma };

@@ -1,22 +1,35 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
-import { VpnPool } from "./components/vpnPool";
 import { VpnAsg } from "./components/vpnAsg";
 import { ControlPlane } from "./controlPlane";
+import { MetricsService } from "./metricsService";
 import { Observability } from "./observability";
 
 const config = new pulumi.Config();
+const globalConfig = new pulumi.Config("global");
+const regionConfig = new pulumi.Config("region");
 const stack = pulumi.getStack();
 
+// Outputs
 let ecrUri: pulumi.Output<string> | undefined;
-let apiUrl: pulumi.Output<string> | undefined;
+let controlPlaneApiUrl: pulumi.Output<string> | undefined;
+let controlPlaneFunctionArn: pulumi.Output<string> | undefined;
+let metricsApiUrl: pulumi.Output<string> | undefined;
+let metricsFunctionArn: pulumi.Output<string> | undefined;
 let ampWorkspaceId: pulumi.Output<string> | undefined;
 let amgWorkspaceUrl: pulumi.Output<string> | undefined;
 let nlbDnsName: pulumi.Output<string> | undefined;
 let desktopBucketUrl: pulumi.Output<string> | undefined;
+let lambdaCodeBucket: pulumi.Output<string> | undefined;
 
 if (stack === "global") {
-  const ecrRepoName = config.get("global:ecrRepoName") ?? "vpnvpn/rust-server";
+  // ==========================================================================
+  // Global Stack (us-east-1)
+  // ==========================================================================
+
+  const ecrRepoName = globalConfig.get("ecrRepoName") ?? "vpnvpn/rust-server";
+
+  // ECR repository for vpn-server images
   const repo = new aws.ecr.Repository("rust-server-repo", {
     name: ecrRepoName,
     imageScanningConfiguration: { scanOnPush: true },
@@ -28,7 +41,7 @@ if (stack === "global") {
 
   // S3 bucket for desktop app downloads
   const desktopBucketName =
-    config.get("global:desktopBucket") ?? "vpnvpn-desktop-releases";
+    globalConfig.get("desktopBucket") ?? "vpnvpn-desktop-releases";
   const desktopBucket = new aws.s3.Bucket("desktop-releases", {
     bucket: desktopBucketName,
     acl: "public-read",
@@ -67,27 +80,75 @@ if (stack === "global") {
 
   desktopBucketUrl = pulumi.interpolate`https://${desktopBucket.bucketRegionalDomainName}`;
 
-  const cp = new ControlPlane("control-plane");
-  apiUrl = cp.apiUrl;
+  // S3 bucket for Lambda deployment packages
+  const codeBucketName =
+    globalConfig.get("codeBucket") ?? "vpnvpn-lambda-deployments";
+  const codeBucket = new aws.s3.Bucket("lambda-code", {
+    bucket: codeBucketName,
+    versioning: { enabled: true },
+    tags: { Project: "vpnvpn" },
+  });
 
+  lambdaCodeBucket = codeBucket.bucket;
+
+  // Database URL and API keys from config/secrets
+  const databaseUrl = config.requireSecret("databaseUrl");
+  const controlPlaneApiKey = config.requireSecret("controlPlaneApiKey");
+  const bootstrapToken = config.getSecret("bootstrapToken");
+
+  // Control Plane Lambda + API Gateway
+  const controlPlaneCodeKey = globalConfig.get("controlPlaneCodeKey");
+  const controlPlaneImageUri = globalConfig.get("controlPlaneImageUri");
+
+  const cp = new ControlPlane("control-plane", {
+    codeBucket: controlPlaneCodeKey ? codeBucket.bucket : undefined,
+    codeKey: controlPlaneCodeKey,
+    imageUri: controlPlaneImageUri,
+    databaseUrl,
+    apiKey: controlPlaneApiKey,
+    bootstrapToken,
+  });
+
+  controlPlaneApiUrl = cp.apiUrl;
+  controlPlaneFunctionArn = cp.functionArn;
+
+  // Metrics Service Lambda + API Gateway
+  const metricsCodeKey = globalConfig.get("metricsCodeKey");
+  const metricsImageUri = globalConfig.get("metricsImageUri");
+
+  const metrics = new MetricsService("metrics", {
+    codeBucket: metricsCodeKey ? codeBucket.bucket : undefined,
+    codeKey: metricsCodeKey,
+    imageUri: metricsImageUri,
+    databaseUrl,
+  });
+
+  metricsApiUrl = metrics.apiUrl;
+  metricsFunctionArn = metrics.functionArn;
+
+  // Observability (AMP/Grafana)
   const obs = new Observability("observability");
   ampWorkspaceId = obs.ampWorkspaceId;
   amgWorkspaceUrl = obs.amgWorkspaceUrl;
 } else if (stack.startsWith("region-")) {
+  // ==========================================================================
+  // Regional Stack (e.g., region-us-east-1, region-eu-west-1)
+  // ==========================================================================
+
   const regionName = aws.getRegionOutput().name;
-  const ecrRepoName = config.get("global:ecrRepoName") ?? "vpnvpn/rust-server";
-  const imageTag = config.require("region:imageTag");
-  const minInstances = config.getNumber("region:minInstances") ?? 1;
-  const maxInstances = config.getNumber("region:maxInstances") ?? 10;
-  const desiredInstances = config.getNumber("region:desiredInstances");
-  const adminCidr = config.get("region:adminCidr") ?? "0.0.0.0/0";
+  const ecrRepoName = globalConfig.get("ecrRepoName") ?? "vpnvpn/rust-server";
+  const imageTag = regionConfig.require("imageTag");
+  const minInstances = regionConfig.getNumber("minInstances") ?? 1;
+  const maxInstances = regionConfig.getNumber("maxInstances") ?? 10;
+  const desiredInstances = regionConfig.getNumber("desiredInstances");
+  const adminCidr = regionConfig.get("adminCidr") ?? "0.0.0.0/0";
   const targetSessionsPerInstance =
-    config.getNumber("region:targetSessionsPerInstance") ?? 100;
+    regionConfig.getNumber("targetSessionsPerInstance") ?? 100;
+  const instanceType = regionConfig.get("instanceType") ?? "t3.medium";
 
   const accountId = aws.getCallerIdentityOutput().accountId;
   const computedEcrUri = pulumi.interpolate`${accountId}.dkr.ecr.${regionName}.amazonaws.com/${ecrRepoName}:${imageTag}`;
 
-  const instanceType = config.get("region:instanceType") ?? "t3.medium";
   const pool = new VpnAsg("vpnvpn", {
     region: regionName,
     minInstances,
@@ -104,11 +165,16 @@ if (stack === "global") {
   throw new Error(`Unknown stack name: ${stack}`);
 }
 
+// Exports
 export {
   ecrUri,
-  apiUrl,
+  controlPlaneApiUrl,
+  controlPlaneFunctionArn,
+  metricsApiUrl,
+  metricsFunctionArn,
   ampWorkspaceId,
   amgWorkspaceUrl,
   nlbDnsName,
   desktopBucketUrl,
+  lambdaCodeBucket,
 };

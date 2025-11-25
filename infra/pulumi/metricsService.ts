@@ -1,7 +1,7 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 
-export interface ControlPlaneArgs {
+export interface MetricsServiceArgs {
   /**
    * S3 bucket containing the Lambda deployment package.
    * If not provided, assumes Docker image deployment.
@@ -19,38 +19,30 @@ export interface ControlPlaneArgs {
    * Database URL for Prisma connection.
    */
   databaseUrl: pulumi.Input<string>;
-  /**
-   * API key for authenticating web app requests.
-   */
-  apiKey: pulumi.Input<string>;
-  /**
-   * Bootstrap token for VPN node registration.
-   */
-  bootstrapToken?: pulumi.Input<string>;
 }
 
 /**
- * ControlPlane provisions AWS Lambda and API Gateway resources for the
- * control-plane service. Supports both ZIP-based and Docker image deployment.
+ * MetricsService provisions AWS Lambda and API Gateway resources for the
+ * metrics service. Supports both ZIP-based and Docker image deployment.
  */
-export class ControlPlane extends pulumi.ComponentResource {
+export class MetricsService extends pulumi.ComponentResource {
   public readonly apiUrl: pulumi.Output<string>;
   public readonly functionArn: pulumi.Output<string>;
 
   constructor(
     name: string,
-    args: ControlPlaneArgs,
+    args: MetricsServiceArgs,
     opts?: pulumi.ComponentResourceOptions
   ) {
-    super("vpnvpn:components:ControlPlane", name, {}, opts);
+    super("vpnvpn:components:MetricsService", name, {}, opts);
 
     const config = new pulumi.Config();
 
     // If no deployment args provided, fall back to URL-only mode
     if (!args.imageUri && !args.codeBucket) {
       const url =
-        config.get("controlPlaneApiUrl") ??
-        "https://example-control-plane.your-domain.com";
+        config.get("metricsApiUrl") ??
+        "https://example-metrics.your-domain.com";
       this.apiUrl = pulumi.output(url);
       this.functionArn = pulumi.output("");
       this.registerOutputs({ apiUrl: this.apiUrl, functionArn: this.functionArn });
@@ -100,8 +92,6 @@ export class ControlPlane extends pulumi.ComponentResource {
     const environment = {
       variables: {
         DATABASE_URL: args.databaseUrl,
-        CONTROL_PLANE_API_KEY: args.apiKey,
-        CONTROL_PLANE_BOOTSTRAP_TOKEN: args.bootstrapToken ?? "",
         NODE_OPTIONS: "--enable-source-maps",
       },
     };
@@ -118,7 +108,7 @@ export class ControlPlane extends pulumi.ComponentResource {
           imageUri: args.imageUri,
           role: lambdaRole.arn,
           timeout: 30,
-          memorySize: 512,
+          memorySize: 256,
           environment,
           tags: { Project: "vpnvpn" },
         },
@@ -135,7 +125,7 @@ export class ControlPlane extends pulumi.ComponentResource {
           s3Key: args.codeKey!,
           role: lambdaRole.arn,
           timeout: 30,
-          memorySize: 512,
+          memorySize: 256,
           environment,
           tags: { Project: "vpnvpn" },
         },
@@ -150,7 +140,7 @@ export class ControlPlane extends pulumi.ComponentResource {
         protocolType: "HTTP",
         corsConfiguration: {
           allowOrigins: ["*"],
-          allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+          allowMethods: ["GET", "POST", "OPTIONS"],
           allowHeaders: ["*"],
         },
         tags: { Project: "vpnvpn" },
@@ -214,3 +204,4 @@ export class ControlPlane extends pulumi.ComponentResource {
     });
   }
 }
+
