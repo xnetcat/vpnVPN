@@ -39,7 +39,8 @@ export default async function AdminVpnMetricsPage({
   }));
 
   const resolvedSearch =
-    (searchParams && (await searchParams)) || ({} as Record<string, string | string[] | undefined>);
+    (searchParams && (await searchParams)) ||
+    ({} as Record<string, string | string[] | undefined>);
 
   const statusFilter =
     (resolvedSearch.status as string | undefined)?.toLowerCase() || "all";
@@ -75,14 +76,11 @@ export default async function AdminVpnMetricsPage({
     (s) => s.status === "online",
   ).length;
 
-  const byCountry = filteredServers.reduce<Record<string, number>>(
-    (acc, s) => {
-      const key = s.country || "Unknown";
-      acc[key] = (acc[key] || 0) + (s.sessions || 0);
-      return acc;
-    },
-    {},
-  );
+  const byCountry = filteredServers.reduce<Record<string, number>>((acc, s) => {
+    const key = s.country || "Unknown";
+    acc[key] = (acc[key] || 0) + (s.sessions || 0);
+    return acc;
+  }, {});
 
   const allCountries = Array.from(
     new Set(
@@ -168,8 +166,8 @@ export default async function AdminVpnMetricsPage({
         <div className="rounded-lg border bg-white p-6 shadow-sm">
           <div className="text-sm text-gray-500 mb-1">Online servers</div>
           <div className="text-3xl font-bold">{onlineServers}</div>
-            <p className="text-xs text-gray-500 mt-1">
-              of {filteredServers.length} matched servers
+          <p className="text-xs text-gray-500 mt-1">
+            of {filteredServers.length} matched servers
           </p>
         </div>
         <div className="rounded-lg border bg-white p-6 shadow-sm">

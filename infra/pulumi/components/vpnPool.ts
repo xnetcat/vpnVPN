@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import * as awsx from "@pulumi/awsx";
@@ -69,7 +68,7 @@ export class VpnPool extends pulumi.ComponentResource {
       `${name}-exec-attach`,
       {
         role: taskExecRole.name,
-        policyArn: aws.iam.ManagedPolicies.AmazonECSTaskExecutionRolePolicy,
+        policyArn: "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
       },
       { parent: this }
     );

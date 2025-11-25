@@ -34,6 +34,26 @@ bun run dev:turbo      # turbo run dev --parallel
 
 See `docs/LOCAL_DEV.md` for full local stack instructions and `docs/ARCHITECTURE.md` for a deeper architecture overview.
 
+### Deployment
+
+```bash
+# Deploy to staging
+./scripts/deploy.sh staging
+
+# Deploy to production
+./scripts/deploy.sh production
+```
+
+The deployment script:
+- Loads environment from root `.env`
+- Deploys global infrastructure to us-east-1
+- Builds and pushes vpn-server Docker image
+- Deploys VPN nodes to regions in `scripts/regions.json`
+- Builds desktop apps with hardcoded API endpoints
+- Uploads desktop executables to S3
+
+See `docs/CI_CD.md` for detailed deployment documentation.
+
 ### Tests & CI
 
 - Unit/integration tests live under each app/service (Vitest for TS, `cargo test` for Rust).

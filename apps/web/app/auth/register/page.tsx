@@ -24,7 +24,9 @@ function RegisterForm() {
       : "/desktop";
 
   const callbackUrl =
-    isDesktopParam && rawCallback === "/desktop" ? defaultCallback : rawCallback;
+    isDesktopParam && rawCallback === "/desktop"
+      ? defaultCallback
+      : rawCallback;
 
   const [email, setEmail] = useState("");
   const [magicState, setMagicState] = useState<
@@ -150,9 +152,7 @@ function RegisterForm() {
             <a
               href={`/auth/signin?callbackUrl=${encodeURIComponent(
                 callbackUrl,
-              )}${
-                isDesktopParam ? "&desktop=1" : ""
-              }`}
+              )}${isDesktopParam ? "&desktop=1" : ""}`}
               className="font-medium text-blue-600 hover:text-blue-800"
             >
               Sign in

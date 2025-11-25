@@ -1,0 +1,444 @@
+#!/usr/bin/env bash
+# =============================================================================
+# vpnVPN Deployment Script
+# =============================================================================
+# This script automates the entire deployment process:
+# 1. Loads environment from root .env
+# 2. Deploys global Pulumi stack to us-east-1
+# 3. Builds and pushes vpn-server Docker image
+# 4. Deploys VPN nodes to specified regions
+# 5. Builds desktop apps for staging/production
+# 6. Uploads desktop executables to S3
+#
+# Usage:
+#   ./scripts/deploy.sh [staging|production] [--skip-desktop] [--skip-vpn-nodes]
+#
+# Prerequisites:
+#   - AWS CLI configured
+#   - Pulumi CLI installed
+#   - Docker installed
+#   - Bun installed
+#   - Rust toolchain (for desktop builds)
+# =============================================================================
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+ENVIRONMENT="${1:-staging}"
+SKIP_DESKTOP=false
+SKIP_VPN_NODES=false
+
+for arg in "$@"; do
+  case $arg in
+    --skip-desktop) SKIP_DESKTOP=true ;;
+    --skip-vpn-nodes) SKIP_VPN_NODES=true ;;
+  esac
+done
+
+if [[ "$ENVIRONMENT" != "staging" && "$ENVIRONMENT" != "production" ]]; then
+  log_error "Environment must be 'staging' or 'production'"
+  exit 1
+fi
+
+log_info "Deploying to ${ENVIRONMENT} environment"
+
+# =============================================================================
+# Load Environment Variables
+# =============================================================================
+
+ENV_FILE="${ROOT_DIR}/.env"
+if [[ ! -f "$ENV_FILE" ]]; then
+  log_error "Missing .env file at ${ENV_FILE}"
+  log_info "Create one based on .env.example or env.example files"
+  exit 1
+fi
+
+log_info "Loading environment from ${ENV_FILE}"
+set -a
+source "$ENV_FILE"
+set +a
+
+# Validate required variables
+REQUIRED_VARS=(
+  "AWS_REGION"
+  "AWS_ACCOUNT_ID"
+  "PULUMI_ACCESS_TOKEN"
+  "CONTROL_PLANE_API_URL"
+  "CONTROL_PLANE_API_KEY"
+  "ECR_REPO_NAME"
+)
+
+for var in "${REQUIRED_VARS[@]}"; do
+  if [[ -z "${!var:-}" ]]; then
+    log_error "Missing required environment variable: ${var}"
+    exit 1
+  fi
+done
+
+# Set environment-specific URLs
+if [[ "$ENVIRONMENT" == "production" ]]; then
+  WEB_URL="${NEXTAUTH_URL:-https://vpnvpn.dev}"
+  DESKTOP_URL="${WEB_URL}/desktop?desktop=1"
+else
+  WEB_URL="${NEXTAUTH_URL:-https://staging.vpnvpn.dev}"
+  DESKTOP_URL="${WEB_URL}/desktop?desktop=1"
+fi
+
+# Parse VPN regions configuration from regions.json or environment
+REGIONS_FILE="${SCRIPT_DIR}/regions.json"
+if [[ -f "$REGIONS_FILE" ]]; then
+  VPN_REGIONS=$(jq -c ".${ENVIRONMENT}" "$REGIONS_FILE")
+  log_info "Loaded regions from ${REGIONS_FILE}"
+else
+  VPN_REGIONS="${VPN_REGIONS:-'[{\"region\": \"us-east-1\", \"nodes\": 2, \"min\": 1, \"max\": 5}]'}"
+  log_warn "Using default regions (regions.json not found)"
+fi
+
+log_success "Environment loaded successfully"
+
+# =============================================================================
+# Step 1: Deploy Global Pulumi Stack (us-east-1)
+# =============================================================================
+
+deploy_global_stack() {
+  log_info "Deploying global Pulumi stack to us-east-1..."
+  
+  cd "${ROOT_DIR}/infra/pulumi"
+  bun install
+  
+  pulumi login
+  
+  # Always deploy global to us-east-1
+  pulumi stack select global 2>/dev/null || pulumi stack init global
+  
+  pulumi config set aws:region us-east-1
+  pulumi config set global:ecrRepoName "${ECR_REPO_NAME}"
+  pulumi config set controlPlaneApiUrl "${CONTROL_PLANE_API_URL}"
+  
+  # Add S3 bucket for desktop downloads
+  pulumi config set global:desktopBucket "${DESKTOP_S3_BUCKET:-vpnvpn-desktop-${ENVIRONMENT}}"
+  
+  log_info "Running pulumi up for global stack..."
+  pulumi up -y
+  
+  # Export outputs
+  ECR_URI=$(pulumi stack output ecrUri 2>/dev/null || echo "")
+  
+  log_success "Global stack deployed successfully"
+  cd "${ROOT_DIR}"
+}
+
+# =============================================================================
+# Step 2: Build and Push VPN Server Image
+# =============================================================================
+
+build_vpn_server() {
+  log_info "Building VPN server Docker image..."
+  
+  cd "${ROOT_DIR}/apps/vpn-server"
+  
+  # Generate image tag from git commit
+  IMAGE_TAG="${IMAGE_TAG:-sha-$(git rev-parse --short HEAD)}"
+  
+  ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${ECR_REPO_NAME}"
+  FULL_IMAGE="${ECR_URI}:${IMAGE_TAG}"
+  
+  log_info "Building image: ${FULL_IMAGE}"
+  docker build -t "${FULL_IMAGE}" .
+  
+  # Login to ECR
+  log_info "Logging into ECR..."
+  aws ecr get-login-password --region us-east-1 | \
+    docker login --username AWS --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"
+  
+  # Push image
+  log_info "Pushing image to ECR..."
+  docker push "${FULL_IMAGE}"
+  
+  # Also tag as latest for the environment
+  docker tag "${FULL_IMAGE}" "${ECR_URI}:${ENVIRONMENT}-latest"
+  docker push "${ECR_URI}:${ENVIRONMENT}-latest"
+  
+  log_success "VPN server image pushed: ${FULL_IMAGE}"
+  cd "${ROOT_DIR}"
+  
+  export IMAGE_TAG
+}
+
+# =============================================================================
+# Step 3: Deploy VPN Nodes to Regions
+# =============================================================================
+
+deploy_vpn_nodes() {
+  if [[ "$SKIP_VPN_NODES" == "true" ]]; then
+    log_warn "Skipping VPN node deployment (--skip-vpn-nodes)"
+    return
+  fi
+  
+  log_info "Deploying VPN nodes to regions..."
+  
+  cd "${ROOT_DIR}/infra/pulumi"
+  
+  # Parse regions JSON
+  REGIONS=$(echo "${VPN_REGIONS}" | jq -c '.[]')
+  
+  while IFS= read -r region_config; do
+    REGION=$(echo "$region_config" | jq -r '.region')
+    NODES=$(echo "$region_config" | jq -r '.nodes // 2')
+    MIN=$(echo "$region_config" | jq -r '.min // 1')
+    MAX=$(echo "$region_config" | jq -r '.max // 10')
+    INSTANCE_TYPE=$(echo "$region_config" | jq -r '.instanceType // "t3.medium"')
+    
+    STACK_NAME="region-${REGION}"
+    
+    log_info "Deploying ${NODES} nodes to ${REGION}..."
+    
+    pulumi stack select "${STACK_NAME}" 2>/dev/null || pulumi stack init "${STACK_NAME}"
+    
+    pulumi config set aws:region "${REGION}"
+    pulumi config set global:ecrRepoName "${ECR_REPO_NAME}"
+    pulumi config set region:imageTag "${IMAGE_TAG}"
+    pulumi config set region:desiredInstances "${NODES}"
+    pulumi config set region:minInstances "${MIN}"
+    pulumi config set region:maxInstances "${MAX}"
+    pulumi config set region:instanceType "${INSTANCE_TYPE}"
+    pulumi config set region:adminCidr "0.0.0.0/0"
+    
+    pulumi up -y
+    
+    # Get NLB DNS
+    NLB_DNS=$(pulumi stack output nlbDnsName 2>/dev/null || echo "")
+    log_success "Region ${REGION} deployed. NLB: ${NLB_DNS}"
+    
+  done <<< "$REGIONS"
+  
+  cd "${ROOT_DIR}"
+}
+
+# =============================================================================
+# Step 4: Build Desktop Apps
+# =============================================================================
+
+build_desktop_apps() {
+  if [[ "$SKIP_DESKTOP" == "true" ]]; then
+    log_warn "Skipping desktop app build (--skip-desktop)"
+    return
+  fi
+  
+  log_info "Building desktop apps for ${ENVIRONMENT}..."
+  
+  cd "${ROOT_DIR}/apps/desktop"
+  
+  # Install dependencies
+  bun install
+  
+  # Set environment variables for build - these get hardcoded into the bundle
+  export VITE_VPNVPN_DESKTOP_URL="${DESKTOP_URL}"
+  export VITE_VPNVPN_API_URL="${WEB_URL}"
+  
+  log_info "Desktop URL: ${DESKTOP_URL}"
+  log_info "API URL: ${WEB_URL}"
+  
+  # Build frontend (this bundles into dist/ which Tauri embeds)
+  log_info "Building desktop frontend with Vite..."
+  bun run build:web
+  
+  # Update tauri.conf.json with environment-specific values
+  if [[ "$ENVIRONMENT" == "production" ]]; then
+    BUNDLE_ID="com.vpnvpn.desktop"
+    APP_NAME="vpnVPN Desktop"
+    APP_VERSION="${APP_VERSION:-1.0.0}"
+  else
+    BUNDLE_ID="com.vpnvpn.desktop.staging"
+    APP_NAME="vpnVPN Desktop (Staging)"
+    APP_VERSION="${APP_VERSION:-0.1.0}"
+  fi
+  
+  # Update tauri config
+  log_info "Updating Tauri config for ${ENVIRONMENT}..."
+  TAURI_CONF="src-tauri/tauri.conf.json"
+  if [[ -f "$TAURI_CONF" ]]; then
+    # Use jq to update config if available, otherwise use sed
+    if command -v jq &> /dev/null; then
+      jq --arg name "$APP_NAME" --arg id "$BUNDLE_ID" --arg ver "$APP_VERSION" \
+        '.productName = $name | .identifier = $id | .version = $ver' \
+        "$TAURI_CONF" > "${TAURI_CONF}.tmp" && mv "${TAURI_CONF}.tmp" "$TAURI_CONF"
+    fi
+  fi
+  
+  # Build Tauri app
+  log_info "Building Tauri desktop app..."
+  cd src-tauri
+  cargo tauri build --release
+  
+  # Collect build artifacts
+  ARTIFACTS_DIR="${ROOT_DIR}/dist/desktop/${ENVIRONMENT}"
+  mkdir -p "${ARTIFACTS_DIR}"
+  
+  log_info "Collecting build artifacts..."
+  
+  # Copy artifacts based on OS
+  case "$(uname -s)" in
+    Darwin)
+      if ls target/release/bundle/dmg/*.dmg 1> /dev/null 2>&1; then
+        cp -v target/release/bundle/dmg/*.dmg "${ARTIFACTS_DIR}/"
+        log_success "macOS DMG built"
+      fi
+      if ls target/release/bundle/macos/*.app 1> /dev/null 2>&1; then
+        # Zip the .app for easier distribution
+        for app in target/release/bundle/macos/*.app; do
+          APP_BASENAME=$(basename "$app" .app)
+          (cd target/release/bundle/macos && zip -r "${ARTIFACTS_DIR}/${APP_BASENAME}.app.zip" "$(basename "$app")")
+        done
+        log_success "macOS App bundle built"
+      fi
+      ;;
+    Linux)
+      if ls target/release/bundle/deb/*.deb 1> /dev/null 2>&1; then
+        cp -v target/release/bundle/deb/*.deb "${ARTIFACTS_DIR}/"
+        log_success "Linux DEB built"
+      fi
+      if ls target/release/bundle/appimage/*.AppImage 1> /dev/null 2>&1; then
+        cp -v target/release/bundle/appimage/*.AppImage "${ARTIFACTS_DIR}/"
+        log_success "Linux AppImage built"
+      fi
+      if ls target/release/bundle/rpm/*.rpm 1> /dev/null 2>&1; then
+        cp -v target/release/bundle/rpm/*.rpm "${ARTIFACTS_DIR}/"
+        log_success "Linux RPM built"
+      fi
+      ;;
+    MINGW*|MSYS*|CYGWIN*)
+      if ls target/release/bundle/msi/*.msi 1> /dev/null 2>&1; then
+        cp -v target/release/bundle/msi/*.msi "${ARTIFACTS_DIR}/"
+        log_success "Windows MSI built"
+      fi
+      if ls target/release/bundle/nsis/*.exe 1> /dev/null 2>&1; then
+        cp -v target/release/bundle/nsis/*.exe "${ARTIFACTS_DIR}/"
+        log_success "Windows NSIS installer built"
+      fi
+      ;;
+  esac
+  
+  # List artifacts
+  log_info "Build artifacts:"
+  ls -la "${ARTIFACTS_DIR}/"
+  
+  log_success "Desktop app built. Artifacts in ${ARTIFACTS_DIR}"
+  cd "${ROOT_DIR}"
+}
+
+# =============================================================================
+# Step 5: Upload Desktop Apps to S3
+# =============================================================================
+
+upload_desktop_to_s3() {
+  if [[ "$SKIP_DESKTOP" == "true" ]]; then
+    return
+  fi
+  
+  log_info "Uploading desktop apps to S3..."
+  
+  ARTIFACTS_DIR="${ROOT_DIR}/dist/desktop/${ENVIRONMENT}"
+  S3_BUCKET="${DESKTOP_S3_BUCKET:-vpnvpn-desktop-${ENVIRONMENT}}"
+  S3_PREFIX="releases/${ENVIRONMENT}"
+  
+  if [[ ! -d "${ARTIFACTS_DIR}" ]]; then
+    log_warn "No desktop artifacts found at ${ARTIFACTS_DIR}"
+    return
+  fi
+  
+  # Create bucket if it doesn't exist
+  aws s3 mb "s3://${S3_BUCKET}" --region us-east-1 2>/dev/null || true
+  
+  # Upload artifacts
+  aws s3 sync "${ARTIFACTS_DIR}/" "s3://${S3_BUCKET}/${S3_PREFIX}/" \
+    --acl public-read \
+    --cache-control "max-age=3600"
+  
+  # Create latest symlinks
+  for file in "${ARTIFACTS_DIR}"/*; do
+    FILENAME=$(basename "$file")
+    EXTENSION="${FILENAME##*.}"
+    LATEST_NAME="vpnvpn-desktop-latest.${EXTENSION}"
+    
+    aws s3 cp "s3://${S3_BUCKET}/${S3_PREFIX}/${FILENAME}" \
+      "s3://${S3_BUCKET}/${S3_PREFIX}/${LATEST_NAME}" \
+      --acl public-read
+  done
+  
+  log_success "Desktop apps uploaded to s3://${S3_BUCKET}/${S3_PREFIX}/"
+  
+  # Print download URLs
+  echo ""
+  log_info "Desktop Download URLs:"
+  echo "  macOS:  https://${S3_BUCKET}.s3.amazonaws.com/${S3_PREFIX}/vpnvpn-desktop-latest.dmg"
+  echo "  Linux:  https://${S3_BUCKET}.s3.amazonaws.com/${S3_PREFIX}/vpnvpn-desktop-latest.AppImage"
+  echo ""
+}
+
+# =============================================================================
+# Step 6: Print Summary
+# =============================================================================
+
+print_summary() {
+  echo ""
+  echo "============================================================================="
+  echo -e "${GREEN}Deployment Complete!${NC}"
+  echo "============================================================================="
+  echo ""
+  echo "Environment: ${ENVIRONMENT}"
+  echo ""
+  echo "Services:"
+  echo "  Web App:       ${WEB_URL}"
+  echo "  Control Plane: ${CONTROL_PLANE_API_URL}"
+  echo "  Metrics:       ${METRICS_API_URL:-N/A}"
+  echo ""
+  echo "VPN Regions:"
+  echo "${VPN_REGIONS}" | jq -r '.[] | "  \(.region): \(.nodes) nodes"'
+  echo ""
+  echo "Desktop Downloads:"
+  echo "  Bucket: s3://${DESKTOP_S3_BUCKET:-vpnvpn-desktop-${ENVIRONMENT}}"
+  echo ""
+  echo "Next Steps:"
+  echo "  1. Verify VPN nodes are registered: curl ${CONTROL_PLANE_API_URL}/servers"
+  echo "  2. Test desktop app download links"
+  echo "  3. Verify web app at ${WEB_URL}"
+  echo ""
+}
+
+# =============================================================================
+# Main
+# =============================================================================
+
+main() {
+  log_info "Starting vpnVPN deployment..."
+  echo ""
+  
+  deploy_global_stack
+  build_vpn_server
+  deploy_vpn_nodes
+  build_desktop_apps
+  upload_desktop_to_s3
+  print_summary
+}
+
+main
+

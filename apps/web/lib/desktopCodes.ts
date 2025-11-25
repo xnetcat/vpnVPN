@@ -9,7 +9,7 @@ function randomSixDigitCode(): string {
 
 export async function createDesktopCode(
   email: string,
-  url: string
+  url: string,
 ): Promise<string> {
   const normalisedEmail = email.trim().toLowerCase();
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
@@ -50,7 +50,7 @@ export async function createDesktopCode(
 
 export async function consumeDesktopCode(
   email: string,
-  code: string
+  code: string,
 ): Promise<string | null> {
   const normalisedEmail = email.trim().toLowerCase();
   const now = new Date();

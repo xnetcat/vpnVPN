@@ -1,63 +1,115 @@
-## Architecture Overview
+# Architecture Overview
 
 vpnVPN is a Bun/Turborepo monorepo with a TypeScript/Postgres control plane and Rust VPN data plane.
 
-### Apps
+## Apps
 
-- `apps/web`: Next.js 15 SaaS frontend (Vercel).
-- `apps/desktop`: Tauri desktop client for configuring the VPN.
-- `apps/vpn-server`: Rust VPN node binary supporting WireGuard/OpenVPN/IKEv2.
+### `apps/web`
 
-### Services
+Next.js 15 SaaS frontend hosted on Vercel.
 
-- `services/control-plane`
-  - Bun + Fastify HTTP API.
-  - Endpoints for:
-    - `POST /peers` – create/update a user peer.
-    - `POST /peers/revoke-for-user` – revoke all peers for a user.
-    - `DELETE /peers/:publicKey` – revoke a specific peer.
-  - Stores servers, peers, tokens, and metrics metadata in Postgres via `@vpnvpn/db`.
-  - Secured via `x-api-key` (`CONTROL_PLANE_API_KEY`).
+- tRPC for type-safe API calls
+- NextAuth.js for authentication (GitHub, Google, Email)
+- Stripe for subscriptions
+- Resend for transactional emails
+- Prisma + PostgreSQL for data persistence
 
-- `services/metrics`
-  - Bun + Fastify HTTP API.
-  - `POST /metrics/vpn` – vpn-server metrics ingestion (CPU, memory, active peers, region).
-  - Persists metrics into the shared Postgres database for dashboard views.
+### `apps/desktop`
 
-### Shared Database
+Tauri desktop client for configuring and connecting to the VPN.
 
-- `packages/db`
-  - Prisma schema and client for:
-    - SaaS data: users, sessions, subscriptions, devices, notifications.
-    - Control plane: `VpnServer`, `VpnPeer`, `VpnToken`, `VpnMetric`.
-  - Uses `DATABASE_URL` (Neon in production, Postgres in local Docker).
+### `apps/vpn-server`
 
-### VPN Server (Rust)
+Rust VPN node binary supporting WireGuard, OpenVPN, and IKEv2.
 
-- `apps/vpn-server`
-  - Generates and persists its own WireGuard server keys and config.
-  - Registers with the control plane via `POST /server/register` (via `ControlPlaneClient`).
-  - Periodically fetches peers (`GET /server/peers`) and applies them to the local WireGuard/OpenVPN/IKEv2 backends.
-  - Exposes an admin API (`/health`, `/metrics`, `/status`, `/pubkey`) on `ADMIN_PORT`.
+- Generates and persists WireGuard server keys
+- Registers with control plane via `POST /server/register`
+- Periodically fetches peers via `GET /server/peers`
+- Applies peers to WireGuard/OpenVPN/IKEv2 backends
+- Exposes admin API (`/health`, `/metrics`, `/status`, `/pubkey`) on `ADMIN_PORT`
 
-### Frontend Integration
+## Services
 
-- Web app uses tRPC routers to:
-  - Manage devices, subscriptions, admin actions.
-  - Call the control-plane service via `lib/controlPlane.ts` using `CONTROL_PLANE_API_URL` + `CONTROL_PLANE_API_KEY`.
-- When a user adds a device:
-  1. The server generates a WireGuard keypair.
-  2. The device record is stored in Postgres.
-  3. The control-plane service is called to create/update the peer for that user.
-  4. A client config is rendered for the desktop/mobile VPN client.
+### `services/control-plane`
 
-### Deployment
+Bun + Fastify HTTP API backed by Postgres via `@vpnvpn/db`.
 
-- AWS is used only as a hosting platform:
-  - `infra/pulumi` provisions:
-    - ECR repositories and/or ECS/EC2 resources for the containerized vpn-server.
-    - Networking (VPC, security groups, load balancers).
-  - The control-plane and metrics services are deployed as generic containers; Pulumi reads `controlPlaneApiUrl` from config, instead of creating Lambdas/APIGW/DynamoDB.
-- Other environments (Kubernetes, on-prem) can run the same containers/Docker Compose without changes to application code.
+**Endpoints:**
 
+| Endpoint | Description |
+| -------- | ----------- |
+| `POST /server/register` | VPN node self-registration (bearer token auth) |
+| `GET /server/peers` | Fetch peers assigned to a server (bearer token auth) |
+| `GET /servers` | List all servers with metrics (API key auth) |
+| `POST /peers` | Create/update a user peer (API key auth) |
+| `POST /peers/revoke-for-user` | Revoke all peers for a user (API key auth) |
+| `DELETE /peers/:publicKey` | Revoke a specific peer (API key auth) |
 
+**Security:** Bearer tokens for VPN nodes, `x-api-key` header for web app calls.
+
+### `services/metrics`
+
+Bun + Fastify HTTP API for vpn-server metrics ingestion.
+
+**Endpoint:** `POST /metrics/vpn` — accepts CPU, memory, active peers, and region data.
+
+Persists metrics to Postgres for dashboard views.
+
+## Shared Database
+
+### `packages/db`
+
+Prisma schema and client for:
+
+- **SaaS data:** users, sessions, accounts, subscriptions, devices, notification preferences
+- **Control plane:** VpnServer, VpnPeer, VpnToken, VpnMetric
+- **Desktop:** DesktopLoginCode
+
+Uses `DATABASE_URL` (Neon in production, Postgres in local Docker).
+
+## Frontend Integration
+
+The web app uses tRPC routers to:
+
+- Manage devices, subscriptions, and admin actions
+- Call the control-plane service via `lib/controlPlane.ts` using `CONTROL_PLANE_API_URL` + `CONTROL_PLANE_API_KEY`
+
+### Device Registration Flow
+
+1. User clicks "Add Device" in the dashboard
+2. Server generates a WireGuard keypair
+3. Device record is stored in Postgres
+4. Control-plane service is called to create the peer
+5. Client config is rendered for download/QR code
+
+## Deployment
+
+### Web App
+
+Deployed to Vercel with environment variables configured in the Vercel dashboard.
+
+### Control Plane & Metrics
+
+Deployed as containers (ECS, EC2, Kubernetes, or on-prem). Environment-agnostic.
+
+### VPN Server
+
+Deployed via Pulumi to AWS:
+
+- ECR repository for Docker images
+- EC2 Auto Scaling Group behind Network Load Balancer
+- Security groups for VPN protocols (WireGuard, OpenVPN, IKEv2)
+- Target-tracking autoscaling based on ActiveSessions metric
+
+Pulumi reads `controlPlaneApiUrl` from config to connect VPN nodes to the control plane.
+
+### Multi-Environment Support
+
+The same containers can run on:
+
+- AWS (EC2, ECS, EKS)
+- Kubernetes
+- Docker Compose (local development)
+- On-premises servers
+
+No AWS-specific services are required for the control plane or metrics services.

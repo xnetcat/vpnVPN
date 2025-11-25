@@ -8,8 +8,8 @@
   },
   "dependencies": {
     "@pulumi/aws": "^6.0.0",
-    "@pulumi/pulumi": "^3.100.0",
-    "aws-sdk": "^2.1691.0"
+    "@pulumi/awsx": "^2.0.0",
+    "@pulumi/pulumi": "^3.100.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.11",

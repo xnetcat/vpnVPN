@@ -7,9 +7,9 @@ use crate::vpn::PeerSpec;
 
 pub struct ControlPlaneClient {
     client: Client,
-    base_url: String,
-    auth_token: String,
-    server_id: String,
+    pub(crate) base_url: String,
+    pub(crate) auth_token: String,
+    pub(crate) server_id: String,
 }
 
 #[derive(Debug, Serialize)]

@@ -1,15 +1,15 @@
-// @ts-nocheck
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import * as awsx from "@pulumi/awsx";
 
 export interface VpnAsgArgs {
-  region: string;
+  region: pulumi.Input<string>;
   minInstances: number;
   maxInstances: number;
-  imageUri: string; // ECR image with tag
-  instanceType?: string; // e.g., t3.medium
-  adminCidr?: string; // CIDR for admin port 8080
+  desiredInstances?: number;
+  imageUri: pulumi.Input<string>;
+  instanceType?: string;
+  adminCidr?: string;
   targetSessionsPerInstance?: number;
 }
 
@@ -310,7 +310,7 @@ runcmd:
           {
             deviceName: "/dev/xvda",
             ebs: {
-              deleteOnTermination: true,
+              deleteOnTermination: "true",
               volumeSize: 12,
               volumeType: "gp3",
             },
@@ -327,7 +327,7 @@ runcmd:
     const asg = new aws.autoscaling.Group(
       `${name}-asg`,
       {
-        desiredCapacity: args.minInstances,
+        desiredCapacity: args.desiredInstances ?? args.minInstances,
         minSize: args.minInstances,
         maxSize: args.maxInstances,
         vpcZoneIdentifiers: vpc.privateSubnetIds,

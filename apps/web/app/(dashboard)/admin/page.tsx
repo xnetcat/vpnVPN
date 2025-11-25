@@ -48,7 +48,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const nodes = await fetchNodes();
 
   const resolvedSearch =
-    (searchParams && (await searchParams)) || ({} as Record<string, string | string[] | undefined>);
+    (searchParams && (await searchParams)) ||
+    ({} as Record<string, string | string[] | undefined>);
 
   const statusFilter =
     (resolvedSearch.status as string | undefined)?.toLowerCase() || "all";
@@ -67,12 +68,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       return false;
     }
     if (q) {
-      const haystack = [
-        n.id,
-        n.status,
-        n.region ?? "",
-        n.country ?? "",
-      ]
+      const haystack = [n.id, n.status, n.region ?? "", n.country ?? ""]
         .join(" ")
         .toLowerCase();
       if (!haystack.includes(q)) return false;
@@ -257,9 +253,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             {filteredNodes.map((n) => (
               <tr key={n.id} className="hover:bg-slate-800/80">
                 <td className="px-4 py-2 text-sm text-slate-100">{n.id}</td>
-                <td className="px-4 py-2 text-sm text-slate-300">
-                  {n.status}
-                </td>
+                <td className="px-4 py-2 text-sm text-slate-300">{n.status}</td>
                 <td className="px-4 py-2 text-sm text-slate-300">
                   {n.lastSeen ?? "—"}
                 </td>

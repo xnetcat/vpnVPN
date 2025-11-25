@@ -7,148 +7,131 @@ vpnVPN is a privacy-first, verified-data-flow VPN SaaS platform. It lets custome
 Key pillars:
 
 - **Privacy & Security:** No traffic logging, strong modern ciphers (WireGuard, OpenVPN, IKEv2), end-to-end TLS on control APIs, and a minimal-metadata model.
-- **Universal Deployment:** Node agent (`vpn-server`) runs as a binary or Docker container on Linux, macOS, and Windows hosts, including EC2 and generic VPS.
-- **Full SaaS Frontend:** A production-grade Next.js app on Vercel for marketing, signup, billing, user dashboards, and admin operations.
-- **Verifiable Data Flow:** All cross-service communication is explicit, documented, and testable end-to-end in local and production-like environments (no mock APIs in the main flows).
+- **Universal Deployment:** Node agent (`vpn-server`) runs as a binary or Docker container on Linux, macOS, and Windows hosts.
+- **Full SaaS Frontend:** Production-grade Next.js app on Vercel for marketing, signup, billing, user dashboards, and admin operations.
+- **Verifiable Data Flow:** All cross-service communication is explicit, documented, and testable end-to-end.
 
 ## 2. System Architecture
 
-### 2.1 Frontend App (`web-app`)
+### 2.1 Frontend App (`apps/web`)
 
 Full-stack Next.js SaaS application hosted on **Vercel**.
 
 - **Roles**
   - Public: landing, pricing, docs, signup/login.
-  - User: dashboard to view subscription status, manage devices, download configs/QR codes, pick servers/regions, and view aggregate usage.
-  - Admin: secure panel to monitor the fleet, manage users and peers, issue/revoke node tokens, and inspect proxy pool status.
+  - User: dashboard to view subscription status, manage devices, download configs/QR codes, pick servers/regions.
+  - Admin: secure panel to monitor the fleet, manage users and peers, issue/revoke node tokens.
 - **SaaS Capabilities**
-  - **Authentication:** NextAuth.js (Auth.js) with GitHub, Google, and email (magic link).
-  - **Billing:** Stripe subscriptions (checkout, portal, webhooks) for monthly/yearly plans.
-  - **Notifications:** Transactional email (welcome, billing changes, security alerts) via Resend or SendGrid.
-  - **Access Control:** RBAC and subscription gating (`requirePaidUser`) for all paid endpoints and pages.
+  - **Authentication:** NextAuth.js with GitHub, Google, and email (magic link).
+  - **Billing:** Stripe subscriptions (checkout, portal, webhooks) for multi-tier plans.
+  - **Notifications:** Transactional email via Resend.
+  - **Access Control:** RBAC and subscription gating for paid endpoints.
 - **Tech Stack**
-  - Next.js App Router, React, TypeScript (strict), Tailwind CSS, Prisma + PostgreSQL, Stripe, AWS SDK.
-- **Hosting & Best Practices**
-  - Deployed on Vercel with environment variables managed via Vercel project settings.
-  - Sensitive values never committed; no `.env` files in git.
-  - Uses Vercel Edge/Node runtimes for middleware and API routes where appropriate.
+  - Next.js App Router, React, TypeScript, Tailwind CSS, tRPC, Prisma + PostgreSQL, Stripe.
 
-### 2.2 Control Plane (AWS)
+### 2.2 Control Plane (`services/control-plane`)
 
-Central API and state store that coordinates users, peers, and nodes.
+Bun/Fastify HTTP API backed by PostgreSQL via Prisma.
 
 - **Responsibilities**
-  - **Server Registry:** VPN nodes self-register and send periodic heartbeats.
-  - **Peer Management:** Stores and serves allowed peers (device public keys, allowed IPs) to nodes.
-  - **Proxy Pool:** Ingests, normalizes, and exposes a pool of HTTP(S) proxies for advanced features.
-  - **Billing & Entitlements:** Receives Stripe webhooks and keeps subscription state in sync.
-- **Infrastructure**
-  - AWS API Gateway (HTTP API v2) → container-based Lambda functions (Node.js 20.x) for each endpoint.
-  - DynamoDB tables:
-    - `vpnServers`: node registry (id, status, lastSeen, protocols, metadata).
-    - `vpnPeers`: device peers (publicKey, userId, allowedIps, server assignment).
-    - `vpnTokens`: node registration tokens.
-    - `proxies`: proxy pool items and metadata.
-  - Provisioned and updated via Pulumi (TypeScript), with separate stacks for `global` and regional resources.
+  - **Server Registry:** VPN nodes self-register and can be listed.
+  - **Peer Management:** Stores and serves allowed peers to nodes.
+  - **Token Management:** Issue and revoke node registration tokens.
+- **Endpoints**
+  - `POST /server/register` — Node registration (bearer token auth).
+  - `GET /server/peers` — Peer list for a server (bearer token auth).
+  - `GET /servers` — List all servers (API key auth).
+  - `POST /peers` — Create/update peer (API key auth).
+  - `POST /peers/revoke-for-user` — Revoke all peers for a user (API key auth).
+  - `DELETE /peers/:publicKey` — Revoke specific peer (API key auth).
 
-### 2.3 VPN Node Agent (`vpn-server`)
+### 2.3 Metrics Service (`services/metrics`)
 
-Rust binary (and Docker image) that runs on host machines and controls underlying VPN daemons.
+Bun/Fastify HTTP API for vpn-server metrics ingestion.
+
+- **Endpoint:** `POST /metrics/vpn` — Accepts CPU, memory, active peers, and region data.
+- Persists metrics to PostgreSQL for dashboard views.
+
+### 2.4 VPN Node Agent (`apps/vpn-server`)
+
+Rust binary (and Docker image) that runs on host machines.
 
 - **Protocols**
   - WireGuard (primary, high-performance).
   - OpenVPN (compatibility).
   - IKEv2/IPsec (enterprise and OS-native support).
 - **Capabilities**
-  - **Self-Registration:** On startup, calls `POST /server/register` with its WireGuard public key, listen ports, and host metadata.
-  - **Sync Loop:** On a fixed interval, calls `GET /server/peers` and applies peers to all enabled backends.
-  - **Health & Metrics:** Publishes aggregate metrics (active sessions, bytes per protocol) via `POST /server/heartbeat` and CloudWatch.
-  - **Doctor Mode:** `vpn-server doctor` checks for required binaries, kernel modules, TUN/TAP devices, and AWS environment when applicable.
+  - **Self-Registration:** On startup, calls `POST /server/register` with WireGuard public key, listen ports, and host metadata.
+  - **Sync Loop:** Periodically calls `GET /server/peers` and applies peers to all enabled backends.
+  - **Health & Metrics:** Publishes aggregate metrics via the metrics service.
+  - **Admin API:** Exposes `/health`, `/metrics`, `/status`, `/pubkey` endpoints.
 - **Configuration**
-  - Primary via CLI flags (e.g. `vpn-server run --api-url ... --token ... --listen-port 51820`).
-  - Environment variables are supported as a convenience, but `.env` files are not required or recommended for production.
+  - Primary via CLI flags and environment variables.
 
 ## 3. Privacy, Security & Data Model
 
 ### 3.1 Privacy Guarantees
 
-- **No Traffic Logging**
-  - VPN protocols (WireGuard, OpenVPN, IKEv2) are configured with logging disabled or minimized to operational errors.
-  - No packet contents or per-flow metadata are stored.
-- **Minimal Metadata**
-  - Nodes and control plane only exchange:
-    - Aggregate active session counts.
-    - Aggregate bytes in/out per protocol.
-    - Device public keys and allowed IPs.
-  - No long-term storage of client IP addresses or DNS queries.
-- **Encryption**
+- **No Traffic Logging:** VPN protocols are configured with logging disabled.
+- **Minimal Metadata:** Only aggregate session counts, bytes in/out, and device public keys are stored.
+- **Encryption:**
   - WireGuard: ChaCha20-Poly1305.
-  - OpenVPN: AES-256-GCM (or equivalent modern cipher suites).
-  - IKEv2: strongSwan with modern proposals (e.g. AES-256 + SHA-256 + PFS).
-  - All control-plane HTTP APIs served over TLS (HTTPS) in production.
+  - OpenVPN: AES-256-GCM.
+  - IKEv2: strongSwan with modern proposals.
+  - All control APIs served over TLS.
 
 ### 3.2 Logical Data Model
 
-- **User (Postgres)**
-  - `id`, `email`, `name`, `stripeCustomerId`, timestamps.
-  - `subscriptions[]`, `devices[]`, `notificationPreferences`.
-- **Subscription (Postgres)**
-  - `id`, `userId`, `stripeSubscriptionId`, `status`, `priceId`, `currentPeriodEnd`.
-- **Device / Peer**
-  - In Postgres: `Device` (UI-level entity with `id`, `userId`, `name`, `publicKey`).
-  - In DynamoDB: `vpnPeers` (network-level entity with `publicKey`, `userId`, `allowedIps`, `createdAt`, `serverAssignment`).
-- **Server (DynamoDB)**
-  - `vpnServers`: `id` (node identifier), `publicIp`, `status`, `lastSeen`, `protocols`, `metrics`, `metadata`.
-- **Proxy (DynamoDB)**
-  - `proxies`: `proxyId`, `type`, `ip`, `port`, `latency`, `score`, `country`, `lastValidated`, `source`.
+- **User (Postgres):** `id`, `email`, `name`, `stripeCustomerId`, timestamps.
+- **Subscription (Postgres):** `stripeSubscriptionId`, `status`, `priceId`, `tier`, `currentPeriodEnd`.
+- **Device (Postgres):** UI-level entity with `name`, `publicKey`, `serverId`.
+- **VpnPeer (Postgres):** Network-level entity with `publicKey`, `userId`, `allowedIps`, `serverId`.
+- **VpnServer (Postgres):** `id`, `status`, `lastSeen`, `metadata`.
+- **VpnToken (Postgres):** Node registration tokens with `label`, `usageCount`, `active`.
+- **VpnMetric (Postgres):** Time-series metrics per server.
 
 ### 3.3 VPN Server Control Loop
 
-1. **Startup**
-   - Parse CLI args: `--api-url`, `--token`, `--listen-port`, optional flags for enabled protocols.
-   - Run `vpn-server doctor` implicitly in non-strict mode to warn about missing capabilities.
-   - Generate or load WireGuard private key and configuration.
-2. **Register**
-   - Call `POST /server/register` with:
-     - Node id (instance ID or generated UUID).
-     - Public IP (if detectable) and WireGuard public key.
-     - Listen ports and enabled protocols.
-   - Control plane validates token from `vpnTokens` and writes to `vpnServers`.
-3. **Sync Loop**
-   - Every N seconds:
-     - Call `GET /server/peers` (authenticated via bearer token).
-     - Receive a list of peers (`publicKey`, `allowedIps`, optional `endpoint`) assigned to this node.
-     - Compute a diff vs current kernel/daemon state and apply changes via WireGuard/OpenVPN/IPsec backends.
-4. **Metrics**
-   - On a separate interval:
-     - Collect aggregate session counts and bytes sent/received per protocol.
-     - Call `POST /server/heartbeat` with a small JSON payload.
-     - Publish CloudWatch metrics in the `vpnVPN` namespace for autoscaling and observability.
+1. **Startup:** Parse CLI args, run diagnostics, generate/load WireGuard keys.
+2. **Register:** Call `POST /server/register` with node identity and public key.
+3. **Sync Loop:** Periodically fetch peers from control plane and apply to backends.
+4. **Metrics:** Report health and session counts to metrics service.
 
-### 3.4 Infrastructure as Code
+## 4. Infrastructure
 
-- **Pulumi (TypeScript)**
-  - `global` stack:
-    - ECR repositories for `vpn-server` and Lambda images.
-    - Control-plane API Gateway and container Lambdas.
-    - Observability (CloudWatch, AMP, Grafana).
-  - `region-*` stacks:
-    - Data-plane capacity (e.g., ASGs + NLB or ECS + NLB) that pull the `vpn-server` image.
-    - Security groups, routing, and autoscaling policies based on `ActiveSessions` metrics.
+### 4.1 Pulumi (TypeScript)
 
-## 4. End-to-End Data Flow
+- **`global` stack:**
+  - ECR repository for vpn-server images.
+  - Control-plane URL configuration.
+  - Observability (AMP, Grafana).
+- **`region-*` stacks:**
+  - VPC, NLB, security groups.
+  - EC2 Auto Scaling Group running vpn-server containers.
+  - Target-tracking autoscaling based on ActiveSessions metric.
+
+### 4.2 Deployment Options
+
+The control plane and metrics services are container-based and can run on:
+
+- AWS (ECS, EC2, EKS)
+- Kubernetes
+- Docker Compose
+- On-premises servers
+
+## 5. End-to-End Data Flow
 
 ```mermaid
 sequenceDiagram
     participant U as User (Browser)
-    participant F as Web App (Next.js on Vercel)
-    participant DB as Postgres (User Data)
+    participant F as Web App (Next.js)
+    participant DB as Postgres
     participant S as Stripe
-    participant CP as Control Plane API (AWS Lambda/DynamoDB)
-    participant VPN as VPN Node Agent (Rust)
-    participant WG as WireGuard Interface
+    participant CP as Control Plane
+    participant VPN as VPN Node
+    participant WG as WireGuard
 
-    Note over U, S: **1. User Subscription Flow**
+    Note over U, S: 1. User Subscription Flow
     U->>F: Sign Up / Login (SSO)
     U->>F: Purchase Subscription
     F->>S: Create Checkout Session
@@ -158,63 +141,63 @@ sequenceDiagram
     F->>DB: Update User (active=true)
     F->>U: Email Notification (Welcome)
 
-    Note over U, VPN: **2. Peer Provisioning Flow**
+    Note over U, VPN: 2. Peer Provisioning Flow
     U->>F: Dashboard -> "Add Device"
-    F->>F: Generate Client Keypair (JS)
+    F->>F: Generate Client Keypair
     F->>CP: POST /peers { publicKey, userId }
-    CP->>DB: Store Peer (dynamo)
+    CP->>DB: Store Peer
     F-->>U: Download .conf / QR Code
 
-    Note over VPN, CP: **3. VPN Node Registration & Sync**
+    Note over VPN, CP: 3. VPN Node Registration & Sync
     VPN->>VPN: Startup (CLI Args)
-    VPN->>CP: POST /server/register { ip, pubKey }
+    VPN->>CP: POST /server/register { id, publicKey }
     CP->>DB: Update Server Status (Online)
 
     loop Every 30s
         VPN->>CP: GET /server/peers
-        CP->>DB: Fetch Allowed Peers for Server
+        CP->>DB: Fetch Allowed Peers
         CP-->>VPN: List [ { pubKey, allowedIP } ... ]
-        VPN->>WG: Apply Diff (Add new, Remove old)
+        VPN->>WG: Apply Diff
     end
 
-    Note over VPN, CP: **4. Monitoring & Usage**
+    Note over VPN, CP: 4. Monitoring & Usage
     loop Every 1m
-        VPN->>WG: Collect Stats (Bytes, Sessions)
-        VPN->>CP: POST /server/heartbeat { stats }
+        VPN->>WG: Collect Stats
+        VPN->>CP: POST /metrics/vpn { stats }
         CP->>DB: Update Metrics
     end
 
-    Note over U, WG: **5. Connection**
+    Note over U, WG: 5. Connection
     U->>WG: Connect (UDP 51820)
-    WG->>WG: Handshake (Authenticated by Public Key)
+    WG->>WG: Handshake
     WG-->>U: Traffic Flowing
 ```
 
-## 5. Local Development & Testing (No Mocks)
+## 6. Local Development
 
-- Local development is done against real components:
-  - `web-app` in dev mode.
-  - Control plane deployed to LocalStack (DynamoDB, Lambda, API Gateway).
-  - `vpn-server` container running with `NET_ADMIN` and TUN in Docker.
-  - Postgres for Prisma.
-- All local integration tests exercise the same HTTP APIs as production; there are no mock control-plane implementations in the main test flow.
-- `local/test-flow.sh` (or equivalent) walks the real flow:
-  - Create a user in `web-app`.
-  - Run a Stripe test checkout.
-  - Let Stripe webhooks update subscription state.
-  - Add a device from the dashboard (which calls `POST /peers`).
-  - Start `vpn-server`, which registers and fetches peers.
-  - Verify the peer appears in the WireGuard configuration inside the container.
+Local development uses Docker Compose with real components:
 
-## 6. Operational Runbooks
+- `web-app` in dev mode
+- `control-plane` service with Postgres
+- `metrics` service
+- `vpn-server` container with `NET_ADMIN` capability
 
-- **Adding a Node**
-  - Provision a host (EC2, VPS, bare metal, or local server) with required VPN binaries.
-  - Generate or retrieve a node token from the admin panel.
-  - Run the `vpn-server` container or binary with `--api-url` and `--token`.
-  - The node self-registers and appears in the admin fleet view; once approved (optional), it starts receiving peers.
-- **Revoking a User or Device**
-  - Cancel or delete the user’s Stripe subscription (or mark the account as banned in the admin UI).
-  - Stripe webhook updates subscription state; the web app clears or flags peers.
-  - Control plane stops returning these peers from `GET /server/peers`.
-  - Nodes remove revoked peers on the next sync, cutting off VPN access.
+All integration tests exercise real HTTP APIs; no mock implementations.
+
+See `docs/LOCAL_DEV.md` for setup instructions.
+
+## 7. Operational Runbooks
+
+### Adding a Node
+
+1. Provision a host with required VPN binaries.
+2. Generate or retrieve a node token from the admin panel.
+3. Run `vpn-server` with `--api-url` and `--token`.
+4. The node self-registers and starts receiving peers.
+
+### Revoking a User or Device
+
+1. Cancel the user's Stripe subscription or mark the account as banned.
+2. Stripe webhook updates subscription state.
+3. Control plane marks peers as inactive.
+4. VPN nodes remove revoked peers on next sync.

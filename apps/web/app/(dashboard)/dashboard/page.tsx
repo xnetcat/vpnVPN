@@ -137,9 +137,7 @@ export default async function DashboardPage() {
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             <div>
               <div className="mb-1 text-sm text-slate-400">Plan</div>
-              <div className="font-medium text-slate-50">
-                {tierConfig.name}
-              </div>
+              <div className="font-medium text-slate-50">{tierConfig.name}</div>
             </div>
             <div>
               <div className="mb-1 text-sm text-slate-400">Status</div>

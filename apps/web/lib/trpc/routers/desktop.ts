@@ -2,8 +2,7 @@ import { z } from "zod";
 import { router, publicProcedure } from "../init";
 import { consumeDesktopCode } from "@/lib/desktopCodes";
 
-const ADMIN_BASE =
-  process.env.VPN_NODE_ADMIN_URL || "http://vpn-node:9090";
+const ADMIN_BASE = process.env.VPN_NODE_ADMIN_URL || "http://vpn-node:9090";
 
 export const desktopRouter = router({
   // Resolve a 6-digit desktop login code to the original NextAuth callback URL.
@@ -54,5 +53,3 @@ export const desktopRouter = router({
     }
   }),
 });
-
-

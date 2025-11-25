@@ -11,7 +11,7 @@ const WEB_BASE_URL = process.env.NEXTAUTH_URL || "http://localhost:3000";
 
 if (!resend) {
   console.warn(
-    "[email] RESEND_API_KEY not set. Email notifications will be skipped."
+    "[email] RESEND_API_KEY not set. Email notifications will be skipped.",
   );
 }
 
@@ -180,7 +180,7 @@ export async function sendEmail(context: EmailContext): Promise<void> {
     // so the frontend can surface an error instead of pretending success.
     if (context.template === "magic_link") {
       throw new Error(
-        "RESEND_API_KEY is not configured; cannot send magic link"
+        "RESEND_API_KEY is not configured; cannot send magic link",
       );
     }
     return;

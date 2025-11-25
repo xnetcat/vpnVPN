@@ -13,6 +13,10 @@ env:
   ECR_REPO_NAME: ${{ secrets.ECR_REPO_NAME }}
   AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
   CONTROL_PLANE_API_URL: ${{ secrets.CONTROL_PLANE_API_URL }}
+  # VPN Node Configuration (optional, with defaults)
+  VPN_DESIRED_INSTANCES: ${{ vars.VPN_DESIRED_INSTANCES || '2' }}
+  VPN_MIN_INSTANCES: ${{ vars.VPN_MIN_INSTANCES || '1' }}
+  VPN_MAX_INSTANCES: ${{ vars.VPN_MAX_INSTANCES || '10' }}
 
 jobs:
   deploy:
@@ -85,10 +89,9 @@ jobs:
           pulumi config set aws:region $AWS_REGION --stack region-us-east-1
           pulumi config set global:ecrRepoName $ECR_REPO_NAME --stack region-us-east-1
           pulumi config set region:imageTag ${{ steps.image.outputs.tag }} --stack region-us-east-1
-          pulumi config set region:minInstances 1 --stack region-us-east-1
-          pulumi config set region:maxInstances 3 --stack region-us-east-1
-          pulumi config set region:instanceCpu 1024 --stack region-us-east-1
-          pulumi config set region:instanceMemory 2048 --stack region-us-east-1
+          pulumi config set region:desiredInstances ${VPN_DESIRED_INSTANCES:-2} --stack region-us-east-1
+          pulumi config set region:minInstances ${VPN_MIN_INSTANCES:-1} --stack region-us-east-1
+          pulumi config set region:maxInstances ${VPN_MAX_INSTANCES:-10} --stack region-us-east-1
           pulumi config set region:adminCidr 0.0.0.0/0 --stack region-us-east-1
 
       - name: Pulumi up (region)

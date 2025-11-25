@@ -106,7 +106,7 @@ function SignInForm() {
       if (!result.ok || !result.url) {
         setCodeState("error");
         setCodeError(
-          "Invalid or expired code. Request a new one from the desktop app."
+          "Invalid or expired code. Request a new one from the desktop app.",
         );
         return;
       }

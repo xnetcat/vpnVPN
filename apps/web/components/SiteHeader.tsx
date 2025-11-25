@@ -16,28 +16,16 @@ export default async function SiteHeader() {
         <nav className="flex items-center gap-4 text-xs font-medium text-slate-300">
           {authed ? (
             <>
-              <Link
-                href="/dashboard"
-                className="hover:text-slate-50"
-              >
+              <Link href="/dashboard" className="hover:text-slate-50">
                 Dashboard
               </Link>
-              <Link
-                href="/servers"
-                className="hover:text-slate-50"
-              >
+              <Link href="/servers" className="hover:text-slate-50">
                 Servers
               </Link>
-              <Link
-                href="/proxies"
-                className="hover:text-slate-50"
-              >
+              <Link href="/proxies" className="hover:text-slate-50">
                 Proxies
               </Link>
-              <Link
-                href="/account"
-                className="hover:text-slate-50"
-              >
+              <Link href="/account" className="hover:text-slate-50">
                 Account
               </Link>
               <form action="/api/auth/signout" method="POST">
@@ -51,16 +39,10 @@ export default async function SiteHeader() {
             </>
           ) : (
             <>
-              <Link
-                href="/pricing"
-                className="hover:text-slate-50"
-              >
+              <Link href="/pricing" className="hover:text-slate-50">
                 Pricing
               </Link>
-              <Link
-                href="/auth/register"
-                className="hover:text-slate-50"
-              >
+              <Link href="/auth/register" className="hover:text-slate-50">
                 Register
               </Link>
               <Link

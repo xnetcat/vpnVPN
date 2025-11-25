@@ -21,7 +21,7 @@ export default async function DevicesPage() {
   const gate = await requirePaidUser();
   if (!gate.ok) {
     redirect(
-      gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing"
+      gate.reason === "unauthenticated" ? "/api/auth/signin" : "/pricing",
     );
   }
 

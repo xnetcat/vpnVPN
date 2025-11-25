@@ -26,7 +26,7 @@ export default async function DesktopPage({ searchParams }: DesktopPageProps) {
     redirect(
       gate.reason === "unauthenticated"
         ? "/auth/signin?desktop=1&callbackUrl=/desktop?desktop=1"
-        : "/pricing"
+        : "/pricing",
     );
   }
 

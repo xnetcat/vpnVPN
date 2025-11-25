@@ -5,7 +5,7 @@ describe("Tiers configuration", () => {
   it("should have correct Basic tier configuration", () => {
     const basic = TIERS.basic;
     expect(basic.name).toBe("Basic");
-    expect(basic.price).toBe(5);
+    expect(basic.price).toBe(10);
     expect(basic.deviceLimit).toBe(1);
     expect(basic.features).toContain("1 device");
   });
@@ -13,7 +13,7 @@ describe("Tiers configuration", () => {
   it("should have correct Pro tier configuration", () => {
     const pro = TIERS.pro;
     expect(pro.name).toBe("Pro");
-    expect(pro.price).toBe(12);
+    expect(pro.price).toBe(30);
     expect(pro.deviceLimit).toBe(5);
     expect(pro.features).toContain("5 devices");
     expect(pro.features).toContain("Priority support");
@@ -22,7 +22,7 @@ describe("Tiers configuration", () => {
   it("should have correct Enterprise tier configuration", () => {
     const enterprise = TIERS.enterprise;
     expect(enterprise.name).toBe("Enterprise");
-    expect(enterprise.price).toBe(29);
+    expect(enterprise.price).toBe(1000);
     expect(enterprise.deviceLimit).toBe(999);
     expect(enterprise.features).toContain("Unlimited devices");
     expect(enterprise.features).toContain("Dedicated support");

@@ -2,10 +2,9 @@ config:
   aws:region: us-east-1
   vpnvpn-infra:global:ecrRepoName: vpnvpn/rust-server
   vpnvpn-infra:region:imageTag: latest
+  vpnvpn-infra:region:desiredInstances: "2"
   vpnvpn-infra:region:minInstances: "1"
-  vpnvpn-infra:region:maxInstances: "3"
-  vpnvpn-infra:region:instanceCpu: "1024"
-  vpnvpn-infra:region:instanceMemory: "2048"
-  vpnvpn-infra:region:adminCidr: 0.0.0.0/0
+  vpnvpn-infra:region:maxInstances: "10"
   vpnvpn-infra:region:instanceType: t3.medium
-  vpnvpn-infra:region:targetSessionsPerInstance: "120"
+  vpnvpn-infra:region:adminCidr: 0.0.0.0/0
+  vpnvpn-infra:region:targetSessionsPerInstance: "100"
