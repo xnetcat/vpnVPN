@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   if (!sig || !webhookSecret) {
     return NextResponse.json(
       { error: "Missing signature/secret" },
-      { status: 400 },
+      { status: 400 }
     );
   }
   const body = await req.text();
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     const error = err as Error;
     return NextResponse.json(
       { error: `Webhook Error: ${error.message}` },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
@@ -39,9 +39,7 @@ export async function POST(req: Request) {
             ? session.subscription
             : (session.subscription as Stripe.Subscription | null)?.id;
         const customerId: string | undefined =
-          typeof session.customer === "string"
-            ? session.customer
-            : undefined;
+          typeof session.customer === "string" ? session.customer : undefined;
         const userId: string | undefined = session.metadata?.userId;
         if (!subscriptionId || !customerId) break;
         const sub = await stripe.subscriptions.retrieve(subscriptionId);
@@ -116,10 +114,11 @@ export async function POST(req: Request) {
       case "customer.subscription.deleted": {
         const subObj = event.data.object as Stripe.Subscription;
         const subscriptionId = subObj.id;
-        const customerId =
+        const customerId: string | undefined =
           typeof subObj.customer === "string"
             ? subObj.customer
-            : subObj.customer.id;
+            : subObj.customer?.id;
+        if (!customerId) break;
         const priceId = subObj.items?.data?.[0]?.price?.id;
         const status = subObj.status;
         const tier = priceId ? getTierFromPriceId(priceId) : "basic";
@@ -160,7 +159,7 @@ export async function POST(req: Request) {
                 {
                   userId: user.id,
                   error: e,
-                },
+                }
               );
             }
 
