@@ -307,9 +307,107 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
 }
 
 async fn run_admin(port: u16) {
-    async fn health() -> &'static str {
-        "ok"
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+
+    #[derive(serde::Serialize)]
+    struct HealthCheck {
+        status: &'static str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        active: Option<Vec<String>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
     }
+
+    #[derive(serde::Serialize)]
+    struct HealthResponse {
+        status: &'static str,
+        timestamp: String,
+        service: &'static str,
+        checks: std::collections::HashMap<String, HealthCheck>,
+    }
+
+    async fn health() -> impl IntoResponse {
+        let mut checks = std::collections::HashMap::new();
+
+        // VPN backends check
+        let vpn_check = if let Some(node) = crate::vpn::VPN_NODE.get() {
+            let statuses = node.collect_status();
+            let active_protocols: Vec<String> = statuses
+                .iter()
+                .filter(|s| s.running)
+                .map(|s| s.protocol.clone())
+                .collect();
+
+            if active_protocols.is_empty() {
+                HealthCheck {
+                    status: "error",
+                    active: Some(vec![]),
+                    error: Some("No VPN backends running".to_string()),
+                }
+            } else {
+                HealthCheck {
+                    status: "ok",
+                    active: Some(active_protocols),
+                    error: None,
+                }
+            }
+        } else {
+            HealthCheck {
+                status: "error",
+                active: None,
+                error: Some("VPN node not initialized".to_string()),
+            }
+        };
+        checks.insert("vpnBackends".to_string(), vpn_check);
+
+        // System resources check (basic sanity)
+        let mut sys = sysinfo::System::new();
+        sys.refresh_memory();
+        let total_mem = sys.total_memory();
+        let used_mem = sys.used_memory();
+        let mem_ratio = if total_mem > 0 {
+            (used_mem as f64 / total_mem as f64).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+
+        // Consider system unhealthy if memory usage exceeds 95%
+        let system_check = if mem_ratio > 0.95 {
+            HealthCheck {
+                status: "error",
+                active: None,
+                error: Some(format!("Memory usage critical: {:.1}%", mem_ratio * 100.0)),
+            }
+        } else {
+            HealthCheck {
+                status: "ok",
+                active: None,
+                error: None,
+            }
+        };
+        checks.insert("system".to_string(), system_check);
+
+        // Determine overall status
+        let has_error = checks.values().any(|c| c.status == "error");
+        let overall_status = if has_error { "unhealthy" } else { "healthy" };
+
+        let response = HealthResponse {
+            status: overall_status,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            service: "vpn-server",
+            checks,
+        };
+
+        let status_code = if has_error {
+            StatusCode::SERVICE_UNAVAILABLE
+        } else {
+            StatusCode::OK
+        };
+
+        (status_code, axum::Json(response))
+    }
+
     async fn metrics() -> (
         [(axum::http::header::HeaderName, axum::http::HeaderValue); 1],
         Vec<u8>,
