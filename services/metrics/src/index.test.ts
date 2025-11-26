@@ -6,6 +6,7 @@ vi.mock("@vpnvpn/db", () => ({
     vpnMetric: {
       create: vi.fn(),
     },
+    $queryRaw: vi.fn().mockResolvedValue([{ "?column?": 1 }]),
   },
 }));
 

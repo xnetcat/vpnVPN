@@ -8,6 +8,10 @@ vi.mock("@vpnvpn/db", () => ({
       create: vi.fn(),
       update: vi.fn(),
     },
+    vpnToken: {
+      upsert: vi.fn(),
+    },
+    $queryRaw: vi.fn().mockResolvedValue([{ "?column?": 1 }]),
   },
 }));
 

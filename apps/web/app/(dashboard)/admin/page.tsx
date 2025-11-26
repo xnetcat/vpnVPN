@@ -145,17 +145,17 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         </Link>
 
         <Link
-          href="/admin/vpn-metrics"
+          href="/admin/analytics"
           className="rounded-lg border border-slate-800 bg-slate-900/80 p-6 shadow-sm shadow-slate-900/40 transition-shadow hover:shadow-md"
         >
           <div className="flex items-center gap-3 mb-2">
             <div className="rounded-lg bg-orange-500/10 p-2">
               <BarChart3 className="h-5 w-5 text-orange-400" />
             </div>
-            <h3 className="font-semibold text-slate-50">VPN Metrics</h3>
+            <h3 className="font-semibold text-slate-50">Analytics</h3>
           </div>
           <p className="text-sm text-slate-400">
-            View aggregated sessions and load by server and country
+            Usage metrics, trends, tier breakdown, and system health
           </p>
         </Link>
 

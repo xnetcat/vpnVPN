@@ -21,6 +21,7 @@
 - [x] Admin panel (token management, fleet monitoring, server provisioning)
 - [x] Dashboard with real metrics from control plane
 - [x] Desktop download links with S3 integration
+- [x] Advanced usage analytics dashboard (tier breakdown, geographic distribution, historical trends)
 
 ### Control Plane (`services/control-plane`)
 
@@ -30,6 +31,7 @@
 - [x] Token-based VPN node authentication
 - [x] API key authentication for web app calls
 - [x] Lambda-compatible deployment (dual-mode: Lambda + standalone)
+- [x] Rate limiting on all endpoints (per-IP and per-token)
 
 ### Metrics Service (`services/metrics`)
 
@@ -63,6 +65,7 @@
 - [x] S3 bucket for desktop releases
 - [x] Lambda + API Gateway for control-plane
 - [x] Lambda + API Gateway for metrics service
+- [x] Multi-region VPN deployment (10 production regions)
 
 ### CI/CD (`.github/workflows`)
 
@@ -73,34 +76,31 @@
 - [x] Desktop build and S3 upload
 - [x] CrossGuard policy tests
 
+### Documentation
+
+- [x] CI/CD documentation (`docs/CI_CD.md`)
+- [x] Architecture overview (`docs/ARCHITECTURE.md`)
+- [x] API contract documentation (`docs/API_REFERENCE.md`)
+- [x] Secrets management guide (`docs/SECRETS_MANAGEMENT.md`)
+- [x] VPN node deployment runbook (`docs/VPN_NODE_RUNBOOK.md`)
+- [x] Troubleshooting guide (`docs/TROUBLESHOOTING.md`)
+- [x] Production setup guide (`docs/PRODUCTION_SETUP.md`)
+- [x] Backup and disaster recovery (`docs/BACKUP_RECOVERY.md`)
+- [x] Certificate rotation guide (`docs/CERTIFICATE_ROTATION.md`)
+
 ---
 
 ## Pending Tasks
 
 ### Production Readiness
 
+These tasks require external service configuration (follow guides in `docs/PRODUCTION_SETUP.md`):
+
 - [ ] Configure production Stripe webhooks
 - [ ] Set up production Resend sender domain
 - [ ] Create production VPN node tokens
 - [ ] End-to-end production flow test
 - [ ] SSL certificates for custom domains
-
-### Documentation
-
-- [x] CI/CD documentation
-- [x] Architecture overview
-- [ ] API contract documentation for all endpoints
-- [ ] Secrets management guide (Vercel, AWS)
-- [ ] VPN node deployment runbook
-- [ ] Troubleshooting guide
-
-### Optional Enhancements
-
-- [ ] Additional VPN regions
-- [ ] Usage analytics dashboard
-- [ ] Rate limiting on control-plane endpoints
-- [ ] Backup and disaster recovery procedures
-- [ ] Automated certificate rotation
 
 ---
 
@@ -110,15 +110,15 @@
 
 #### Control Plane (`services/control-plane`)
 
-| Endpoint                 | Method | Auth         | Description              |
-| ------------------------ | ------ | ------------ | ------------------------ |
-| `/health`                | GET    | None         | Health check             |
-| `/server/register`       | POST   | Bearer token | VPN node registration    |
-| `/server/peers`          | GET    | Bearer token | Fetch peers for a server |
-| `/servers`               | GET    | API key      | List all servers         |
-| `/peers`                 | POST   | API key      | Create/update peer       |
-| `/peers/revoke-for-user` | POST   | API key      | Revoke user's peers      |
-| `/peers/:publicKey`      | DELETE | API key      | Revoke specific peer     |
+| Endpoint                 | Method | Auth         | Rate Limit | Description              |
+| ------------------------ | ------ | ------------ | ---------- | ------------------------ |
+| `/health`                | GET    | None         | 300/min    | Health check             |
+| `/server/register`       | POST   | Bearer token | 20/min     | VPN node registration    |
+| `/server/peers`          | GET    | Bearer token | 100/min    | Fetch peers for a server |
+| `/servers`               | GET    | API key      | 100/min    | List all servers         |
+| `/peers`                 | POST   | API key      | 30/min     | Create/update peer       |
+| `/peers/revoke-for-user` | POST   | API key      | 30/min     | Revoke user's peers      |
+| `/peers/:publicKey`      | DELETE | API key      | 30/min     | Revoke specific peer     |
 
 #### Metrics (`services/metrics`)
 
@@ -126,6 +126,35 @@
 | -------------- | ------ | ------------------------- |
 | `/health`      | GET    | Health check              |
 | `/metrics/vpn` | POST   | Ingest VPN server metrics |
+
+### Documentation Index
+
+| Document                       | Description                        |
+| ------------------------------ | ---------------------------------- |
+| `docs/ARCHITECTURE.md`         | System architecture overview       |
+| `docs/CI_CD.md`                | CI/CD workflows and deployment     |
+| `docs/API_REFERENCE.md`        | Complete API documentation         |
+| `docs/PRODUCTION_SETUP.md`     | Production configuration guide     |
+| `docs/SECRETS_MANAGEMENT.md`   | Secrets and credentials management |
+| `docs/VPN_NODE_RUNBOOK.md`     | VPN node deployment and operations |
+| `docs/TROUBLESHOOTING.md`      | Common issues and solutions        |
+| `docs/BACKUP_RECOVERY.md`      | Backup and disaster recovery       |
+| `docs/CERTIFICATE_ROTATION.md` | Certificate and key rotation       |
+
+### VPN Regions (Production)
+
+| Region         | Location                  | Nodes |
+| -------------- | ------------------------- | ----- |
+| us-east-1      | US East (N. Virginia)     | 3     |
+| us-west-2      | US West (Oregon)          | 2     |
+| ca-central-1   | Canada (Montreal)         | 1     |
+| eu-west-1      | Europe (Ireland)          | 2     |
+| eu-central-1   | Europe (Frankfurt)        | 2     |
+| eu-north-1     | Europe (Stockholm)        | 1     |
+| ap-southeast-1 | Asia Pacific (Singapore)  | 2     |
+| ap-northeast-1 | Asia Pacific (Tokyo)      | 2     |
+| ap-south-1     | Asia Pacific (Mumbai)     | 1     |
+| sa-east-1      | South America (São Paulo) | 1     |
 
 ### Environment Variables
 
