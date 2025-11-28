@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+#[cfg(any(windows, target_os = "linux"))]
 use tauri_plugin_deep_link::DeepLinkExt;
 
 #[derive(Serialize)]
@@ -12,6 +14,147 @@ struct Health {
 #[tauri::command]
 fn health_check() -> Health {
     Health { ok: true }
+}
+
+/// Status of VPN tool availability on the system.
+#[derive(Serialize, Clone)]
+struct VpnToolsStatus {
+    wireguard_available: bool,
+    wireguard_path: Option<String>,
+    openvpn_available: bool,
+    openvpn_path: Option<String>,
+    ikev2_available: bool,
+    ikev2_path: Option<String>,
+}
+
+/// Check if a command exists and is executable.
+fn command_exists(cmd: &str) -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        // On Windows, try `where` to find the command
+        let output = std::process::Command::new("where")
+            .arg(cmd)
+            .output()
+            .ok()?;
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .next()?
+                .trim()
+                .to_string();
+            if !path.is_empty() {
+                return Some(path);
+            }
+        }
+        None
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // On Unix, use `which` to find the command
+        let output = std::process::Command::new("which")
+            .arg(cmd)
+            .output()
+            .ok()?;
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() {
+                return Some(path);
+            }
+        }
+        None
+    }
+}
+
+#[tauri::command]
+fn detect_vpn_tools() -> VpnToolsStatus {
+    let settings = load_settings().unwrap_or_default();
+
+    // Check WireGuard availability
+    let (wireguard_available, wireguard_path) = {
+        #[cfg(target_os = "windows")]
+        {
+            // On Windows, check for wireguard.exe CLI
+            let custom_path = settings.wireguard_cli_path.as_deref();
+            if let Some(path) = custom_path {
+                if std::path::Path::new(path).exists() {
+                    (true, Some(path.to_string()))
+                } else {
+                    (false, None)
+                }
+            } else {
+                let found = command_exists("wireguard.exe")
+                    .or_else(|| command_exists("wireguard"));
+                (found.is_some(), found)
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            // On Linux/macOS, check for wg-quick
+            let custom_path = settings.wg_quick_path.as_deref();
+            if let Some(path) = custom_path {
+                if std::path::Path::new(path).exists() || command_exists(path).is_some() {
+                    (true, Some(path.to_string()))
+                } else {
+                    (false, None)
+                }
+            } else {
+                let found = command_exists("wg-quick");
+                (found.is_some(), found)
+            }
+        }
+    };
+
+    // Check OpenVPN availability
+    let (openvpn_available, openvpn_path) = {
+        let custom_path = settings.openvpn_path.as_deref();
+        if let Some(path) = custom_path {
+            if std::path::Path::new(path).exists() || command_exists(path).is_some() {
+                (true, Some(path.to_string()))
+            } else {
+                (false, None)
+            }
+        } else {
+            #[cfg(target_os = "windows")]
+            let found = command_exists("openvpn.exe").or_else(|| command_exists("openvpn"));
+            #[cfg(not(target_os = "windows"))]
+            let found = command_exists("openvpn");
+            (found.is_some(), found)
+        }
+    };
+
+    // Check IKEv2/IPsec availability
+    let (ikev2_available, ikev2_path) = {
+        #[cfg(target_os = "macos")]
+        {
+            // macOS has built-in IKEv2 support via System Preferences / networksetup
+            let found = command_exists("networksetup");
+            (found.is_some(), found)
+        }
+        #[cfg(target_os = "linux")]
+        {
+            // Linux typically uses strongSwan (ipsec command)
+            let found = command_exists("ipsec")
+                .or_else(|| command_exists("strongswan"))
+                .or_else(|| command_exists("nmcli"));
+            (found.is_some(), found)
+        }
+        #[cfg(target_os = "windows")]
+        {
+            // Windows has built-in IKEv2 support via rasdial/PowerShell
+            let found = command_exists("rasdial");
+            (found.is_some(), found)
+        }
+    };
+
+    VpnToolsStatus {
+        wireguard_available,
+        wireguard_path,
+        openvpn_available,
+        openvpn_path,
+        ikev2_available,
+        ikev2_path,
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -341,18 +484,19 @@ fn main() {
     tauri::Builder::default()
         // Deep link plugin registers the `vpnvpn://` scheme on all desktop OSes.
         .plugin(tauri_plugin_deep_link::init())
-        .setup(|app| {
+        .setup(|_app| {
             // On Linux and Windows, ensure the statically configured schemes are
             // registered for the current executable (handy in dev and portable builds).
             #[cfg(any(windows, target_os = "linux"))]
             {
-                app.deep_link().register_all()?;
+                _app.deep_link().register_all()?;
             }
 
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             health_check,
+            detect_vpn_tools,
             get_desktop_settings,
             update_desktop_settings,
             apply_vpn_config,

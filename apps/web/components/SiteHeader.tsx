@@ -1,7 +1,21 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 
 export default async function SiteHeader() {
+  // Hide the header on desktop routes - DesktopShell provides its own header
+  const headersList = await headers();
+  const pathname = headersList.get("x-pathname") || "";
+  const search = headersList.get("x-search") || "";
+
+  // Check if this is a desktop route or desktop auth flow
+  const isDesktopRoute =
+    pathname.startsWith("/desktop") || search.includes("desktop=1");
+
+  if (isDesktopRoute) {
+    return null;
+  }
+
   const session = await getSession();
   const authed = Boolean((session?.user as any)?.id);
   return (

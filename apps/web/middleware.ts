@@ -57,11 +57,20 @@ function rewriteForSubdomains(req: NextRequest): NextResponse | null {
 export function middleware(req: NextRequest) {
   const rewritten = rewriteForSubdomains(req);
   if (rewritten) {
+    // Add pathname and search params headers for rewritten requests
+    rewritten.headers.set("x-pathname", req.nextUrl.pathname);
+    rewritten.headers.set("x-search", req.nextUrl.search);
     return rewritten;
   }
 
   const { pathname } = req.nextUrl;
-  if (!protectedPaths.has(pathname)) return NextResponse.next();
+
+  // Add pathname and search params headers so server components can access them
+  const response = NextResponse.next();
+  response.headers.set("x-pathname", pathname);
+  response.headers.set("x-search", req.nextUrl.search);
+
+  if (!protectedPaths.has(pathname)) return response;
 
   const hasSession =
     req.cookies.has("__Secure-next-auth.session-token") ||
@@ -74,7 +83,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {

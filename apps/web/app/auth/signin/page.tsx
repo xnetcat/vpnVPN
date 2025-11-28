@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import type { FormEvent } from "react";
 import { Suspense, useState } from "react";
 import { trpc } from "@/lib/trpc/client";
+import { Shield, Mail, Key, ArrowRight } from "lucide-react";
 
 type MagicState = "idle" | "sending" | "sent" | "error";
 type CodeState = "idle" | "verifying" | "error" | "success";
@@ -81,7 +82,7 @@ function SignInForm() {
 
       if (result?.error) {
         setMagicState("error");
-        setMagicError("Failed to send magic link. Please try again.");
+        setMagicError("Failed to send code. Please try again.");
         return;
       }
 
@@ -106,7 +107,7 @@ function SignInForm() {
       if (!result.ok || !result.url) {
         setCodeState("error");
         setCodeError(
-          "Invalid or expired code. Request a new one from the desktop app.",
+          "Invalid or expired code. Request a new one from the desktop app."
         );
         return;
       }
@@ -129,6 +130,144 @@ function SignInForm() {
     }
   };
 
+  // Desktop-specific sign-in flow - code only
+  if (isDesktopParam) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+        <div className="w-full max-w-md">
+          {/* Logo and Title */}
+          <div className="mb-8 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600">
+              <Shield className="h-8 w-8 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-100">
+              vpnVPN Desktop
+            </h1>
+            <p className="mt-2 text-sm text-slate-400">
+              Sign in with a one-time code sent to your email
+            </p>
+          </div>
+
+          {/* Sign In Card */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl shadow-slate-900/40">
+            {/* Step 1: Email */}
+            <form onSubmit={handleMagicLinkSubmit} className="space-y-4">
+              <div>
+                <label className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-200">
+                  <Mail className="h-4 w-4 text-slate-400" />
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-50 shadow-sm placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={magicState === "sending" || !email}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:from-emerald-400 hover:to-teal-400 disabled:from-slate-600 disabled:to-slate-600 disabled:text-slate-400"
+              >
+                {magicState === "sending" ? (
+                  "Sending code..."
+                ) : (
+                  <>
+                    Send verification code
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+
+              {magicState === "sent" && (
+                <div className="rounded-lg bg-emerald-500/10 p-3">
+                  <p className="text-center text-sm text-emerald-400">
+                    Code sent! Check your inbox and enter the 6-digit code
+                    below.
+                  </p>
+                </div>
+              )}
+
+              {magicState === "error" && magicError && (
+                <div className="rounded-lg bg-red-500/10 p-3">
+                  <p className="text-center text-sm text-red-400">
+                    {magicError}
+                  </p>
+                </div>
+              )}
+            </form>
+
+            {/* Divider */}
+            <div className="my-6 flex items-center gap-3">
+              <div className="h-px flex-1 bg-slate-800" />
+              <span className="text-xs uppercase tracking-wide text-slate-500">
+                Enter your code
+              </span>
+              <div className="h-px flex-1 bg-slate-800" />
+            </div>
+
+            {/* Step 2: Code Entry */}
+            <form onSubmit={handleCodeSubmit} className="space-y-4">
+              <div>
+                <label className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-200">
+                  <Key className="h-4 w-4 text-slate-400" />
+                  6-Digit Code
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="000000"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-center text-2xl font-mono tracking-[0.5em] text-slate-50 shadow-sm placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={codeState === "verifying" || code.length !== 6}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-100 transition-colors hover:bg-slate-700 disabled:opacity-50"
+              >
+                {codeState === "verifying" ? (
+                  "Verifying..."
+                ) : codeState === "success" ? (
+                  <>
+                    <span className="text-emerald-400">Signed in!</span>
+                  </>
+                ) : (
+                  "Sign in with code"
+                )}
+              </button>
+
+              {codeState === "error" && codeError && (
+                <div className="rounded-lg bg-red-500/10 p-3">
+                  <p className="text-center text-sm text-red-400">
+                    {codeError}
+                  </p>
+                </div>
+              )}
+            </form>
+          </div>
+
+          {/* Footer */}
+          <div className="mt-6 text-center">
+            <p className="text-xs text-slate-500">
+              By signing in, you agree to vpnVPN&apos;s terms of service
+              <br />
+              and acknowledge our strict no-logging policy.
+            </p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Standard web sign-in flow
   return (
     <main className="flex min-h-[calc(100vh-65px)] items-center justify-center bg-slate-950 px-4">
       <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-lg shadow-slate-900/40">
@@ -136,14 +275,13 @@ function SignInForm() {
           Sign in
         </h1>
         <p className="mt-2 text-sm text-slate-400">
-          {isDesktopParam
-            ? "Secure access to your vpnVPN account. Enter your email to receive a one-time 6-digit code for the desktop app, or continue with your preferred provider."
-            : "Secure access to your vpnVPN account. Sign in with your email using a one-time magic link, or continue with your preferred provider."}
+          Secure access to your vpnVPN account. Sign in with your email using a
+          one-time magic link, or continue with your preferred provider.
         </p>
 
         <form onSubmit={handleMagicLinkSubmit} className="mt-6 space-y-3">
           <label className="block text-sm font-medium text-slate-200">
-            {isDesktopParam ? "Email verification code" : "Email magic link"}
+            Email magic link
             <input
               type="email"
               required
@@ -159,71 +297,18 @@ function SignInForm() {
             className="flex w-full items-center justify-center rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-60"
           >
             {magicState === "sending"
-              ? isDesktopParam
-                ? "Sending code..."
-                : "Sending magic link..."
-              : isDesktopParam
-                ? "Send code"
-                : "Send magic link"}
+              ? "Sending magic link..."
+              : "Send magic link"}
           </button>
           {magicState === "sent" && (
             <p className="text-xs text-emerald-400">
-              {isDesktopParam
-                ? "Code sent. Check your inbox to complete sign-in."
-                : "Magic link sent. Check your inbox to complete sign-in."}
+              Magic link sent. Check your inbox to complete sign-in.
             </p>
           )}
           {magicState === "error" && magicError && (
             <p className="text-xs text-red-400">{magicError}</p>
           )}
         </form>
-
-        {isDesktopParam && (
-          <form
-            onSubmit={handleCodeSubmit}
-            className="mt-4 space-y-2 rounded-md border border-dashed border-slate-700 p-3 bg-slate-900/60"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-slate-200">
-                Have a 6‑digit desktop code?
-              </span>
-              {codeState === "success" && (
-                <span className="text-[11px] font-medium text-green-600">
-                  Signed in
-                </span>
-              )}
-            </div>
-            <p className="text-[11px] text-slate-400">
-              Open the email on this device, copy the 6‑digit code and paste it
-              here. We&apos;ll link your vpnVPN desktop app without relying on
-              OS deep links.
-            </p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                placeholder="123456"
-                className="w-24 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-center text-sm tracking-[0.3em] text-slate-50 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              />
-              <button
-                type="submit"
-                disabled={codeState === "verifying" || !code}
-                className="flex-1 rounded-md border border-slate-700 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-800 disabled:opacity-60"
-              >
-                {codeState === "verifying"
-                  ? "Verifying..."
-                  : "Sign in with code"}
-              </button>
-            </div>
-            {codeState === "error" && codeError && (
-              <p className="text-[11px] text-red-400">{codeError}</p>
-            )}
-          </form>
-        )}
 
         <div className="mt-6 flex items-center gap-3">
           <div className="h-px flex-1 bg-slate-800" />
@@ -261,8 +346,8 @@ export default function SignInPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-[calc(100vh-65px)] items-center justify-center">
-          Loading...
+        <div className="flex min-h-[calc(100vh-65px)] items-center justify-center bg-slate-950">
+          <div className="text-slate-400">Loading...</div>
         </div>
       }
     >
