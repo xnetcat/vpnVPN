@@ -19,6 +19,17 @@ type MapServer = {
   sessions: number;
 };
 
+// Client-side logging helper
+const log = (...args: unknown[]) => {
+  // eslint-disable-next-line no-console
+  console.log("[DesktopShell]", ...args);
+};
+
+const logError = (...args: unknown[]) => {
+  // eslint-disable-next-line no-console
+  console.error("[DesktopShell]", ...args);
+};
+
 // Deterministically place a server "pin" on the map using a hash of its id.
 function positionForServer(id: string): { top: string; left: string } {
   let hash = 0;
@@ -38,7 +49,7 @@ function isDesktopShell(): boolean {
 
 async function applyVpnConfig(
   protocol: Protocol,
-  config: string,
+  config: string
 ): Promise<void> {
   if (!isDesktopShell()) return;
   const anyWin = window as any;
@@ -52,6 +63,17 @@ async function disconnectVpn(protocol: Protocol): Promise<void> {
 }
 
 export default function DesktopShell() {
+  // Log component mount
+  useEffect(() => {
+    log("DesktopShell mounted");
+    log("isDesktopShell:", isDesktopShell());
+    log(
+      "window location:",
+      typeof window !== "undefined" ? window.location.href : "N/A"
+    );
+    return () => log("DesktopShell unmounted");
+  }, []);
+
   const serversQuery = trpc.servers.list.useQuery();
   const utils = trpc.useUtils();
 
@@ -67,6 +89,21 @@ export default function DesktopShell() {
   const [openvpnPath, setOpenvpnPath] = useState("");
   const [wireguardCliPath, setWireguardCliPath] = useState("");
 
+  // Log servers query state
+  useEffect(() => {
+    log("serversQuery state:", {
+      isLoading: serversQuery.isLoading,
+      isError: serversQuery.isError,
+      error: serversQuery.error?.message,
+      dataLength: serversQuery.data?.length,
+    });
+  }, [
+    serversQuery.isLoading,
+    serversQuery.isError,
+    serversQuery.error,
+    serversQuery.data,
+  ]);
+
   // Discover vpn-node WireGuard public key via tRPC when not provided by env.
   const pubkeyQuery = trpc.desktop.serverPubkey.useQuery(undefined, {
     enabled:
@@ -76,7 +113,7 @@ export default function DesktopShell() {
 
   const servers: MapServer[] = useMemo(
     () => serversQuery.data ?? [],
-    [serversQuery.data],
+    [serversQuery.data]
   );
 
   const selectedServer =
@@ -200,7 +237,7 @@ export default function DesktopShell() {
     (async () => {
       try {
         const s = (await anyWin.__TAURI__.core.invoke(
-          "get_desktop_settings",
+          "get_desktop_settings"
         )) as {
           preferred_protocol?: Protocol;
           auto_connect?: boolean;
@@ -240,7 +277,7 @@ export default function DesktopShell() {
       })
       .catch((e: unknown) =>
         // eslint-disable-next-line no-console
-        console.error("Failed to update desktop settings file", e),
+        console.error("Failed to update desktop settings file", e)
       );
   }, [protocol, autoConnect, wgQuickPath, openvpnPath, wireguardCliPath]);
 
@@ -295,7 +332,7 @@ export default function DesktopShell() {
       } catch (e) {
         console.error("Failed to apply VPN config via Tauri", e);
         setError(
-          "Config generated, but failed to apply VPN settings locally. You may need to import it manually.",
+          "Config generated, but failed to apply VPN settings locally. You may need to import it manually."
         );
       }
       setStatus("connected");
@@ -309,7 +346,7 @@ export default function DesktopShell() {
     setConfig(null);
     setStatus("disconnected");
     void disconnectVpn(protocol).catch((e) =>
-      console.error("Failed to disconnect VPN via Tauri", e),
+      console.error("Failed to disconnect VPN via Tauri", e)
     );
   };
 
@@ -321,6 +358,14 @@ export default function DesktopShell() {
       : protocol === "openvpn"
         ? "OpenVPN"
         : "IKEv2 / IPsec";
+
+  // Log when the main UI is about to render
+  log("Rendering main UI", {
+    serversCount: servers.length,
+    selectedId,
+    status,
+    protocol,
+  });
 
   return (
     <main className="flex min-h-[calc(100vh-65px)] bg-slate-950 text-slate-50">
@@ -347,7 +392,7 @@ export default function DesktopShell() {
                 servers.find(
                   (s) =>
                     s.country?.toLowerCase().includes(term) ||
-                    s.region.toLowerCase().includes(term),
+                    s.region.toLowerCase().includes(term)
                 ) ?? null;
               if (found) setSelectedId(found.id);
             }}

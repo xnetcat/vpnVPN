@@ -18,6 +18,12 @@ interface ErrorInfo {
   details?: string;
 }
 
+// eslint-disable-next-line no-console
+const log = (...args: unknown[]) => console.log("[desktop-app]", ...args);
+// eslint-disable-next-line no-console
+const logError = (...args: unknown[]) =>
+  console.error("[desktop-app]", ...args);
+
 export default function App() {
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("loading");
@@ -25,33 +31,47 @@ export default function App() {
   const [retryCount, setRetryCount] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const loadTimeoutRef = useRef<number | null>(null);
+  // Track connection state in a ref to avoid stale closures in timeouts
+  const connectionStateRef = useRef<ConnectionState>("loading");
+
+  // Keep the ref in sync with state
+  useEffect(() => {
+    connectionStateRef.current = connectionState;
+    log("connectionState changed:", connectionState);
+  }, [connectionState]);
 
   // Check if we're online
   const checkOnline = useCallback(() => {
-    return navigator.onLine;
+    const online = navigator.onLine;
+    log("checkOnline:", online);
+    return online;
   }, []);
 
   // Check if the server is reachable
   const checkServerHealth = useCallback(async (): Promise<boolean> => {
+    log("checking server health at:", `${API_URL}/api/health`);
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      const response = await fetch(`${API_URL}/api/health`, {
+      await fetch(`${API_URL}/api/health`, {
         method: "HEAD",
         mode: "no-cors",
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
+      log("server health check passed");
       return true;
-    } catch {
+    } catch (err) {
+      logError("server health check failed:", err);
       return false;
     }
   }, []);
 
   // Handle iframe load success
   const handleIframeLoad = useCallback(() => {
+    log("iframe onLoad fired");
     if (loadTimeoutRef.current) {
       clearTimeout(loadTimeoutRef.current);
       loadTimeoutRef.current = null;
@@ -63,6 +83,7 @@ export default function App() {
 
   // Handle iframe load error
   const handleIframeError = useCallback(() => {
+    logError("iframe error or timeout");
     if (loadTimeoutRef.current) {
       clearTimeout(loadTimeoutRef.current);
       loadTimeoutRef.current = null;
@@ -85,6 +106,7 @@ export default function App() {
 
   // Start loading with timeout
   const startLoading = useCallback(() => {
+    log("startLoading called, setting state to loading");
     setConnectionState("loading");
     setError(null);
 
@@ -94,25 +116,34 @@ export default function App() {
     }
 
     loadTimeoutRef.current = window.setTimeout(() => {
+      // Use ref to get current state to avoid stale closure
+      const currentState = connectionStateRef.current;
+      log("load timeout fired, current connectionState:", currentState);
       // If still loading after timeout, check if it's a connection issue
-      if (connectionState === "loading") {
+      if (currentState === "loading") {
+        log("still loading after timeout, triggering error");
         handleIframeError();
+      } else {
+        log("already connected or errored, skipping timeout action");
       }
     }, 15000); // 15 second timeout
-  }, [connectionState, handleIframeError]);
+  }, [handleIframeError]);
 
   // Retry connection
   const handleRetry = useCallback(async () => {
+    log("handleRetry called, incrementing retry count");
     setRetryCount((prev) => prev + 1);
     startLoading();
 
     // Force iframe reload
     if (iframeRef.current) {
       const currentSrc = iframeRef.current.src;
+      log("forcing iframe reload, current src:", currentSrc);
       iframeRef.current.src = "";
       setTimeout(() => {
         if (iframeRef.current) {
           iframeRef.current.src = currentSrc;
+          log("iframe src restored");
         }
       }, 100);
     }
@@ -145,6 +176,8 @@ export default function App() {
 
   // Initial load
   useEffect(() => {
+    log("initial mount, WEB_URL:", WEB_URL, "API_URL:", API_URL);
+    log("navigator.onLine:", navigator.onLine);
     startLoading();
 
     return () => {
@@ -152,13 +185,35 @@ export default function App() {
         clearTimeout(loadTimeoutRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Render loading state
-  if (connectionState === "loading") {
-    return (
-      <div className="app-container">
-        <div className="status-screen">
+  const isLoading = connectionState === "loading";
+  const isError = connectionState === "error" || connectionState === "offline";
+
+  // Always render the iframe so it can load and trigger onLoad.
+  // Show overlays on top for loading/error states.
+  return (
+    <div className="app-container">
+      {/* Always render iframe so onLoad can fire */}
+      <iframe
+        ref={iframeRef}
+        src={WEB_URL}
+        title="vpnVPN Desktop"
+        className="app-iframe"
+        onLoad={handleIframeLoad}
+        onError={handleIframeError}
+        allow="clipboard-write; fullscreen"
+        style={{
+          // Hide iframe visually while loading/error, but keep it mounted
+          opacity: connectionState === "connected" ? 1 : 0,
+          pointerEvents: connectionState === "connected" ? "auto" : "none",
+        }}
+      />
+
+      {/* Loading overlay */}
+      {isLoading && (
+        <div className="status-screen overlay">
           <div className="logo">
             <svg
               width="48"
@@ -178,15 +233,11 @@ export default function App() {
           <p className="loading-text">Connecting to vpnVPN...</p>
           <p className="loading-url">{WEB_URL}</p>
         </div>
-      </div>
-    );
-  }
+      )}
 
-  // Render error/offline state
-  if (connectionState === "error" || connectionState === "offline") {
-    return (
-      <div className="app-container">
-        <div className="status-screen error">
+      {/* Error/offline overlay */}
+      {isError && (
+        <div className="status-screen error overlay">
           <div className="logo error-icon">
             {connectionState === "offline" ? (
               <svg
@@ -245,22 +296,7 @@ export default function App() {
             </p>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  // Render connected state with iframe
-  return (
-    <div className="app-container">
-      <iframe
-        ref={iframeRef}
-        src={WEB_URL}
-        title="vpnVPN Desktop"
-        className="app-iframe"
-        onLoad={handleIframeLoad}
-        onError={handleIframeError}
-        allow="clipboard-write; fullscreen"
-      />
+      )}
     </div>
   );
 }
