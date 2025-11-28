@@ -1,5 +1,10 @@
 import { AlertTriangle } from "lucide-react";
-import type { MapServer, ViewState, Protocol, VpnToolsStatus } from "../lib/types";
+import type {
+  MapServer,
+  ViewState,
+  Protocol,
+  VpnToolsStatus,
+} from "../lib/types";
 
 type ConnectionBarProps = {
   selectedServer: MapServer | null;
@@ -40,13 +45,9 @@ export function ConnectionBar({
       vpnTools.ikev2_available
     : false;
 
-  // IKEv2 uses native OS features - we don't support auto-connection for it
-  const isNativeProtocol = protocol === "ikev2";
-
   // Determine if connect should be disabled
   const toolAvailable = isToolAvailable();
-  const canConnect =
-    selectedServer && !isConnecting && toolAvailable && !isNativeProtocol;
+  const canConnect = selectedServer && !isConnecting && toolAvailable;
 
   // Get warning message
   const getWarningMessage = (): string | null => {
@@ -54,11 +55,15 @@ export function ConnectionBar({
     if (!hasAnyTool) {
       return "No VPN tools installed. Please install WireGuard or OpenVPN.";
     }
-    if (isNativeProtocol) {
-      return "IKEv2/IPsec uses native OS features. Configure via System Settings.";
-    }
     if (!toolAvailable) {
+      if (protocol === "ikev2") {
+        return "IKEv2/IPsec is not available. Please install strongSwan or use a different protocol.";
+      }
       return `${protocol === "wireguard" ? "WireGuard" : "OpenVPN"} is not installed. Please install it or select a different protocol.`;
+    }
+    // Info message for IKEv2 when tool is available
+    if (protocol === "ikev2" && toolAvailable) {
+      return "IKEv2 will open the config file for you to import into System Settings.";
     }
     return null;
   };
@@ -104,14 +109,33 @@ export function ConnectionBar({
         </button>
       </div>
 
-      {/* Warning banner */}
+      {/* Warning/Info banner */}
       {warningMessage && status !== "connected" && (
-        <div className="flex items-center gap-2 border-t border-amber-500/20 bg-amber-500/10 px-6 py-2">
-          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
-          <span className="text-xs text-amber-300">{warningMessage}</span>
+        <div
+          className={`flex items-center gap-2 border-t px-6 py-2 ${
+            protocol === "ikev2" && toolAvailable
+              ? "border-blue-500/20 bg-blue-500/10"
+              : "border-amber-500/20 bg-amber-500/10"
+          }`}
+        >
+          <AlertTriangle
+            className={`h-4 w-4 shrink-0 ${
+              protocol === "ikev2" && toolAvailable
+                ? "text-blue-400"
+                : "text-amber-400"
+            }`}
+          />
+          <span
+            className={`text-xs ${
+              protocol === "ikev2" && toolAvailable
+                ? "text-blue-300"
+                : "text-amber-300"
+            }`}
+          >
+            {warningMessage}
+          </span>
         </div>
       )}
     </div>
   );
 }
-

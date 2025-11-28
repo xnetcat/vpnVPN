@@ -1,14 +1,10 @@
-import { useEffect, useState } from "react";
-import { X, AlertCircle, CheckCircle, Info } from "lucide-react";
+import { useEffect } from "react";
+import { X, AlertCircle, CheckCircle, Info, ExternalLink } from "lucide-react";
+import type { ToastMessage } from "../lib/useToasts";
 
-export type ToastType = "success" | "error" | "info" | "warning";
-
-export type ToastMessage = {
-  id: string;
-  type: ToastType;
-  message: string;
-  duration?: number; // ms, 0 = persistent
-};
+// Re-export types for convenience
+export type { ToastType, ToastAction, ToastMessage } from "../lib/useToasts";
+export { useToasts } from "../lib/useToasts";
 
 type ToastProps = {
   toast: ToastMessage;
@@ -46,21 +42,43 @@ function Toast({ toast, onClose }: ToastProps) {
     info: "text-blue-300",
   };
 
+  const actionColors = {
+    success: "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30",
+    error: "bg-red-500/20 text-red-300 hover:bg-red-500/30",
+    warning: "bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30",
+    info: "bg-blue-500/20 text-blue-300 hover:bg-blue-500/30",
+  };
+
   return (
     <div
-      className={`flex items-start gap-3 rounded-lg border ${colors[toast.type]} px-4 py-3 shadow-lg backdrop-blur-sm animate-in slide-in-from-top-2 fade-in duration-200`}
+      className={`flex flex-col gap-2 rounded-lg border ${colors[toast.type]} px-4 py-3 shadow-lg backdrop-blur-sm animate-in slide-in-from-top-2 fade-in duration-200`}
     >
-      {icons[toast.type]}
-      <p className={`flex-1 text-sm ${textColors[toast.type]}`}>
-        {toast.message}
-      </p>
-      <button
-        type="button"
-        onClick={() => onClose(toast.id)}
-        className="text-slate-400 transition-colors hover:text-slate-200"
-      >
-        <X className="h-4 w-4" />
-      </button>
+      <div className="flex items-start gap-3">
+        {icons[toast.type]}
+        <p className={`flex-1 text-sm ${textColors[toast.type]}`}>
+          {toast.message}
+        </p>
+        <button
+          type="button"
+          onClick={() => onClose(toast.id)}
+          className="text-slate-400 transition-colors hover:text-slate-200"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      {toast.action && (
+        <button
+          type="button"
+          onClick={() => {
+            toast.action?.onClick();
+            onClose(toast.id);
+          }}
+          className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${actionColors[toast.type]}`}
+        >
+          <ExternalLink className="h-3 w-3" />
+          {toast.action.label}
+        </button>
+      )}
     </div>
   );
 }
@@ -81,42 +99,3 @@ export function ToastContainer({ toasts, onClose }: ToastContainerProps) {
     </div>
   );
 }
-
-// Hook for managing toasts
-export function useToasts() {
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
-  const addToast = (
-    type: ToastType,
-    message: string,
-    duration: number = 5000
-  ) => {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    setToasts((prev) => [...prev, { id, type, message, duration }]);
-    return id;
-  };
-
-  const removeToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  const clearToasts = () => {
-    setToasts([]);
-  };
-
-  return {
-    toasts,
-    addToast,
-    removeToast,
-    clearToasts,
-    success: (message: string, duration?: number) =>
-      addToast("success", message, duration),
-    error: (message: string, duration?: number) =>
-      addToast("error", message, duration ?? 0), // Errors persist by default
-    warning: (message: string, duration?: number) =>
-      addToast("warning", message, duration),
-    info: (message: string, duration?: number) =>
-      addToast("info", message, duration),
-  };
-}
-

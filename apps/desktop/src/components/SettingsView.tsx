@@ -1,5 +1,3 @@
-
-
 import { useState } from "react";
 import {
   ChevronLeft,
@@ -17,7 +15,12 @@ import {
   RefreshCw,
   Bug,
 } from "lucide-react";
-import type { SettingsTab, Protocol, VpnToolsStatus, ViewState } from "../lib/types";
+import type {
+  SettingsTab,
+  Protocol,
+  VpnToolsStatus,
+  ViewState,
+} from "../lib/types";
 
 type DebugInfo = {
   isConnected: boolean;
@@ -68,7 +71,7 @@ const PROTOCOL_OPTIONS = [
   {
     id: "ikev2" as const,
     label: "IKEv2 / IPsec",
-    desc: "Native OS support (manual config)",
+    desc: "Native OS support",
   },
 ];
 

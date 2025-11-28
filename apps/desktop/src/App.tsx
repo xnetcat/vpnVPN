@@ -7,6 +7,7 @@ import {
   applyVpnConfig,
   disconnectVpn,
   checkVpnStatus,
+  openInBrowser,
   log,
   logError,
 } from "./lib/tauri";
@@ -25,6 +26,7 @@ import {
   useDeviceRegistration,
   useServerPubkey,
   useAuth,
+  useMachineId,
 } from "./lib/hooks";
 
 import { DesktopHeader } from "./components/DesktopHeader";
@@ -322,7 +324,7 @@ export default function App() {
   const [hasAttemptedAutoConnect, setHasAttemptedAutoConnect] = useState(false);
 
   // Toast notifications
-  const { toasts, removeToast, warning, error: showError } = useToasts();
+  const { toasts, removeToast, warning, info, error: showError } = useToasts();
 
   // Custom hooks
   const userCountry = useUserCountry();
@@ -350,6 +352,7 @@ export default function App() {
   const { registerDevice, confirmConnection, cancelConnection } =
     useDeviceRegistration();
   const wgServerPublicKey = useServerPubkey();
+  const machineId = useMachineId();
 
   const selectedServer =
     servers.find((s) => s.id === selectedId) ?? servers[0] ?? null;
@@ -407,9 +410,11 @@ export default function App() {
       );
       return;
     }
-    if (protocol === "ikev2") {
+    // IKEv2 note: When CLI tool is available, we can open the config file
+    // but cannot verify connection status programmatically
+    if (protocol === "ikev2" && !vpnTools?.ikev2_available) {
       showError(
-        "IKEv2/IPsec uses native OS features. Please configure via System Settings."
+        "IKEv2/IPsec is not available on this system. Please install strongSwan or use a different protocol."
       );
       return;
     }
@@ -423,6 +428,7 @@ export default function App() {
       const result = await registerDevice({
         name: `Desktop • ${selectedServer.region}`,
         serverId: selectedServer.id,
+        machineId: machineId ?? undefined,
       });
 
       deviceId = result.deviceId;
@@ -448,6 +454,20 @@ export default function App() {
       setConfig(cfg);
       try {
         await applyVpnConfig(protocol, cfg);
+
+        // For IKEv2, we can't verify connection status - it opens the config file
+        // for manual import into System Settings
+        if (protocol === "ikev2") {
+          info(
+            "IKEv2 config file opened. Please import it into your System Settings to complete the connection."
+          );
+          setStatus("disconnected");
+          // Don't confirm the device since we can't verify the connection
+          if (deviceId) {
+            await cancelConnection(deviceId);
+          }
+          return;
+        }
 
         // Wait a moment for the VPN to initialize
         await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -486,7 +506,27 @@ export default function App() {
       }
     } catch (e: any) {
       setStatus("disconnected");
-      showError(e.message ?? "Failed to connect to VPN server");
+      const errorMessage = e.message ?? "Failed to connect to VPN server";
+
+      // Check if it's a device limit error
+      if (
+        errorMessage.toLowerCase().includes("device limit") ||
+        errorMessage.toLowerCase().includes("forbidden")
+      ) {
+        showError(
+          "Device limit reached. Remove an existing device to connect a new one.",
+          0,
+          {
+            label: "Manage Devices",
+            onClick: () => {
+              void openInBrowser(`${API_BASE_URL}/devices`);
+            },
+          }
+        );
+      } else {
+        showError(errorMessage);
+      }
+
       // If device was created but connection failed, cancel it
       if (deviceId) {
         await cancelConnection(deviceId);

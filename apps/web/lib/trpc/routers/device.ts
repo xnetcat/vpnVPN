@@ -22,19 +22,94 @@ export const deviceRouter = router({
     return devices;
   }),
 
-  // Step 1: Register device - creates device and peer, but doesn't send email
+  // Step 1: Register device - creates or updates device and peer, but doesn't send email
   // Device starts in "pending" status until connection is confirmed
+  // If machineId is provided and a device with that machineId already exists for
+  // this user, the existing device is updated instead of creating a new one
   register: paidProcedure
     .input(
       z.object({
         name: z.string().min(1),
         serverId: z.string().optional(),
+        machineId: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { name, serverId } = input;
+      const { name, serverId, machineId } = input;
 
-      // Check device limit (count only confirmed devices)
+      // Check if there's an existing device with this machineId
+      let existingDevice = machineId
+        ? await ctx.prisma.device.findFirst({
+            where: {
+              userId: ctx.userId,
+              machineId,
+            },
+          })
+        : null;
+
+      // If device exists with this machineId, we'll update it instead of creating a new one
+      // This prevents device limit issues when reconnecting from the same machine
+      if (existingDevice) {
+        console.log(
+          "[device] Found existing device with machineId, updating:",
+          {
+            deviceId: existingDevice.id,
+            machineId,
+          }
+        );
+
+        // Revoke old peer and generate new keys
+        try {
+          await revokePeerByPublicKey(existingDevice.publicKey);
+        } catch {
+          // Ignore errors revoking old peer
+        }
+
+        // Generate new WireGuard keypair
+        const keyPair = nacl.box.keyPair();
+        const publicKey = util.encodeBase64(keyPair.publicKey);
+        const privateKey = util.encodeBase64(keyPair.secretKey);
+
+        // Update existing device with new keys
+        const device = await ctx.prisma.device.update({
+          where: { id: existingDevice.id },
+          data: {
+            publicKey,
+            name,
+            serverId,
+            status: "pending",
+          },
+        });
+
+        const assignedIp = allocateDeviceIp(ctx.userId, device.id);
+
+        // Register with control plane
+        try {
+          await addPeerForDevice({
+            publicKey,
+            userId: ctx.userId,
+            allowedIps: [assignedIp],
+            serverId,
+          });
+        } catch (err) {
+          console.error(
+            "[device] control-plane addPeer failed for existing device",
+            {
+              err,
+              userId: ctx.userId,
+              deviceId: device.id,
+            }
+          );
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to register device with VPN server",
+          });
+        }
+
+        return { deviceId: device.id, assignedIp, publicKey, privateKey };
+      }
+
+      // No existing device found - check device limit and create new one
       const tierConfig = getTierConfig(ctx.tier);
       const deviceCount = await ctx.prisma.device.count({
         where: {
@@ -46,7 +121,7 @@ export const deviceRouter = router({
       if (deviceCount >= tierConfig.deviceLimit) {
         throw new TRPCError({
           code: "FORBIDDEN",
-          message: `Device limit reached (${tierConfig.deviceLimit}). Please upgrade your plan.`,
+          message: `Device limit reached (${tierConfig.deviceLimit}). Please upgrade your plan or remove an existing device.`,
         });
       }
 
@@ -80,6 +155,7 @@ export const deviceRouter = router({
           userId: ctx.userId,
           publicKey,
           name,
+          machineId, // Store machineId for future reconnections
           serverId,
           status: "pending", // Will be updated to "active" when confirmed
         },

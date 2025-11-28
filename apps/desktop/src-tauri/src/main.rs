@@ -16,6 +16,28 @@ fn health_check() -> Health {
     Health { ok: true }
 }
 
+/// Get a unique machine identifier for this device.
+/// This is used to identify devices across reconnections to avoid creating
+/// duplicate device entries.
+#[tauri::command]
+fn get_machine_id() -> String {
+    // Try to get machine ID from the machine-uid crate
+    // Falls back to hostname if that fails
+    match machine_uid::get() {
+        Ok(id) => id,
+        Err(_) => {
+            // Fallback: use hostname + username hash
+            let hostname = std::env::var("HOSTNAME")
+                .or_else(|_| std::env::var("COMPUTERNAME"))
+                .unwrap_or_else(|_| "unknown-host".to_string());
+            let username = std::env::var("USER")
+                .or_else(|_| std::env::var("USERNAME"))
+                .unwrap_or_else(|_| "unknown-user".to_string());
+            format!("{}@{}", username, hostname)
+        }
+    }
+}
+
 /// Status of VPN tool availability on the system.
 #[derive(Serialize, Clone)]
 struct VpnToolsStatus {
@@ -637,6 +659,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             health_check,
+            get_machine_id,
             detect_vpn_tools,
             check_vpn_status,
             get_desktop_settings,

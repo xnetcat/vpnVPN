@@ -109,6 +109,7 @@ model Device {
 
   name            String
   publicKey       String   @unique
+  machineId       String?  // Unique identifier for the physical device
   serverId        String?
   status          String   @default("pending") // "pending" | "active"
   lastConnectedAt DateTime?
@@ -118,6 +119,7 @@ model Device {
 
   @@index([userId])
   @@index([status])
+  @@index([userId, machineId])
 }
 
 // Control plane: VPN servers, peers, tokens, metrics

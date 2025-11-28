@@ -7,6 +7,7 @@ import {
   checkVpnStatus,
   getDesktopSettings,
   updateDesktopSettings,
+  getMachineId,
   log,
   logError,
 } from "./tauri";
@@ -184,13 +185,30 @@ export function useServers() {
   return { servers, isLoading, error, refetch: fetchServers };
 }
 
+// Hook to get unique machine identifier
+export function useMachineId(): string | null {
+  const [machineId, setMachineId] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const id = await getMachineId();
+      if (id) {
+        setMachineId(id);
+        log("Machine ID:", id);
+      }
+    })();
+  }, []);
+
+  return machineId;
+}
+
 // Hook to register a device
 export function useDeviceRegistration() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const registerDevice = useCallback(
-    async (params: { name: string; serverId?: string }) => {
+    async (params: { name: string; serverId?: string; machineId?: string }) => {
       setIsLoading(true);
       setError(null);
       try {

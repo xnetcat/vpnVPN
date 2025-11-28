@@ -83,6 +83,16 @@ export async function healthCheck(): Promise<boolean> {
   }
 }
 
+// Get unique machine identifier
+export async function getMachineId(): Promise<string | null> {
+  try {
+    return await invoke<string>("get_machine_id");
+  } catch (e) {
+    logError("Failed to get machine ID", e);
+    return null;
+  }
+}
+
 // Open URL in default browser
 export async function openInBrowser(url: string): Promise<void> {
   try {
