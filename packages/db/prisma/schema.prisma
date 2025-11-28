@@ -107,14 +107,17 @@ model Device {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  name      String
-  publicKey String   @unique
-  serverId  String?
+  name            String
+  publicKey       String   @unique
+  serverId        String?
+  status          String   @default("pending") // "pending" | "active"
+  lastConnectedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([status])
 }
 
 // Control plane: VPN servers, peers, tokens, metrics

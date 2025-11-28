@@ -12,13 +12,13 @@ export function buildWireGuardConfig(params: {
   serverPublicKeyOverride?: string;
 }) {
   const endpoint = WG_ENDPOINT;
-  const serverPublicKey = params.serverPublicKeyOverride || WG_SERVER_PUBLIC_KEY;
+  const serverPublicKey =
+    params.serverPublicKeyOverride || WG_SERVER_PUBLIC_KEY;
 
   return [
     "[Interface]",
-    "Name = vpnvpn-desktop",
     `PrivateKey = ${params.privateKey}`,
-    `Address = ${params.assignedIp}`,
+    `Address = ${params.assignedIp}/32`,
     "DNS = 1.1.1.1",
     "",
     "[Peer]",
@@ -27,6 +27,7 @@ export function buildWireGuardConfig(params: {
       : "# PublicKey = <server-public-key>",
     "AllowedIPs = 0.0.0.0/0, ::/0",
     endpoint ? `Endpoint = ${endpoint}` : "# Endpoint = <hostname:51820>",
+    "PersistentKeepalive = 25",
     "",
   ].join("\n");
 }
@@ -76,4 +77,3 @@ export function buildIkev2Config(params: { serverName: string }) {
     "",
   ].join("\n");
 }
-

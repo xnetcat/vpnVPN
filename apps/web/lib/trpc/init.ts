@@ -7,13 +7,52 @@ import type { Session } from "next-auth";
 export type Context = {
   session: Session | null;
   prisma: typeof prisma;
+  req?: Request;
 };
 
-export const createContext = async (): Promise<Context> => {
+// Create context with optional request for Authorization header support
+export const createContext = async (opts?: { req?: Request }): Promise<Context> => {
+  const req = opts?.req;
+  
+  // Check for Authorization header first (desktop app)
+  if (req) {
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.slice(7);
+      
+      // Look up the session in the database
+      const dbSession = await prisma.session.findUnique({
+        where: { sessionToken: token },
+        include: { user: true },
+      });
+
+      if (dbSession && dbSession.expires > new Date()) {
+        // Create a NextAuth-compatible session object
+        const session: Session = {
+          user: {
+            id: dbSession.user.id,
+            email: dbSession.user.email ?? undefined,
+            name: dbSession.user.name ?? undefined,
+            image: dbSession.user.image ?? undefined,
+          } as any,
+          expires: dbSession.expires.toISOString(),
+        };
+        
+        return {
+          session,
+          prisma,
+          req,
+        };
+      }
+    }
+  }
+
+  // Fall back to NextAuth session (cookie-based)
   const session = await getSession();
   return {
     session,
     prisma,
+    req,
   };
 };
 

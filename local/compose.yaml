@@ -126,9 +126,13 @@ services:
       - vpn-net
     develop:
       watch:
-        - path: ../apps/web
+        - path: ../apps/web/app
           action: rebuild
-        - path: ../apps/web/.env
+        - path: ../apps/web/components
+          action: rebuild
+        - path: ../apps/web/lib
+          action: rebuild
+        - path: ../apps/web/package.json
           action: rebuild
         - path: ../packages
           action: rebuild

@@ -2,6 +2,31 @@ import { NextResponse } from "next/server";
 import { prisma } from "@vpnvpn/db";
 import { sendEmail } from "@/lib/email";
 
+// Allowed origins for CORS (desktop app)
+const allowedOrigins = [
+  "http://localhost:5173", // Vite dev server
+  "tauri://localhost", // Tauri production build
+];
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get("Origin") || "";
+  const allowedOrigin = allowedOrigins.includes(origin)
+    ? origin
+    : allowedOrigins[0];
+
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Credentials": "true",
+  };
+}
+
+// Handle preflight requests
+export async function OPTIONS(req: Request) {
+  return new NextResponse(null, { status: 204, headers: getCorsHeaders(req) });
+}
+
 // In-memory rate limiting (per IP and per email)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
@@ -30,12 +55,17 @@ function generateOtpCode(): string {
 }
 
 export async function POST(req: Request) {
+  const corsHeaders = getCorsHeaders(req);
+
   try {
     const body = await req.json();
     const { email } = body;
 
     if (!email || typeof email !== "string") {
-      return NextResponse.json({ error: "Email is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Email is required" },
+        { status: 400, headers: corsHeaders }
+      );
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -45,7 +75,7 @@ export async function POST(req: Request) {
     if (!emailRegex.test(normalizedEmail)) {
       return NextResponse.json(
         { error: "Invalid email format" },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -55,7 +85,7 @@ export async function POST(req: Request) {
         {
           error: "Too many requests. Please wait a minute before trying again.",
         },
-        { status: 429 }
+        { status: 429, headers: corsHeaders }
       );
     }
 
@@ -66,7 +96,7 @@ export async function POST(req: Request) {
         {
           error: "Too many requests. Please wait a minute before trying again.",
         },
-        { status: 429 }
+        { status: 429, headers: corsHeaders }
       );
     }
 
@@ -100,12 +130,12 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true }, { headers: corsHeaders });
   } catch (error) {
     console.error("[otp/send] Error:", error);
     return NextResponse.json(
       { error: "Failed to send verification code" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }

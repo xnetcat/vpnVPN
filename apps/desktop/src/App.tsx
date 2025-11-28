@@ -3,7 +3,14 @@ import { Shield, Mail, Key, ArrowRight, Loader2 } from "lucide-react";
 
 import type { ViewState, AppView, SettingsTab } from "./lib/types";
 import { IS_PRODUCTION, API_BASE_URL } from "./lib/config";
-import { applyVpnConfig, disconnectVpn, log, logError } from "./lib/tauri";
+import {
+  applyVpnConfig,
+  disconnectVpn,
+  checkVpnStatus,
+  log,
+  logError,
+} from "./lib/tauri";
+import { setStoredSessionToken, setStoredUser } from "./lib/auth";
 import {
   buildWireGuardConfig,
   buildOpenVpnConfig,
@@ -26,6 +33,7 @@ import { ServerSidebar } from "./components/ServerSidebar";
 import { ServerMap } from "./components/ServerMap";
 import { ConnectionBar } from "./components/ConnectionBar";
 import { StatusPanel } from "./components/StatusPanel";
+import { ToastContainer, useToasts } from "./components/Toast";
 
 // Login screen component with OTP-based authentication
 function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
@@ -77,7 +85,6 @@ function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
       const res = await fetch(`${API_BASE_URL}/api/auth/otp/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
           code,
@@ -90,7 +97,13 @@ function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
         throw new Error(data.error || "Failed to verify code");
       }
 
-      if (data.success) {
+      if (data.success && data.sessionToken) {
+        // Store the session token and user for future API calls
+        setStoredSessionToken(data.sessionToken);
+        if (data.user) {
+          setStoredUser(data.user);
+        }
+        log("Login successful, session token stored");
         onLoginSuccess();
       } else {
         setError("Verification failed. Please try again.");
@@ -306,8 +319,10 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [status, setStatus] = useState<ViewState>("disconnected");
   const [config, setConfig] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [hasAttemptedAutoConnect, setHasAttemptedAutoConnect] = useState(false);
+
+  // Toast notifications
+  const { toasts, removeToast, warning, error: showError } = useToasts();
 
   // Custom hooks
   const userCountry = useUserCountry();
@@ -332,7 +347,8 @@ export default function App() {
     isLoading: serversLoading,
     refetch: refetchServers,
   } = useServers();
-  const { registerDevice } = useDeviceRegistration();
+  const { registerDevice, confirmConnection, cancelConnection } =
+    useDeviceRegistration();
   const wgServerPublicKey = useServerPubkey();
 
   const selectedServer =
@@ -386,27 +402,30 @@ export default function App() {
   const handleConnect = async () => {
     if (!selectedServer) return;
     if (!isCurrentProtocolAvailable) {
-      setError(
-        `${protocol === "wireguard" ? "WireGuard" : protocol === "openvpn" ? "OpenVPN" : "IKEv2"} is not installed`
+      showError(
+        `${protocol === "wireguard" ? "WireGuard" : protocol === "openvpn" ? "OpenVPN" : "IKEv2"} is not installed. Check Settings → Connection for installation instructions.`
       );
       return;
     }
     if (protocol === "ikev2") {
-      setError(
+      showError(
         "IKEv2/IPsec uses native OS features. Please configure via System Settings."
       );
       return;
     }
 
-    setError(null);
     setStatus("connecting");
     setConfig(null);
+
+    let deviceId: string | null = null;
 
     try {
       const result = await registerDevice({
         name: `Desktop • ${selectedServer.region}`,
         serverId: selectedServer.id,
       });
+
+      deviceId = result.deviceId;
 
       let cfg: string;
       if (protocol === "wireguard") {
@@ -429,16 +448,49 @@ export default function App() {
       setConfig(cfg);
       try {
         await applyVpnConfig(protocol, cfg);
+
+        // Wait a moment for the VPN to initialize
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        // Verify the VPN is actually connected
+        const vpnStatus = await checkVpnStatus();
+        if (vpnStatus?.is_connected) {
+          setStatus("connected");
+          log("VPN connection verified:", vpnStatus);
+          // Confirm the connection - this sends the email and marks device as active
+          if (deviceId) {
+            await confirmConnection(deviceId);
+          }
+        } else {
+          warning(
+            "VPN config applied but connection could not be verified. Check your VPN client."
+          );
+          setStatus("disconnected");
+          log("VPN connection not verified:", vpnStatus);
+          // Cancel the connection - cleans up the pending device
+          if (deviceId) {
+            await cancelConnection(deviceId);
+          }
+        }
       } catch (e) {
         logError("Failed to apply VPN config via Tauri", e);
-        setError(
+        warning(
           "Config generated, but failed to apply VPN settings locally. You may need to import it manually."
         );
+        // Config was generated but not applied - stay disconnected
+        setStatus("disconnected");
+        // Cancel the connection - cleans up the pending device
+        if (deviceId) {
+          await cancelConnection(deviceId);
+        }
       }
-      setStatus("connected");
     } catch (e: any) {
       setStatus("disconnected");
-      setError(e.message ?? "Failed to connect");
+      showError(e.message ?? "Failed to connect to VPN server");
+      // If device was created but connection failed, cancel it
+      if (deviceId) {
+        await cancelConnection(deviceId);
+      }
     }
   };
 
@@ -528,6 +580,7 @@ export default function App() {
   // Main view
   return (
     <div className="flex h-screen flex-col bg-slate-950 text-slate-50">
+      <ToastContainer toasts={toasts} onClose={removeToast} />
       <DesktopHeader
         status={status}
         onSettingsClick={() => setAppView("settings")}
@@ -539,6 +592,11 @@ export default function App() {
           servers={servers}
           selectedServer={selectedServer}
           onSelectServer={handleSelectServer}
+          onConnect={handleConnect}
+          status={status}
+          protocol={protocol}
+          onRefresh={refetchServers}
+          isRefreshing={serversLoading}
         />
 
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -556,13 +614,12 @@ export default function App() {
             selectedServer={selectedServer}
             userCountry={userCountry}
             onSelectServer={handleSelectServer}
+            onConnect={handleConnect}
+            status={status}
+            protocol={protocol}
           />
 
-          <StatusPanel
-            protocol={protocol}
-            hasConfig={config !== null}
-            error={error}
-          />
+          <StatusPanel protocol={protocol} hasConfig={config !== null} />
         </main>
       </div>
     </div>

@@ -3,6 +3,31 @@ import { prisma } from "@vpnvpn/db";
 import { randomBytes } from "crypto";
 import { cookies } from "next/headers";
 
+// Allowed origins for CORS (desktop app)
+const allowedOrigins = [
+  "http://localhost:5173", // Vite dev server
+  "tauri://localhost", // Tauri production build
+];
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get("Origin") || "";
+  const allowedOrigin = allowedOrigins.includes(origin)
+    ? origin
+    : allowedOrigins[0];
+
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Credentials": "true",
+  };
+}
+
+// Handle preflight requests
+export async function OPTIONS(req: Request) {
+  return new NextResponse(null, { status: 204, headers: getCorsHeaders(req) });
+}
+
 // In-memory rate limiting for verification attempts
 const verifyRateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
@@ -31,6 +56,8 @@ function generateSessionToken(): string {
 }
 
 export async function POST(req: Request) {
+  const corsHeaders = getCorsHeaders(req);
+
   try {
     const body = await req.json();
     const { email, code } = body;
@@ -38,14 +65,14 @@ export async function POST(req: Request) {
     if (!email || typeof email !== "string") {
       return NextResponse.json(
         { error: "Email is required" },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
     if (!code || typeof code !== "string" || code.length !== 6) {
       return NextResponse.json(
         { error: "Invalid code format" },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -55,7 +82,7 @@ export async function POST(req: Request) {
     if (isRateLimited(`verify:${normalizedEmail}`)) {
       return NextResponse.json(
         { error: "Too many verification attempts. Please wait a minute." },
-        { status: 429 }
+        { status: 429, headers: corsHeaders }
       );
     }
 
@@ -64,7 +91,7 @@ export async function POST(req: Request) {
     if (isRateLimited(`verify-ip:${ip}`)) {
       return NextResponse.json(
         { error: "Too many verification attempts. Please wait a minute." },
-        { status: 429 }
+        { status: 429, headers: corsHeaders }
       );
     }
 
@@ -82,7 +109,7 @@ export async function POST(req: Request) {
     if (!otpEntry) {
       return NextResponse.json(
         { error: "Invalid or expired code" },
-        { status: 401 }
+        { status: 401, headers: corsHeaders }
       );
     }
 
@@ -139,20 +166,24 @@ export async function POST(req: Request) {
       expires: sessionExpiry,
     });
 
-    return NextResponse.json({
-      success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
+    // Return the session token for the desktop app to store
+    return NextResponse.json(
+      {
+        success: true,
+        sessionToken, // Desktop app can store this for API calls
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+        },
       },
-    });
+      { headers: corsHeaders }
+    );
   } catch (error) {
     console.error("[otp/verify] Error:", error);
     return NextResponse.json(
       { error: "Failed to verify code" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
-

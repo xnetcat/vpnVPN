@@ -10,6 +10,14 @@ import {
   log,
   logError,
 } from "./tauri";
+import {
+  authFetch,
+  getStoredSessionToken,
+  getStoredUser,
+  setStoredSessionToken,
+  setStoredUser,
+  clearStoredSessionToken,
+} from "./auth";
 
 // Hook to detect user's country from timezone
 export function useUserCountry(): string | null {
@@ -155,9 +163,7 @@ export function useServers() {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/trpc/servers.list`, {
-        credentials: "include",
-      });
+      const res = await authFetch(`${API_BASE_URL}/api/trpc/servers.list`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       // Handle tRPC response format
@@ -188,10 +194,9 @@ export function useDeviceRegistration() {
       setIsLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE_URL}/api/trpc/device.register`, {
+        const res = await authFetch(`${API_BASE_URL}/api/trpc/device.register`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          credentials: "include",
           body: JSON.stringify({ json: params }),
         });
         if (!res.ok) {
@@ -211,7 +216,45 @@ export function useDeviceRegistration() {
     []
   );
 
-  return { registerDevice, isLoading, error };
+  // Confirm connection - call this after VPN connection is verified
+  const confirmConnection = useCallback(async (deviceId: string) => {
+    try {
+      const res = await authFetch(
+        `${API_BASE_URL}/api/trpc/device.confirmConnection`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ json: { deviceId } }),
+        }
+      );
+      if (!res.ok) {
+        logError("Failed to confirm connection:", res.status);
+      }
+    } catch (e) {
+      logError("Failed to confirm connection:", e);
+    }
+  }, []);
+
+  // Cancel connection - call this if VPN connection fails
+  const cancelConnection = useCallback(async (deviceId: string) => {
+    try {
+      const res = await authFetch(
+        `${API_BASE_URL}/api/trpc/device.cancelConnection`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ json: { deviceId } }),
+        }
+      );
+      if (!res.ok) {
+        logError("Failed to cancel connection:", res.status);
+      }
+    } catch (e) {
+      logError("Failed to cancel connection:", e);
+    }
+  }, []);
+
+  return { registerDevice, confirmConnection, cancelConnection, isLoading, error };
 }
 
 // Hook to get server public key
@@ -223,9 +266,7 @@ export function useServerPubkey() {
 
     (async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/trpc/desktop.serverPubkey`, {
-          credentials: "include",
-        });
+        const res = await authFetch(`${API_BASE_URL}/api/trpc/desktop.serverPubkey`);
         if (!res.ok) return;
         const data = await res.json();
         const key = data?.result?.data?.json?.publicKey ?? data?.result?.data?.publicKey;
@@ -247,22 +288,50 @@ export function useAuth() {
 
   const checkAuth = useCallback(async () => {
     setIsLoading(true);
+    
+    // First check if we have a stored token
+    const storedToken = getStoredSessionToken();
+    const storedUser = getStoredUser();
+    
+    if (!storedToken) {
+      setIsAuthenticated(false);
+      setUser(null);
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/session`, {
-        credentials: "include",
-      });
+      // Validate the token with the server
+      const res = await authFetch(`${API_BASE_URL}/api/auth/session`);
       if (!res.ok) {
+        // Token is invalid, clear it
+        clearStoredSessionToken();
         setIsAuthenticated(false);
         setUser(null);
         return;
       }
       const data = await res.json();
-      setIsAuthenticated(!!data?.user);
-      setUser(data?.user ?? null);
+      if (data?.user) {
+        setIsAuthenticated(true);
+        setUser(data.user);
+        // Update stored user in case it changed
+        setStoredUser(data.user);
+      } else {
+        // No user in response, clear stored data
+        clearStoredSessionToken();
+        setIsAuthenticated(false);
+        setUser(null);
+      }
     } catch (e) {
       logError("Failed to check auth:", e);
-      setIsAuthenticated(false);
-      setUser(null);
+      // On network error, trust stored data if available
+      if (storedUser) {
+        setIsAuthenticated(true);
+        setUser(storedUser);
+      } else {
+        setIsAuthenticated(false);
+        setUser(null);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -274,17 +343,16 @@ export function useAuth() {
 
   const signOut = useCallback(async () => {
     try {
-      await fetch(`${API_BASE_URL}/api/auth/signout`, {
+      await authFetch(`${API_BASE_URL}/api/auth/signout`, {
         method: "POST",
-        credentials: "include",
       });
     } catch (e) {
       logError("Sign out failed:", e);
     }
+    clearStoredSessionToken();
     setIsAuthenticated(false);
     setUser(null);
   }, []);
 
   return { isAuthenticated, user, isLoading, checkAuth, signOut };
 }
-
