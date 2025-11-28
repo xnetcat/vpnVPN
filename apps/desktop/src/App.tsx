@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { Shield, Mail, ArrowRight, Loader2 } from "lucide-react";
+import { Shield, Mail, Key, ArrowRight, Loader2 } from "lucide-react";
 
 import type { ViewState, AppView, SettingsTab } from "./lib/types";
 import { IS_PRODUCTION, API_BASE_URL } from "./lib/config";
@@ -27,7 +27,7 @@ import { ServerMap } from "./components/ServerMap";
 import { ConnectionBar } from "./components/ConnectionBar";
 import { StatusPanel } from "./components/StatusPanel";
 
-// Login screen component with code-only authentication
+// Login screen component with OTP-based authentication
 function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -35,7 +35,8 @@ function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSendCode = async (e: React.FormEvent) => {
+  // Step 1: Request OTP code
+  const handleRequestCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
 
@@ -43,49 +44,88 @@ function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/signin/email`, {
+      const res = await fetch(`${API_BASE_URL}/api/auth/otp/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-        credentials: "include",
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to send code");
       }
 
       setStep("code");
     } catch (err: any) {
+      logError("Failed to request OTP", err);
       setError(err.message || "Failed to send verification code");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Step 2: Verify OTP code
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!code || code.length !== 6) return;
+    if (!code || code.length !== 6 || !email) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/callback/email`, {
+      const res = await fetch(`${API_BASE_URL}/api/auth/otp/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, token: code }),
         credentials: "include",
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          code,
+        }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Invalid verification code");
+        throw new Error(data.error || "Failed to verify code");
       }
 
-      onLoginSuccess();
+      if (data.success) {
+        onLoginSuccess();
+      } else {
+        setError("Verification failed. Please try again.");
+      }
     } catch (err: any) {
+      logError("OTP verification failed", err);
       setError(err.message || "Failed to verify code");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Resend code
+  const handleResendCode = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/otp/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to resend code");
+      }
+
+      setError(null);
+      setCode("");
+    } catch (err: any) {
+      logError("Failed to resend OTP", err);
+      setError(err.message || "Failed to resend code");
     } finally {
       setIsLoading(false);
     }
@@ -102,36 +142,34 @@ function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
           <h1 className="mt-4 text-2xl font-bold text-slate-50">
             vpnVPN Desktop
           </h1>
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="mt-2 text-center text-sm text-slate-400">
             {step === "email"
-              ? "Enter your email to sign in"
+              ? "Enter your email to receive a sign-in code"
               : "Enter the 6-digit code sent to your email"}
           </p>
         </div>
 
-        {/* Form */}
-        {step === "email" ? (
-          <form onSubmit={handleSendCode} className="space-y-4">
+        {/* Step 1: Email Input */}
+        {step === "email" && (
+          <form onSubmit={handleRequestCode} className="space-y-4">
             <div>
               <label
                 htmlFor="email"
-                className="mb-1.5 block text-sm font-medium text-slate-300"
+                className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-300"
               >
+                <Mail className="h-4 w-4 text-slate-400" />
                 Email address
               </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900 py-3 pl-10 pr-4 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  required
-                  autoFocus
-                />
-              </div>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                required
+                autoFocus
+              />
             </div>
 
             {error && (
@@ -155,13 +193,23 @@ function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
               )}
             </button>
           </form>
-        ) : (
+        )}
+
+        {/* Step 2: Code Verification */}
+        {step === "code" && (
           <form onSubmit={handleVerifyCode} className="space-y-4">
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
+              <p className="text-center text-sm text-emerald-300">
+                Code sent to {email}
+              </p>
+            </div>
+
             <div>
               <label
                 htmlFor="code"
-                className="mb-1.5 block text-sm font-medium text-slate-300"
+                className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-300"
               >
+                <Key className="h-4 w-4 text-slate-400" />
                 Verification code
               </label>
               <input
@@ -177,9 +225,6 @@ function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
                 required
                 autoFocus
               />
-              <p className="mt-2 text-center text-xs text-slate-500">
-                Code sent to {email}
-              </p>
             </div>
 
             {error && (
@@ -196,21 +241,34 @@ function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
               {isLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
-                "Verify & Sign In"
+                <>
+                  Sign In
+                  <ArrowRight className="h-4 w-4" />
+                </>
               )}
             </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                setStep("email");
-                setCode("");
-                setError(null);
-              }}
-              className="w-full py-2 text-sm text-slate-400 transition-colors hover:text-slate-200"
-            >
-              ← Back to email
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setStep("email");
+                  setCode("");
+                  setError(null);
+                }}
+                className="flex-1 rounded-lg border border-slate-700 py-2 text-sm text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+              >
+                ← Back
+              </button>
+              <button
+                type="button"
+                onClick={handleResendCode}
+                disabled={isLoading}
+                className="flex-1 rounded-lg border border-slate-700 py-2 text-sm text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200 disabled:opacity-50"
+              >
+                Resend Code
+              </button>
+            </div>
           </form>
         )}
       </div>
