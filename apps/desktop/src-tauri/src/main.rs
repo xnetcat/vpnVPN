@@ -32,10 +32,7 @@ fn command_exists(cmd: &str) -> Option<String> {
     #[cfg(target_os = "windows")]
     {
         // On Windows, try `where` to find the command
-        let output = std::process::Command::new("where")
-            .arg(cmd)
-            .output()
-            .ok()?;
+        let output = std::process::Command::new("where").arg(cmd).output().ok()?;
         if output.status.success() {
             let path = String::from_utf8_lossy(&output.stdout)
                 .lines()
@@ -52,10 +49,7 @@ fn command_exists(cmd: &str) -> Option<String> {
     #[cfg(not(target_os = "windows"))]
     {
         // On Unix, use `which` to find the command
-        let output = std::process::Command::new("which")
-            .arg(cmd)
-            .output()
-            .ok()?;
+        let output = std::process::Command::new("which").arg(cmd).output().ok()?;
         if output.status.success() {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !path.is_empty() {
@@ -64,6 +58,36 @@ fn command_exists(cmd: &str) -> Option<String> {
         }
         None
     }
+}
+
+/// Check common installation paths for a command (useful when PATH is not set properly)
+fn check_common_paths(cmd: &str) -> Option<String> {
+    let common_paths = [
+        // Homebrew on Apple Silicon
+        format!("/opt/homebrew/bin/{}", cmd),
+        // Homebrew on Intel Mac / Linux
+        format!("/usr/local/bin/{}", cmd),
+        // Standard Unix paths
+        format!("/usr/bin/{}", cmd),
+        format!("/bin/{}", cmd),
+        // Additional Linux paths
+        format!("/usr/sbin/{}", cmd),
+        format!("/sbin/{}", cmd),
+    ];
+
+    common_paths
+        .into_iter()
+        .find(|path| std::path::Path::new(path).exists())
+}
+
+/// Find a command by checking PATH first, then common locations
+fn find_command(cmd: &str) -> Option<String> {
+    command_exists(cmd).or_else(|| check_common_paths(cmd))
+}
+
+/// Helper to get a non-empty custom path from settings
+fn non_empty_path(path: Option<&str>) -> Option<&str> {
+    path.filter(|p| !p.trim().is_empty())
 }
 
 #[tauri::command]
@@ -75,31 +99,34 @@ fn detect_vpn_tools() -> VpnToolsStatus {
         #[cfg(target_os = "windows")]
         {
             // On Windows, check for wireguard.exe CLI
-            let custom_path = settings.wireguard_cli_path.as_deref();
+            let custom_path = non_empty_path(settings.wireguard_cli_path.as_deref());
             if let Some(path) = custom_path {
                 if std::path::Path::new(path).exists() {
                     (true, Some(path.to_string()))
                 } else {
-                    (false, None)
+                    // Custom path invalid, fall back to auto-detection
+                    let found = find_command("wireguard.exe").or_else(|| find_command("wireguard"));
+                    (found.is_some(), found)
                 }
             } else {
-                let found = command_exists("wireguard.exe")
-                    .or_else(|| command_exists("wireguard"));
+                let found = find_command("wireguard.exe").or_else(|| find_command("wireguard"));
                 (found.is_some(), found)
             }
         }
         #[cfg(not(target_os = "windows"))]
         {
             // On Linux/macOS, check for wg-quick
-            let custom_path = settings.wg_quick_path.as_deref();
+            let custom_path = non_empty_path(settings.wg_quick_path.as_deref());
             if let Some(path) = custom_path {
-                if std::path::Path::new(path).exists() || command_exists(path).is_some() {
+                if std::path::Path::new(path).exists() || find_command(path).is_some() {
                     (true, Some(path.to_string()))
                 } else {
-                    (false, None)
+                    // Custom path invalid, fall back to auto-detection
+                    let found = find_command("wg-quick");
+                    (found.is_some(), found)
                 }
             } else {
-                let found = command_exists("wg-quick");
+                let found = find_command("wg-quick");
                 (found.is_some(), found)
             }
         }
@@ -107,18 +134,23 @@ fn detect_vpn_tools() -> VpnToolsStatus {
 
     // Check OpenVPN availability
     let (openvpn_available, openvpn_path) = {
-        let custom_path = settings.openvpn_path.as_deref();
+        let custom_path = non_empty_path(settings.openvpn_path.as_deref());
         if let Some(path) = custom_path {
-            if std::path::Path::new(path).exists() || command_exists(path).is_some() {
+            if std::path::Path::new(path).exists() || find_command(path).is_some() {
                 (true, Some(path.to_string()))
             } else {
-                (false, None)
+                // Custom path invalid, fall back to auto-detection
+                #[cfg(target_os = "windows")]
+                let found = find_command("openvpn.exe").or_else(|| find_command("openvpn"));
+                #[cfg(not(target_os = "windows"))]
+                let found = find_command("openvpn");
+                (found.is_some(), found)
             }
         } else {
             #[cfg(target_os = "windows")]
-            let found = command_exists("openvpn.exe").or_else(|| command_exists("openvpn"));
+            let found = find_command("openvpn.exe").or_else(|| find_command("openvpn"));
             #[cfg(not(target_os = "windows"))]
-            let found = command_exists("openvpn");
+            let found = find_command("openvpn");
             (found.is_some(), found)
         }
     };
@@ -128,21 +160,21 @@ fn detect_vpn_tools() -> VpnToolsStatus {
         #[cfg(target_os = "macos")]
         {
             // macOS has built-in IKEv2 support via System Preferences / networksetup
-            let found = command_exists("networksetup");
+            let found = find_command("networksetup");
             (found.is_some(), found)
         }
         #[cfg(target_os = "linux")]
         {
             // Linux typically uses strongSwan (ipsec command)
-            let found = command_exists("ipsec")
-                .or_else(|| command_exists("strongswan"))
-                .or_else(|| command_exists("nmcli"));
+            let found = find_command("ipsec")
+                .or_else(|| find_command("strongswan"))
+                .or_else(|| find_command("nmcli"));
             (found.is_some(), found)
         }
         #[cfg(target_os = "windows")]
         {
             // Windows has built-in IKEv2 support via rasdial/PowerShell
-            let found = command_exists("rasdial");
+            let found = find_command("rasdial");
             (found.is_some(), found)
         }
     };
@@ -235,6 +267,11 @@ struct DesktopSettingsUpdate {
     wireguard_cli_path: Option<String>,
 }
 
+/// Convert empty string to None for path settings
+fn normalize_path(path: Option<String>) -> Option<String> {
+    path.filter(|p| !p.trim().is_empty())
+}
+
 #[tauri::command]
 fn update_desktop_settings(update: DesktopSettingsUpdate) -> Result<DesktopSettings, String> {
     let mut current = load_settings()?;
@@ -246,13 +283,13 @@ fn update_desktop_settings(update: DesktopSettingsUpdate) -> Result<DesktopSetti
         current.auto_connect = ac;
     }
     if update.wg_quick_path.is_some() {
-        current.wg_quick_path = update.wg_quick_path;
+        current.wg_quick_path = normalize_path(update.wg_quick_path);
     }
     if update.openvpn_path.is_some() {
-        current.openvpn_path = update.openvpn_path;
+        current.openvpn_path = normalize_path(update.openvpn_path);
     }
     if update.wireguard_cli_path.is_some() {
-        current.wireguard_cli_path = update.wireguard_cli_path;
+        current.wireguard_cli_path = normalize_path(update.wireguard_cli_path);
     }
 
     save_settings(&current)?;
@@ -402,6 +439,108 @@ fn apply_vpn_config(protocol: String, config: String) -> Result<(), String> {
     }
 }
 
+/// Status of VPN connection
+#[derive(Serialize, Clone)]
+struct VpnConnectionStatus {
+    is_connected: bool,
+    protocol: Option<String>,
+    interface_name: Option<String>,
+}
+
+/// Check if WireGuard interface is active
+fn check_wireguard_status() -> Option<String> {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        // Check if the wg interface exists by running `wg show`
+        let output = std::process::Command::new("wg")
+            .arg("show")
+            .arg("interfaces")
+            .output()
+            .ok()?;
+
+        if output.status.success() {
+            let interfaces = String::from_utf8_lossy(&output.stdout);
+            let iface = interfaces.trim();
+            if !iface.is_empty() {
+                return Some(iface.to_string());
+            }
+        }
+        None
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // On Windows, check via wireguard.exe /dumplog or service status
+        let output = std::process::Command::new("sc")
+            .args(["query", "WireGuardTunnel$vpnvpn-wg"])
+            .output()
+            .ok()?;
+
+        if output.status.success() {
+            let out = String::from_utf8_lossy(&output.stdout);
+            if out.contains("RUNNING") {
+                return Some("vpnvpn-wg".to_string());
+            }
+        }
+        None
+    }
+}
+
+/// Check if OpenVPN process is running
+fn check_openvpn_status() -> bool {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        let output = std::process::Command::new("pgrep")
+            .arg("openvpn")
+            .output()
+            .ok();
+
+        matches!(output, Some(o) if o.status.success())
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let output = std::process::Command::new("tasklist")
+            .args(["/FI", "IMAGENAME eq openvpn.exe"])
+            .output()
+            .ok();
+
+        if let Some(o) = output {
+            let out = String::from_utf8_lossy(&o.stdout);
+            return out.contains("openvpn.exe");
+        }
+        false
+    }
+}
+
+#[tauri::command]
+fn check_vpn_status() -> VpnConnectionStatus {
+    // Check WireGuard first
+    if let Some(iface) = check_wireguard_status() {
+        return VpnConnectionStatus {
+            is_connected: true,
+            protocol: Some("wireguard".to_string()),
+            interface_name: Some(iface),
+        };
+    }
+
+    // Check OpenVPN
+    if check_openvpn_status() {
+        return VpnConnectionStatus {
+            is_connected: true,
+            protocol: Some("openvpn".to_string()),
+            interface_name: None,
+        };
+    }
+
+    // Not connected
+    VpnConnectionStatus {
+        is_connected: false,
+        protocol: None,
+        interface_name: None,
+    }
+}
+
 #[tauri::command]
 fn disconnect_vpn(protocol: Option<String>) -> Result<(), String> {
     match protocol.as_deref() {
@@ -484,6 +623,8 @@ fn main() {
     tauri::Builder::default()
         // Deep link plugin registers the `vpnvpn://` scheme on all desktop OSes.
         .plugin(tauri_plugin_deep_link::init())
+        // Shell plugin for opening URLs in browser
+        .plugin(tauri_plugin_shell::init())
         .setup(|_app| {
             // On Linux and Windows, ensure the statically configured schemes are
             // registered for the current executable (handy in dev and portable builds).
@@ -497,6 +638,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             health_check,
             detect_vpn_tools,
+            check_vpn_status,
             get_desktop_settings,
             update_desktop_settings,
             apply_vpn_config,

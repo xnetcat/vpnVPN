@@ -15,7 +15,10 @@
         "height": 640,
         "resizable": true
       }
-    ]
+    ],
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
@@ -26,6 +29,9 @@
       "desktop": {
         "schemes": ["vpnvpn"]
       }
+    },
+    "shell": {
+      "open": true
     }
   }
 }

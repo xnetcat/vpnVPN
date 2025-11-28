@@ -1,0 +1,23 @@
+// API configuration - set via environment variables at build time
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
+
+export const DASHBOARD_URL =
+  import.meta.env.VITE_DASHBOARD_URL ?? `${API_BASE_URL}/dashboard`;
+
+// WireGuard configuration
+export const WG_ENDPOINT = import.meta.env.VITE_WG_ENDPOINT ?? "";
+export const WG_SERVER_PUBLIC_KEY =
+  import.meta.env.VITE_WG_SERVER_PUBLIC_KEY ?? "";
+
+// OpenVPN configuration
+export const OVPN_REMOTE = import.meta.env.VITE_OVPN_REMOTE ?? "<vpn-hostname>";
+export const OVPN_PORT = import.meta.env.VITE_OVPN_PORT ?? "1194";
+
+// IKEv2 configuration
+export const IKEV2_REMOTE =
+  import.meta.env.VITE_IKEV2_REMOTE ?? "<vpn-hostname>";
+
+// Check if we're in production
+export const IS_PRODUCTION = import.meta.env.PROD;
+

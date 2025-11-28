@@ -1,302 +1,512 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { Shield, Mail, ArrowRight, Loader2 } from "lucide-react";
 
-// Web URL is hardcoded at build time via environment variable
-export const WEB_URL =
-  import.meta.env.VITE_VPNVPN_DESKTOP_URL ??
-  "http://localhost:3000/desktop?desktop=1";
+import type { ViewState, AppView, SettingsTab } from "./lib/types";
+import { IS_PRODUCTION, API_BASE_URL } from "./lib/config";
+import { applyVpnConfig, disconnectVpn, log, logError } from "./lib/tauri";
+import {
+  buildWireGuardConfig,
+  buildOpenVpnConfig,
+  buildIkev2Config,
+} from "./lib/vpnConfig";
+import {
+  useUserCountry,
+  useVpnTools,
+  useVpnConnectionStatus,
+  useDesktopSettings,
+  useServers,
+  useDeviceRegistration,
+  useServerPubkey,
+  useAuth,
+} from "./lib/hooks";
 
-// API URL for health checks (derived from web URL or separate env var)
-const API_URL =
-  import.meta.env.VITE_VPNVPN_API_URL ??
-  import.meta.env.VITE_VPNVPN_DESKTOP_URL?.replace("/desktop?desktop=1", "") ??
-  "http://localhost:3000";
+import { DesktopHeader } from "./components/DesktopHeader";
+import { SettingsView } from "./components/SettingsView";
+import { ServerSidebar } from "./components/ServerSidebar";
+import { ServerMap } from "./components/ServerMap";
+import { ConnectionBar } from "./components/ConnectionBar";
+import { StatusPanel } from "./components/StatusPanel";
 
-type ConnectionState = "loading" | "connected" | "error" | "offline";
+// Login screen component with code-only authentication
+function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [step, setStep] = useState<"email" | "code">("email");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-interface ErrorInfo {
-  message: string;
-  details?: string;
-}
+  const handleSendCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
 
-// eslint-disable-next-line no-console
-const log = (...args: unknown[]) => console.log("[desktop-app]", ...args);
-// eslint-disable-next-line no-console
-const logError = (...args: unknown[]) =>
-  console.error("[desktop-app]", ...args);
+    setIsLoading(true);
+    setError(null);
 
-export default function App() {
-  const [connectionState, setConnectionState] =
-    useState<ConnectionState>("loading");
-  const [error, setError] = useState<ErrorInfo | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const loadTimeoutRef = useRef<number | null>(null);
-  // Track connection state in a ref to avoid stale closures in timeouts
-  const connectionStateRef = useRef<ConnectionState>("loading");
-
-  // Keep the ref in sync with state
-  useEffect(() => {
-    connectionStateRef.current = connectionState;
-    log("connectionState changed:", connectionState);
-  }, [connectionState]);
-
-  // Check if we're online
-  const checkOnline = useCallback(() => {
-    const online = navigator.onLine;
-    log("checkOnline:", online);
-    return online;
-  }, []);
-
-  // Check if the server is reachable
-  const checkServerHealth = useCallback(async (): Promise<boolean> => {
-    log("checking server health at:", `${API_URL}/api/health`);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-      await fetch(`${API_URL}/api/health`, {
-        method: "HEAD",
-        mode: "no-cors",
-        signal: controller.signal,
+      const res = await fetch(`${API_BASE_URL}/api/auth/signin/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+        credentials: "include",
       });
 
-      clearTimeout(timeoutId);
-      log("server health check passed");
-      return true;
-    } catch (err) {
-      logError("server health check failed:", err);
-      return false;
-    }
-  }, []);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to send code");
+      }
 
-  // Handle iframe load success
-  const handleIframeLoad = useCallback(() => {
-    log("iframe onLoad fired");
-    if (loadTimeoutRef.current) {
-      clearTimeout(loadTimeoutRef.current);
-      loadTimeoutRef.current = null;
+      setStep("code");
+    } catch (err: any) {
+      setError(err.message || "Failed to send verification code");
+    } finally {
+      setIsLoading(false);
     }
-    setConnectionState("connected");
-    setError(null);
-    setRetryCount(0);
-  }, []);
+  };
 
-  // Handle iframe load error
-  const handleIframeError = useCallback(() => {
-    logError("iframe error or timeout");
-    if (loadTimeoutRef.current) {
-      clearTimeout(loadTimeoutRef.current);
-      loadTimeoutRef.current = null;
-    }
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!code || code.length !== 6) return;
 
-    if (!checkOnline()) {
-      setConnectionState("offline");
-      setError({
-        message: "No internet connection",
-        details: "Please check your network connection and try again.",
-      });
-    } else {
-      setConnectionState("error");
-      setError({
-        message: "Unable to connect to vpnVPN",
-        details: `Could not reach ${WEB_URL}. The server may be down or unreachable.`,
-      });
-    }
-  }, [checkOnline]);
-
-  // Start loading with timeout
-  const startLoading = useCallback(() => {
-    log("startLoading called, setting state to loading");
-    setConnectionState("loading");
+    setIsLoading(true);
     setError(null);
 
-    // Set a timeout for loading
-    if (loadTimeoutRef.current) {
-      clearTimeout(loadTimeoutRef.current);
-    }
-
-    loadTimeoutRef.current = window.setTimeout(() => {
-      // Use ref to get current state to avoid stale closure
-      const currentState = connectionStateRef.current;
-      log("load timeout fired, current connectionState:", currentState);
-      // If still loading after timeout, check if it's a connection issue
-      if (currentState === "loading") {
-        log("still loading after timeout, triggering error");
-        handleIframeError();
-      } else {
-        log("already connected or errored, skipping timeout action");
-      }
-    }, 15000); // 15 second timeout
-  }, [handleIframeError]);
-
-  // Retry connection
-  const handleRetry = useCallback(async () => {
-    log("handleRetry called, incrementing retry count");
-    setRetryCount((prev) => prev + 1);
-    startLoading();
-
-    // Force iframe reload
-    if (iframeRef.current) {
-      const currentSrc = iframeRef.current.src;
-      log("forcing iframe reload, current src:", currentSrc);
-      iframeRef.current.src = "";
-      setTimeout(() => {
-        if (iframeRef.current) {
-          iframeRef.current.src = currentSrc;
-          log("iframe src restored");
-        }
-      }, 100);
-    }
-  }, [startLoading]);
-
-  // Listen for online/offline events
-  useEffect(() => {
-    const handleOnline = () => {
-      if (connectionState === "offline") {
-        handleRetry();
-      }
-    };
-
-    const handleOffline = () => {
-      setConnectionState("offline");
-      setError({
-        message: "Connection lost",
-        details: "Your internet connection was lost. Waiting to reconnect...",
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/callback/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, token: code }),
+        credentials: "include",
       });
-    };
 
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, [connectionState, handleRetry]);
-
-  // Initial load
-  useEffect(() => {
-    log("initial mount, WEB_URL:", WEB_URL, "API_URL:", API_URL);
-    log("navigator.onLine:", navigator.onLine);
-    startLoading();
-
-    return () => {
-      if (loadTimeoutRef.current) {
-        clearTimeout(loadTimeoutRef.current);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Invalid verification code");
       }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
-  const isLoading = connectionState === "loading";
-  const isError = connectionState === "error" || connectionState === "offline";
+      onLoginSuccess();
+    } catch (err: any) {
+      setError(err.message || "Failed to verify code");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  // Always render the iframe so it can load and trigger onLoad.
-  // Show overlays on top for loading/error states.
   return (
-    <div className="app-container">
-      {/* Always render iframe so onLoad can fire */}
-      <iframe
-        ref={iframeRef}
-        src={WEB_URL}
-        title="vpnVPN Desktop"
-        className="app-iframe"
-        onLoad={handleIframeLoad}
-        onError={handleIframeError}
-        allow="clipboard-write; fullscreen"
-        style={{
-          // Hide iframe visually while loading/error, but keep it mounted
-          opacity: connectionState === "connected" ? 1 : 0,
-          pointerEvents: connectionState === "connected" ? "auto" : "none",
-        }}
-      />
-
-      {/* Loading overlay */}
-      {isLoading && (
-        <div className="status-screen overlay">
-          <div className="logo">
-            <svg
-              width="48"
-              height="48"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-            </svg>
+    <div className="flex h-screen flex-col items-center justify-center bg-slate-950 px-6">
+      <div className="w-full max-w-sm">
+        {/* Logo */}
+        <div className="mb-8 flex flex-col items-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600">
+            <Shield className="h-8 w-8 text-white" />
           </div>
-          <h1>vpnVPN</h1>
-          <div className="loading-spinner" />
-          <p className="loading-text">Connecting to vpnVPN...</p>
-          <p className="loading-url">{WEB_URL}</p>
+          <h1 className="mt-4 text-2xl font-bold text-slate-50">
+            vpnVPN Desktop
+          </h1>
+          <p className="mt-2 text-sm text-slate-400">
+            {step === "email"
+              ? "Enter your email to sign in"
+              : "Enter the 6-digit code sent to your email"}
+          </p>
         </div>
-      )}
 
-      {/* Error/offline overlay */}
-      {isError && (
-        <div className="status-screen error overlay">
-          <div className="logo error-icon">
-            {connectionState === "offline" ? (
-              <svg
-                width="48"
-                height="48"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+        {/* Form */}
+        {step === "email" ? (
+          <form onSubmit={handleSendCode} className="space-y-4">
+            <div>
+              <label
+                htmlFor="email"
+                className="mb-1.5 block text-sm font-medium text-slate-300"
               >
-                <line x1="1" y1="1" x2="23" y2="23" />
-                <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
-                <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
-                <path d="M10.71 5.05A16 16 0 0 1 22.58 9" />
-                <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" />
-                <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
-                <line x1="12" y1="20" x2="12.01" y2="20" />
-              </svg>
-            ) : (
-              <svg
-                width="48"
-                height="48"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
+                Email address
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 py-3 pl-10 pr-4 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  required
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            {error && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">
+                <p className="text-sm text-red-300">{error}</p>
+              </div>
             )}
-          </div>
-          <h1>{error?.message ?? "Connection Error"}</h1>
-          <p className="error-details">{error?.details}</p>
 
-          <div className="error-actions">
+            <button
+              type="submit"
+              disabled={isLoading || !email}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 py-3 text-sm font-semibold text-white transition-all hover:from-emerald-400 hover:to-teal-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <>
+                  Send Code
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleVerifyCode} className="space-y-4">
+            <div>
+              <label
+                htmlFor="code"
+                className="mb-1.5 block text-sm font-medium text-slate-300"
+              >
+                Verification code
+              </label>
+              <input
+                id="code"
+                type="text"
+                value={code}
+                onChange={(e) =>
+                  setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                }
+                placeholder="000000"
+                className="w-full rounded-lg border border-slate-700 bg-slate-900 py-3 text-center font-mono text-2xl tracking-[0.5em] text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                maxLength={6}
+                required
+                autoFocus
+              />
+              <p className="mt-2 text-center text-xs text-slate-500">
+                Code sent to {email}
+              </p>
+            </div>
+
+            {error && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">
+                <p className="text-sm text-red-300">{error}</p>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isLoading || code.length !== 6}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 py-3 text-sm font-semibold text-white transition-all hover:from-emerald-400 hover:to-teal-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                "Verify & Sign In"
+              )}
+            </button>
+
             <button
               type="button"
-              className="retry-button"
-              onClick={handleRetry}
+              onClick={() => {
+                setStep("email");
+                setCode("");
+                setError(null);
+              }}
+              className="w-full py-2 text-sm text-slate-400 transition-colors hover:text-slate-200"
             >
-              {retryCount > 0 ? `Retry (${retryCount})` : "Retry"}
+              ← Back to email
             </button>
-          </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
 
-          <div className="error-info">
-            <p>Server URL: {WEB_URL}</p>
-            <p>
-              Status:{" "}
-              {connectionState === "offline" ? "Offline" : "Unreachable"}
-            </p>
-          </div>
-        </div>
-      )}
+// Loading screen component
+function LoadingScreen() {
+  return (
+    <div className="flex h-screen flex-col items-center justify-center bg-slate-950">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600">
+        <Shield className="h-8 w-8 animate-pulse text-white" />
+      </div>
+      <h1 className="mt-4 text-xl font-semibold text-slate-50">vpnVPN</h1>
+      <p className="mt-2 text-sm text-slate-400">Loading...</p>
+    </div>
+  );
+}
+
+export default function App() {
+  // Auth state
+  const {
+    isAuthenticated,
+    isLoading: authLoading,
+    signOut,
+    checkAuth,
+  } = useAuth();
+
+  // View state
+  const [appView, setAppView] = useState<AppView>("main");
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
+
+  // VPN connection state
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [status, setStatus] = useState<ViewState>("disconnected");
+  const [config, setConfig] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [hasAttemptedAutoConnect, setHasAttemptedAutoConnect] = useState(false);
+
+  // Custom hooks
+  const userCountry = useUserCountry();
+  const { vpnTools, refreshTools, isRefreshing } = useVpnTools();
+  const vpnConnectionStatus = useVpnConnectionStatus(status);
+  const {
+    protocol,
+    setProtocol,
+    autoConnect,
+    setAutoConnect,
+    wgQuickPath,
+    setWgQuickPath,
+    openvpnPath,
+    setOpenvpnPath,
+    wireguardCliPath,
+    setWireguardCliPath,
+  } = useDesktopSettings();
+
+  // Data fetching
+  const {
+    servers,
+    isLoading: serversLoading,
+    refetch: refetchServers,
+  } = useServers();
+  const { registerDevice } = useDeviceRegistration();
+  const wgServerPublicKey = useServerPubkey();
+
+  const selectedServer =
+    servers.find((s) => s.id === selectedId) ?? servers[0] ?? null;
+
+  // Log component mount
+  useEffect(() => {
+    log("App mounted, API_BASE_URL:", API_BASE_URL);
+    return () => log("App unmounted");
+  }, []);
+
+  // Check if the selected protocol's tool is available
+  const isCurrentProtocolAvailable = useMemo(() => {
+    if (!vpnTools) return false;
+    switch (protocol) {
+      case "wireguard":
+        return vpnTools.wireguard_available;
+      case "openvpn":
+        return vpnTools.openvpn_available;
+      case "ikev2":
+        return vpnTools.ikev2_available;
+    }
+  }, [vpnTools, protocol]);
+
+  // Auto-connect on launch (only if tool is available and not IKEv2)
+  useEffect(() => {
+    if (
+      !autoConnect ||
+      hasAttemptedAutoConnect ||
+      !selectedServer ||
+      status !== "disconnected" ||
+      !isCurrentProtocolAvailable ||
+      protocol === "ikev2" ||
+      !isAuthenticated
+    ) {
+      return;
+    }
+    setHasAttemptedAutoConnect(true);
+    void handleConnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    autoConnect,
+    hasAttemptedAutoConnect,
+    selectedServer,
+    status,
+    isCurrentProtocolAvailable,
+    protocol,
+    isAuthenticated,
+  ]);
+
+  const handleConnect = async () => {
+    if (!selectedServer) return;
+    if (!isCurrentProtocolAvailable) {
+      setError(
+        `${protocol === "wireguard" ? "WireGuard" : protocol === "openvpn" ? "OpenVPN" : "IKEv2"} is not installed`
+      );
+      return;
+    }
+    if (protocol === "ikev2") {
+      setError(
+        "IKEv2/IPsec uses native OS features. Please configure via System Settings."
+      );
+      return;
+    }
+
+    setError(null);
+    setStatus("connecting");
+    setConfig(null);
+
+    try {
+      const result = await registerDevice({
+        name: `Desktop • ${selectedServer.region}`,
+        serverId: selectedServer.id,
+      });
+
+      let cfg: string;
+      if (protocol === "wireguard") {
+        cfg = buildWireGuardConfig({
+          privateKey: result.privateKey,
+          assignedIp: result.assignedIp,
+          serverPublicKeyOverride: wgServerPublicKey || undefined,
+        });
+      } else if (protocol === "openvpn") {
+        cfg = buildOpenVpnConfig({
+          assignedIp: result.assignedIp,
+          serverName: selectedServer.region,
+        });
+      } else {
+        cfg = buildIkev2Config({
+          serverName: selectedServer.region,
+        });
+      }
+
+      setConfig(cfg);
+      try {
+        await applyVpnConfig(protocol, cfg);
+      } catch (e) {
+        logError("Failed to apply VPN config via Tauri", e);
+        setError(
+          "Config generated, but failed to apply VPN settings locally. You may need to import it manually."
+        );
+      }
+      setStatus("connected");
+    } catch (e: any) {
+      setStatus("disconnected");
+      setError(e.message ?? "Failed to connect");
+    }
+  };
+
+  const handleDisconnect = useCallback(() => {
+    setConfig(null);
+    setStatus("disconnected");
+    void disconnectVpn(protocol).catch((e) =>
+      logError("Failed to disconnect VPN via Tauri", e)
+    );
+  }, [protocol]);
+
+  const handleSelectServer = useCallback((id: string) => {
+    setSelectedId(id);
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    await signOut();
+  }, [signOut]);
+
+  const handleLoginSuccess = useCallback(() => {
+    void checkAuth();
+  }, [checkAuth]);
+
+  // Debug info for settings
+  const debugInfo = useMemo(
+    () => ({
+      isConnected: status === "connected",
+      connectionStatus: status,
+      actuallyConnected: vpnConnectionStatus?.is_connected ?? false,
+      actualProtocol: vpnConnectionStatus?.protocol ?? null,
+      interfaceName: vpnConnectionStatus?.interface_name ?? null,
+      selectedServerId: selectedServer?.id ?? null,
+      selectedServerRegion: selectedServer?.region ?? null,
+      protocol,
+      wgServerPublicKey,
+      isProduction: IS_PRODUCTION,
+      tauriAvailable: true,
+      userCountry,
+    }),
+    [
+      status,
+      vpnConnectionStatus,
+      selectedServer,
+      protocol,
+      wgServerPublicKey,
+      userCountry,
+    ]
+  );
+
+  // Show loading screen while checking auth
+  if (authLoading) {
+    return <LoadingScreen />;
+  }
+
+  // Show login screen if not authenticated
+  if (!isAuthenticated) {
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  // Settings view
+  if (appView === "settings") {
+    return (
+      <div className="flex h-screen flex-col bg-slate-950 text-slate-50">
+        <SettingsView
+          activeTab={settingsTab}
+          setActiveTab={setSettingsTab}
+          protocol={protocol}
+          setProtocol={setProtocol}
+          autoConnect={autoConnect}
+          setAutoConnect={setAutoConnect}
+          wgQuickPath={wgQuickPath}
+          setWgQuickPath={setWgQuickPath}
+          openvpnPath={openvpnPath}
+          setOpenvpnPath={setOpenvpnPath}
+          wireguardCliPath={wireguardCliPath}
+          setWireguardCliPath={setWireguardCliPath}
+          vpnTools={vpnTools}
+          onRefreshTools={refreshTools}
+          isRefreshingTools={isRefreshing}
+          debugInfo={debugInfo}
+          onBack={() => setAppView("main")}
+        />
+      </div>
+    );
+  }
+
+  // Main view
+  return (
+    <div className="flex h-screen flex-col bg-slate-950 text-slate-50">
+      <DesktopHeader
+        status={status}
+        onSettingsClick={() => setAppView("settings")}
+        onSignOut={handleSignOut}
+      />
+
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <ServerSidebar
+          servers={servers}
+          selectedServer={selectedServer}
+          onSelectServer={handleSelectServer}
+        />
+
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ConnectionBar
+            selectedServer={selectedServer}
+            status={status}
+            protocol={protocol}
+            vpnTools={vpnTools}
+            onConnect={handleConnect}
+            onDisconnect={handleDisconnect}
+          />
+
+          <ServerMap
+            servers={servers}
+            selectedServer={selectedServer}
+            userCountry={userCountry}
+            onSelectServer={handleSelectServer}
+          />
+
+          <StatusPanel
+            protocol={protocol}
+            hasConfig={config !== null}
+            error={error}
+          />
+        </main>
+      </div>
     </div>
   );
 }

@@ -1,7 +1,14 @@
-"use client";
-
-import { Settings, LogOut, Shield, Wifi, WifiOff } from "lucide-react";
-import type { ViewState } from "./types";
+import {
+  Settings,
+  LogOut,
+  Shield,
+  Wifi,
+  WifiOff,
+  ExternalLink,
+} from "lucide-react";
+import type { ViewState } from "../lib/types";
+import { openInBrowser } from "../lib/tauri";
+import { DASHBOARD_URL } from "../lib/config";
 
 type DesktopHeaderProps = {
   status: ViewState;
@@ -14,6 +21,10 @@ export function DesktopHeader({
   onSettingsClick,
   onSignOut,
 }: DesktopHeaderProps) {
+  const handleOpenDashboard = () => {
+    void openInBrowser(DASHBOARD_URL);
+  };
+
   return (
     <header className="flex items-center justify-between border-b border-slate-800 bg-slate-900/95 px-4 py-3 backdrop-blur">
       <div className="flex items-center gap-3">
@@ -43,6 +54,17 @@ export function DesktopHeader({
                 : "Disconnected"}
           </span>
         </div>
+
+        {/* Dashboard Button */}
+        <button
+          type="button"
+          onClick={handleOpenDashboard}
+          className="flex items-center gap-1.5 rounded-lg bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-slate-100"
+          title="Open Dashboard in Browser"
+        >
+          Dashboard
+          <ExternalLink className="h-3 w-3" />
+        </button>
 
         {/* Settings Button */}
         <button

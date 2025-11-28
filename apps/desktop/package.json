@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev:web": "vite --port 5173 --strictPort",
-    "dev:tauri": "tauri dev --no-dev-server",
-    "dev": "bun run dev:web & bun run dev:tauri",
+    "dev:vite": "vite --port 5173 --strictPort",
+    "dev:tauri": "tauri dev",
+    "dev": "concurrently --kill-others --names \"vite,tauri\" --prefix-colors \"cyan,magenta\" \"bun run dev:vite\" \"bun run dev:tauri\"",
     "build:web": "vite build",
     "build:tauri": "cd src-tauri && cargo tauri build",
     "build": "bun run build:web && bun run build:tauri",
@@ -16,16 +16,27 @@
     "format": "biome format --write . && cd src-tauri && cargo fmt"
   },
   "dependencies": {
-    "@tauri-apps/plugin-deep-link": "^2.4.3",
+    "@tanstack/react-query": "^5.90.11",
     "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-deep-link": "^2.4.3",
+    "@tauri-apps/plugin-shell": "^2.3.3",
+    "@trpc/client": "^11.7.2",
+    "@trpc/react-query": "^11.7.2",
+    "lucide-react": "^0.555.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-simple-maps": "^3.0.0",
+    "superjson": "^2.2.6",
+    "tailwindcss": "^4.1.17"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.17",
     "@tauri-apps/cli": "^2.0.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@types/react-simple-maps": "^3.0.6",
     "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
     "jsdom": "^27.2.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.0",

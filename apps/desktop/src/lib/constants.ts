@@ -73,7 +73,7 @@ export const REGION_TO_COUNTRY: Record<string, string> = {
   "ca-central-1": "CA",
   "me-south-1": "AE",
   "af-south-1": "ZA",
-  local: "US", // Default local to US, will be overridden by user location
+  local: "US",
 };
 
 // Timezone to country mapping for user location detection

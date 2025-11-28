@@ -1,7 +1,7 @@
 export type ViewState = "disconnected" | "connecting" | "connected";
 export type Protocol = "wireguard" | "openvpn" | "ikev2";
 export type AppView = "main" | "settings";
-export type SettingsTab = "general" | "connection" | "about";
+export type SettingsTab = "general" | "connection" | "about" | "debug";
 
 export type MapServer = {
   id: string;
@@ -27,3 +27,10 @@ export type DesktopSettings = {
   openvpn_path?: string | null;
   wireguard_cli_path?: string | null;
 };
+
+export type VpnConnectionStatus = {
+  is_connected: boolean;
+  protocol: string | null;
+  interface_name: string | null;
+};
+

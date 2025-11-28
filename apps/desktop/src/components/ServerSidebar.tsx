@@ -1,6 +1,4 @@
-"use client";
-
-import type { MapServer } from "./types";
+import type { MapServer } from "../lib/types";
 
 type ServerSidebarProps = {
   servers: MapServer[];

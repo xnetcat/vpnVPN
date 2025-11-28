@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { WEB_URL } from "./App";
+import { API_BASE_URL } from "./lib/config";
 
 describe("desktop App config", () => {
-  it("exposes a sensible default desktop URL", () => {
-    expect(WEB_URL).toMatch(/^https?:\/\//);
+  it("exposes a sensible default API URL", () => {
+    expect(API_BASE_URL).toMatch(/^https?:\/\//);
   });
 });

@@ -1,0 +1,290 @@
+import { useEffect, useState, useCallback } from "react";
+import type { Protocol, VpnToolsStatus, VpnConnectionStatus, MapServer } from "./types";
+import { TIMEZONE_TO_COUNTRY } from "./constants";
+import { API_BASE_URL, WG_SERVER_PUBLIC_KEY } from "./config";
+import {
+  detectVpnTools,
+  checkVpnStatus,
+  getDesktopSettings,
+  updateDesktopSettings,
+  log,
+  logError,
+} from "./tauri";
+
+// Hook to detect user's country from timezone
+export function useUserCountry(): string | null {
+  const [userCountry, setUserCountry] = useState<string | null>(null);
+
+  useEffect(() => {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const country = TIMEZONE_TO_COUNTRY[tz] ?? "US";
+    setUserCountry(country);
+    log("Detected user country from timezone:", country);
+  }, []);
+
+  return userCountry;
+}
+
+// Hook to detect VPN tools availability with refresh capability
+export function useVpnTools(): {
+  vpnTools: VpnToolsStatus | null;
+  refreshTools: () => Promise<void>;
+  isRefreshing: boolean;
+} {
+  const [vpnTools, setVpnTools] = useState<VpnToolsStatus | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const refreshTools = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const tools = await detectVpnTools();
+      if (tools) {
+        setVpnTools(tools);
+        log("Detected VPN tools:", tools);
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshTools();
+  }, [refreshTools]);
+
+  return { vpnTools, refreshTools, isRefreshing };
+}
+
+// Hook to check actual VPN connection status from the system
+export function useVpnConnectionStatus(
+  appStatus: "disconnected" | "connecting" | "connected",
+  pollInterval = 5000
+): VpnConnectionStatus | null {
+  const [connectionStatus, setConnectionStatus] =
+    useState<VpnConnectionStatus | null>(null);
+
+  const checkStatus = useCallback(async () => {
+    const status = await checkVpnStatus();
+    if (status) {
+      setConnectionStatus(status);
+      log("VPN connection status:", status);
+    }
+  }, []);
+
+  // Check status on mount and when app status changes
+  useEffect(() => {
+    void checkStatus();
+  }, [checkStatus, appStatus]);
+
+  // Poll for status when connected
+  useEffect(() => {
+    if (appStatus !== "connected") return;
+
+    const interval = setInterval(() => {
+      void checkStatus();
+    }, pollInterval);
+
+    return () => clearInterval(interval);
+  }, [appStatus, pollInterval, checkStatus]);
+
+  return connectionStatus;
+}
+
+// Hook to manage desktop settings with Tauri persistence
+export function useDesktopSettings() {
+  const [protocol, setProtocol] = useState<Protocol>("wireguard");
+  const [autoConnect, setAutoConnect] = useState(false);
+  const [wgQuickPath, setWgQuickPath] = useState("");
+  const [openvpnPath, setOpenvpnPath] = useState("");
+  const [wireguardCliPath, setWireguardCliPath] = useState("");
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Load settings from Tauri on mount
+  useEffect(() => {
+    (async () => {
+      const settings = await getDesktopSettings();
+      if (settings) {
+        if (settings.preferred_protocol) {
+          setProtocol(settings.preferred_protocol);
+        }
+        if (typeof settings.auto_connect === "boolean") {
+          setAutoConnect(settings.auto_connect);
+        }
+        setWgQuickPath(settings.wg_quick_path ?? "");
+        setOpenvpnPath(settings.openvpn_path ?? "");
+        setWireguardCliPath(settings.wireguard_cli_path ?? "");
+      }
+      setIsLoaded(true);
+    })();
+  }, []);
+
+  // Save settings to Tauri when they change
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    void updateDesktopSettings({
+      preferredProtocol: protocol,
+      autoConnect,
+      wgQuickPath,
+      openvpnPath,
+      wireguardCliPath,
+    });
+  }, [protocol, autoConnect, wgQuickPath, openvpnPath, wireguardCliPath, isLoaded]);
+
+  return {
+    protocol,
+    setProtocol,
+    autoConnect,
+    setAutoConnect,
+    wgQuickPath,
+    setWgQuickPath,
+    openvpnPath,
+    setOpenvpnPath,
+    wireguardCliPath,
+    setWireguardCliPath,
+    isLoaded,
+  };
+}
+
+// Hook to fetch servers from the API
+export function useServers() {
+  const [servers, setServers] = useState<MapServer[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchServers = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/trpc/servers.list`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      // Handle tRPC response format
+      const result = data?.result?.data?.json ?? data?.result?.data ?? data ?? [];
+      setServers(Array.isArray(result) ? result : []);
+    } catch (e: any) {
+      logError("Failed to fetch servers:", e);
+      setError(e.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchServers();
+  }, [fetchServers]);
+
+  return { servers, isLoading, error, refetch: fetchServers };
+}
+
+// Hook to register a device
+export function useDeviceRegistration() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const registerDevice = useCallback(
+    async (params: { name: string; serverId?: string }) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/trpc/device.register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ json: params }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err?.error?.message ?? `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        return data?.result?.data?.json ?? data?.result?.data ?? data;
+      } catch (e: any) {
+        logError("Failed to register device:", e);
+        setError(e.message);
+        throw e;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    []
+  );
+
+  return { registerDevice, isLoading, error };
+}
+
+// Hook to get server public key
+export function useServerPubkey() {
+  const [pubkey, setPubkey] = useState<string>(WG_SERVER_PUBLIC_KEY);
+
+  useEffect(() => {
+    if (pubkey) return;
+
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/trpc/desktop.serverPubkey`, {
+          credentials: "include",
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const key = data?.result?.data?.json?.publicKey ?? data?.result?.data?.publicKey;
+        if (key) setPubkey(key);
+      } catch (e) {
+        logError("Failed to fetch server pubkey:", e);
+      }
+    })();
+  }, [pubkey]);
+
+  return pubkey;
+}
+
+// Hook to check authentication status
+export function useAuth() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [user, setUser] = useState<{ id: string; email?: string; name?: string } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const checkAuth = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/session`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        setIsAuthenticated(false);
+        setUser(null);
+        return;
+      }
+      const data = await res.json();
+      setIsAuthenticated(!!data?.user);
+      setUser(data?.user ?? null);
+    } catch (e) {
+      logError("Failed to check auth:", e);
+      setIsAuthenticated(false);
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void checkAuth();
+  }, [checkAuth]);
+
+  const signOut = useCallback(async () => {
+    try {
+      await fetch(`${API_BASE_URL}/api/auth/signout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (e) {
+      logError("Sign out failed:", e);
+    }
+    setIsAuthenticated(false);
+    setUser(null);
+  }, []);
+
+  return { isAuthenticated, user, isLoading, checkAuth, signOut };
+}
+

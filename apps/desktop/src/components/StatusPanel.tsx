@@ -1,7 +1,15 @@
-"use client";
+import type { Protocol } from "../lib/types";
 
-import { getProtocolLabel } from "./utils";
-import type { Protocol } from "./types";
+function getProtocolLabel(protocol: Protocol): string {
+  switch (protocol) {
+    case "wireguard":
+      return "WireGuard";
+    case "openvpn":
+      return "OpenVPN";
+    case "ikev2":
+      return "IKEv2 / IPsec";
+  }
+}
 
 type StatusPanelProps = {
   protocol: Protocol;
