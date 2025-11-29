@@ -289,6 +289,11 @@ export async function restartDaemon(): Promise<void> {
   await invoke("restart_daemon");
 }
 
+// Stop daemon
+export async function stopDaemon(): Promise<void> {
+  await invoke("stop_daemon");
+}
+
 // Install daemon
 export async function installDaemon(): Promise<void> {
   await invoke("install_daemon");

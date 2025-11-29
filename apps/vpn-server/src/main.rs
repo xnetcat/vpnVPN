@@ -104,8 +104,18 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
         admin_port = args.admin_port,
         "starting_vpn_server"
     );
+    
+    // Log environment for debugging
+    info!(
+        server_id = env::var("SERVER_ID").ok(),
+        vpn_region = env::var("VPN_REGION").ok(),
+        vpn_protocols = env::var("VPN_PROTOCOLS").ok(),
+        metrics_url = env::var("METRICS_URL").ok().map(|_| "[SET]"),
+        "environment_variables"
+    );
 
     // Check system dependencies
+    info!("checking_system_dependencies");
     let nm = crate::net::os::get_network_manager();
     if let Err(e) = nm.check_dependencies() {
         error!(error = ?e, "missing_dependencies");
@@ -115,6 +125,8 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
 
     // Initialize VPN backends
     let protos_env = env::var("VPN_PROTOCOLS").unwrap_or_else(|_| "wireguard,openvpn,ikev2".into());
+    info!(protocols_config = protos_env.as_str(), "parsing_vpn_protocols");
+    
     let enabled: Vec<vpn::VpnProtocol> = protos_env
         .split(',')
         .map(|s| s.trim().to_ascii_lowercase())
@@ -122,14 +134,36 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
             "wireguard" => Some(vpn::VpnProtocol::WireGuard),
             "openvpn" => Some(vpn::VpnProtocol::OpenVpn),
             "ikev2" => Some(vpn::VpnProtocol::IkeV2),
-            _ => None,
+            other => {
+                warn!(protocol = other, "unknown_protocol_skipped");
+                None
+            }
         })
         .collect();
+    
+    info!(
+        enabled_protocols = ?enabled.iter().map(|p| p.as_str()).collect::<Vec<_>>(),
+        "vpn_protocols_enabled"
+    );
 
-    let node = vpn::VpnNode::new(&enabled, args.listen_port).expect("vpn node init");
+    info!("initializing_vpn_node");
+    let node = match vpn::VpnNode::new(&enabled, args.listen_port) {
+        Ok(n) => {
+            info!("vpn_node_created_successfully");
+            n
+        }
+        Err(e) => {
+            error!(error = ?e, "failed_to_create_vpn_node");
+            return Err(1);
+        }
+    };
+    
+    info!("starting_all_vpn_backends");
     node.start_all();
+    
     let node_arc = std::sync::Arc::new(node);
     let _ = vpn::VPN_NODE.set(node_arc.clone());
+    info!("vpn_node_registered_globally");
 
     // Optional static peer for local/docker tests (bypasses control plane peer sync)
     // Treat empty env/flag as "disabled" so docker default-empty vars don't break WireGuard.

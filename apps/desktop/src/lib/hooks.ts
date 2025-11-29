@@ -22,6 +22,7 @@ import {
   saveOnboardingState,
   installDaemon,
   restartDaemon,
+  stopDaemon,
   isDevelopmentMode,
   updateDaemonDev,
   log,
@@ -486,9 +487,14 @@ export function useDaemonStatus() {
   }, [refreshStatus]);
 
   const handleStopDaemon = useCallback(async () => {
-    // Stop is typically done by uninstalling on most platforms
-    logError("Stop daemon not directly supported - use restart or uninstall");
-  }, []);
+    try {
+      await stopDaemon();
+      await refreshStatus();
+    } catch (e) {
+      logError("Failed to stop daemon:", e);
+      throw e;
+    }
+  }, [refreshStatus]);
 
   const handleRestartDaemon = useCallback(async () => {
     try {

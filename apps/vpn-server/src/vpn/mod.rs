@@ -3,6 +3,7 @@ use once_cell::sync::OnceCell;
 use serde::Serialize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::{debug, error, info, warn};
 
 pub mod ipsec;
 pub mod openvpn;
@@ -62,20 +63,62 @@ pub struct VpnNode {
 
 impl VpnNode {
     pub fn new(enabled: &[VpnProtocol], listen_port: u16) -> Result<Self> {
+        info!(
+            protocols = ?enabled.iter().map(|p| p.as_str()).collect::<Vec<_>>(),
+            listen_port = listen_port,
+            "vpn_node_initializing"
+        );
+        
         let mut backends: Vec<Arc<dyn VpnBackend>> = Vec::new();
         for proto in enabled {
             match proto {
                 VpnProtocol::WireGuard => {
-                    backends.push(Arc::new(wireguard::WireGuardBackend::new(listen_port)?));
+                    info!(protocol = "wireguard", port = listen_port, "creating_wireguard_backend");
+                    match wireguard::WireGuardBackend::new(listen_port) {
+                        Ok(backend) => {
+                            info!(protocol = "wireguard", "wireguard_backend_created_successfully");
+                            backends.push(Arc::new(backend));
+                        }
+                        Err(e) => {
+                            error!(protocol = "wireguard", error = ?e, "failed_to_create_wireguard_backend");
+                            return Err(e);
+                        }
+                    }
                 }
                 VpnProtocol::OpenVpn => {
-                    backends.push(Arc::new(openvpn::OpenVpnBackend::new()?));
+                    info!(protocol = "openvpn", "creating_openvpn_backend");
+                    match openvpn::OpenVpnBackend::new() {
+                        Ok(backend) => {
+                            info!(protocol = "openvpn", "openvpn_backend_created_successfully");
+                            backends.push(Arc::new(backend));
+                        }
+                        Err(e) => {
+                            error!(protocol = "openvpn", error = ?e, "failed_to_create_openvpn_backend");
+                            return Err(e);
+                        }
+                    }
                 }
                 VpnProtocol::IkeV2 => {
-                    backends.push(Arc::new(ipsec::IpsecBackend::new()?));
+                    info!(protocol = "ikev2", "creating_ipsec_backend");
+                    match ipsec::IpsecBackend::new() {
+                        Ok(backend) => {
+                            info!(protocol = "ikev2", "ipsec_backend_created_successfully");
+                            backends.push(Arc::new(backend));
+                        }
+                        Err(e) => {
+                            error!(protocol = "ikev2", error = ?e, "failed_to_create_ipsec_backend");
+                            return Err(e);
+                        }
+                    }
                 }
             }
         }
+        
+        info!(
+            backend_count = backends.len(),
+            "vpn_node_initialized"
+        );
+        
         Ok(Self {
             backends,
             last_egress_by_proto: Arc::new(RwLock::new(Default::default())),
@@ -83,37 +126,96 @@ impl VpnNode {
     }
 
     pub fn start_all(&self) {
+        info!(backend_count = self.backends.len(), "starting_all_vpn_backends");
         for b in &self.backends {
-            let _ = b.start();
+            let protocol = b.protocol().as_str();
+            info!(protocol = protocol, "starting_backend");
+            match b.start() {
+                Ok(_) => info!(protocol = protocol, "backend_started_successfully"),
+                Err(e) => error!(protocol = protocol, error = ?e, "backend_start_failed"),
+            }
         }
+        info!("all_backends_start_attempted");
     }
 
     pub fn stop_all(&self) {
+        info!(backend_count = self.backends.len(), "stopping_all_vpn_backends");
         for b in &self.backends {
-            let _ = b.stop();
+            let protocol = b.protocol().as_str();
+            info!(protocol = protocol, "stopping_backend");
+            match b.stop() {
+                Ok(_) => info!(protocol = protocol, "backend_stopped_successfully"),
+                Err(e) => error!(protocol = protocol, error = ?e, "backend_stop_failed"),
+            }
         }
+        info!("all_backends_stopped");
     }
 
     pub fn collect_status(&self) -> Vec<BackendStatus> {
-        self.backends
+        debug!(backend_count = self.backends.len(), "collecting_backend_status");
+        let statuses: Vec<BackendStatus> = self.backends
             .iter()
-            .filter_map(|b| b.status().ok())
-            .collect()
+            .filter_map(|b| {
+                match b.status() {
+                    Ok(status) => {
+                        debug!(
+                            protocol = status.protocol.as_str(),
+                            running = status.running,
+                            active_sessions = status.active_sessions,
+                            egress_bytes = status.egress_bytes,
+                            ingress_bytes = status.ingress_bytes,
+                            "backend_status"
+                        );
+                        Some(status)
+                    }
+                    Err(e) => {
+                        warn!(protocol = b.protocol().as_str(), error = ?e, "failed_to_get_backend_status");
+                        None
+                    }
+                }
+            })
+            .collect();
+        debug!(status_count = statuses.len(), "status_collection_complete");
+        statuses
     }
 
     pub fn apply_peers(&self, peers: &[PeerSpec]) -> Result<()> {
-        for b in &self.backends {
-            b.apply_peers(peers)?;
+        info!(peer_count = peers.len(), "applying_peers_to_all_backends");
+        for peer in peers {
+            debug!(
+                public_key = peer.public_key.as_deref().map(|k| &k[..8.min(k.len())]),
+                allowed_ips = ?peer.allowed_ips,
+                endpoint = peer.endpoint.as_deref(),
+                "peer_spec"
+            );
         }
+        
+        for b in &self.backends {
+            let protocol = b.protocol().as_str();
+            debug!(protocol = protocol, peer_count = peers.len(), "applying_peers_to_backend");
+            match b.apply_peers(peers) {
+                Ok(_) => info!(protocol = protocol, "peers_applied_successfully"),
+                Err(e) => {
+                    error!(protocol = protocol, error = ?e, "failed_to_apply_peers");
+                    return Err(e);
+                }
+            }
+        }
+        info!(peer_count = peers.len(), "all_peers_applied");
         Ok(())
     }
 
     pub fn get_public_key(&self) -> Option<String> {
         for b in &self.backends {
             if b.protocol() == VpnProtocol::WireGuard {
-                return b.public_key();
+                let pk = b.public_key();
+                if pk.is_some() {
+                    debug!(protocol = "wireguard", "public_key_retrieved");
+                }
+                return pk;
             }
         }
+        warn!("no_wireguard_backend_found_for_public_key");
         None
     }
 }

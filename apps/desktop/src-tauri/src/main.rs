@@ -894,10 +894,88 @@ fn disable_kill_switch() -> Result<(), String> {
     daemon_client::disable_kill_switch()
 }
 
+/// Check if we're using the development socket.
+fn is_using_dev_socket() -> bool {
+    std::path::Path::new("/tmp/vpnvpn-daemon.sock").exists()
+}
+
 /// Restart daemon service.
 #[tauri::command]
 fn restart_daemon() -> Result<(), String> {
-    daemon_client::restart_daemon()
+    eprintln!("[restart_daemon] Starting daemon restart...");
+    
+    // Check if we're in dev mode (using /tmp socket)
+    if is_using_dev_socket() {
+        eprintln!("[restart_daemon] Dev mode detected - sending restart signal to daemon");
+        // In dev mode, we can still send the restart request
+        // The daemon will try to restart itself, but if it's running via cargo watch,
+        // the user may need to manually restart
+        match daemon_client::restart_daemon() {
+            Ok(_) => {
+                eprintln!("[restart_daemon] Restart request sent successfully");
+                // Give a hint to the user
+                Err("Restart signal sent. If running via 'cargo watch', you may need to restart manually with: sudo bun run dev:daemon:watch".to_string())
+            }
+            Err(e) => {
+                eprintln!("[restart_daemon] Failed to send restart request: {}", e);
+                Err(format!("Failed to restart daemon: {}. Try running: sudo bun run dev:daemon:watch", e))
+            }
+        }
+    } else {
+        // Production mode - use system service restart
+        eprintln!("[restart_daemon] Production mode - using system service restart");
+        daemon_client::restart_daemon()
+    }
+}
+
+/// Stop daemon service (dev mode).
+#[tauri::command]
+fn stop_daemon() -> Result<(), String> {
+    eprintln!("[stop_daemon] Stopping daemon...");
+    
+    if is_using_dev_socket() {
+        eprintln!("[stop_daemon] Dev mode - daemon must be stopped manually (Ctrl+C in terminal)");
+        return Err("In development mode, stop the daemon manually by pressing Ctrl+C in the terminal where it's running.".to_string());
+    }
+    
+    // Production mode
+    #[cfg(target_os = "macos")]
+    {
+        let status = std::process::Command::new("launchctl")
+            .args(["unload", "/Library/LaunchDaemons/com.vpnvpn.daemon.plist"])
+            .status()
+            .map_err(|e| format!("Failed to stop daemon: {}", e))?;
+        
+        if !status.success() {
+            return Err("Failed to stop daemon service".to_string());
+        }
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        let status = std::process::Command::new("systemctl")
+            .args(["stop", "vpnvpn-daemon"])
+            .status()
+            .map_err(|e| format!("Failed to stop daemon: {}", e))?;
+        
+        if !status.success() {
+            return Err("Failed to stop daemon service".to_string());
+        }
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        let status = std::process::Command::new("net")
+            .args(["stop", "vpnvpn-daemon"])
+            .status()
+            .map_err(|e| format!("Failed to stop daemon: {}", e))?;
+        
+        if !status.success() {
+            return Err("Failed to stop daemon service".to_string());
+        }
+    }
+    
+    Ok(())
 }
 
 /// Get the sidecar binary name with target triple suffix.
@@ -1262,13 +1340,29 @@ fn install_daemon_windows() -> Result<(), String> {
 /// Uninstall the daemon service.
 #[tauri::command]
 fn uninstall_daemon() -> Result<(), String> {
+    eprintln!("[uninstall_daemon] Starting daemon uninstallation...");
+    
+    // Check if we're in dev mode
+    if is_using_dev_socket() {
+        eprintln!("[uninstall_daemon] Dev mode detected - cleaning up dev socket");
+        // In dev mode, just clean up the socket
+        let _ = std::fs::remove_file("/tmp/vpnvpn-daemon.sock");
+        return Err("In development mode, there's no service to uninstall. The dev socket has been cleaned up. Stop the daemon with Ctrl+C.".to_string());
+    }
+
     #[cfg(target_os = "macos")]
     {
+        eprintln!("[uninstall_daemon] macOS - uninstalling production daemon");
         let script = r#"do shell script "
+            echo '[uninstall] Stopping daemon...' >&2 &&
             launchctl unload /Library/LaunchDaemons/com.vpnvpn.daemon.plist 2>/dev/null || true &&
+            echo '[uninstall] Removing plist...' >&2 &&
             rm -f /Library/LaunchDaemons/com.vpnvpn.daemon.plist &&
+            echo '[uninstall] Removing daemon binary...' >&2 &&
             rm -f /Library/PrivilegedHelperTools/com.vpnvpn.daemon &&
-            rm -f /var/run/vpnvpn-daemon.sock
+            echo '[uninstall] Removing socket...' >&2 &&
+            rm -f /var/run/vpnvpn-daemon.sock &&
+            echo '[uninstall] Done!' >&2
         " with administrator privileges"#;
 
         let status = std::process::Command::new("osascript")
@@ -1284,13 +1378,19 @@ fn uninstall_daemon() -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     {
+        eprintln!("[uninstall_daemon] Linux - uninstalling production daemon");
         let script = r#"pkexec sh -c '
+            echo "[uninstall] Stopping daemon..." &&
             systemctl stop vpnvpn-daemon 2>/dev/null || true &&
             systemctl disable vpnvpn-daemon 2>/dev/null || true &&
+            echo "[uninstall] Removing service file..." &&
             rm -f /etc/systemd/system/vpnvpn-daemon.service &&
             systemctl daemon-reload &&
+            echo "[uninstall] Removing daemon binary..." &&
             rm -f /usr/local/bin/vpnvpn-daemon &&
-            rm -f /var/run/vpnvpn-daemon.sock
+            echo "[uninstall] Removing socket..." &&
+            rm -f /var/run/vpnvpn-daemon.sock &&
+            echo "[uninstall] Done!"
         '"#;
 
         let status = std::process::Command::new("sh")
@@ -1306,10 +1406,15 @@ fn uninstall_daemon() -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
+        eprintln!("[uninstall_daemon] Windows - uninstalling production daemon");
         let ps_script = r#"
+            Write-Host "[uninstall] Stopping service..."
             Stop-Service -Name "vpnvpn-daemon" -Force -ErrorAction SilentlyContinue
+            Write-Host "[uninstall] Deleting service..."
             sc.exe delete vpnvpn-daemon
+            Write-Host "[uninstall] Removing files..."
             Remove-Item -Path "C:\Program Files\vpnVPN" -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "[uninstall] Done!"
         "#;
 
         let status = std::process::Command::new("powershell")
@@ -1528,6 +1633,7 @@ fn main() {
             enable_kill_switch,
             disable_kill_switch,
             restart_daemon,
+            stop_daemon,
             install_daemon,
             uninstall_daemon,
             update_daemon_dev,
