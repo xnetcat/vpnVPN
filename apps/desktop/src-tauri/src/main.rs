@@ -1,5 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod daemon_client;
+mod tray;
+
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -318,6 +321,10 @@ fn update_desktop_settings(update: DesktopSettingsUpdate) -> Result<DesktopSetti
     Ok(current)
 }
 
+// Legacy VPN functions - kept for reference but no longer used.
+// All VPN operations now go through the daemon for security and kill-switch support.
+
+#[allow(dead_code)]
 fn write_temp(filename: &str, contents: &str) -> Result<PathBuf, String> {
     use std::fs;
 
@@ -328,6 +335,7 @@ fn write_temp(filename: &str, contents: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+#[allow(dead_code)]
 fn apply_wireguard(config: &str) -> Result<(), String> {
     let settings = load_settings().unwrap_or_default();
     let bin = settings.wg_quick_path.unwrap_or_else(|| "wg-quick".into());
@@ -353,6 +361,7 @@ fn apply_wireguard(config: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn disconnect_wireguard_internal() -> Result<(), String> {
     let settings = load_settings().unwrap_or_default();
     let bin = settings.wg_quick_path.unwrap_or_else(|| "wg-quick".into());
@@ -378,6 +387,7 @@ fn disconnect_wireguard_internal() -> Result<(), String> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn apply_openvpn(config: &str) -> Result<(), String> {
     let settings = load_settings().unwrap_or_default();
     let openvpn_bin = if cfg!(target_os = "windows") {
@@ -406,6 +416,7 @@ fn apply_openvpn(config: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn disconnect_openvpn() -> Result<(), String> {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
@@ -420,6 +431,7 @@ fn disconnect_openvpn() -> Result<(), String> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn apply_ikev2(config: &str) -> Result<(), String> {
     let path = write_temp("vpnvpn-ikev2.conf", config)?;
 
@@ -447,18 +459,144 @@ fn apply_ikev2(config: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn disconnect_ikev2() -> Result<(), String> {
     Ok(())
 }
 
+/// Apply VPN configuration - requires daemon to be running.
+/// The daemon handles all VPN operations for security and kill-switch support.
 #[tauri::command]
 fn apply_vpn_config(protocol: String, config: String) -> Result<(), String> {
-    match protocol.as_str() {
-        "wireguard" => apply_wireguard(&config),
-        "openvpn" => apply_openvpn(&config),
-        "ikev2" => apply_ikev2(&config),
+    // Parse the config string to extract VPN parameters
+    let vpn_config = parse_vpn_config(&protocol, &config)?;
+    
+    // Connect via daemon
+    daemon_client::connect_vpn(vpn_config)?;
+    
+    Ok(())
+}
+
+/// Parse VPN config string into daemon VpnConfig struct.
+fn parse_vpn_config(protocol: &str, config: &str) -> Result<daemon_client::VpnConfig, String> {
+    match protocol {
+        "wireguard" => parse_wireguard_config(config),
+        "openvpn" => Ok(daemon_client::VpnConfig {
+            protocol: "openvpn".to_string(),
+            server_id: String::new(),
+            server_region: String::new(),
+            server_endpoint: String::new(),
+            server_port: 1194,
+            wg_private_key: None,
+            wg_public_key: None,
+            wg_server_public_key: None,
+            wg_preshared_key: None,
+            assigned_ip: None,
+            ovpn_config: Some(config.to_string()),
+            ikev2_identity: None,
+            ikev2_remote_id: None,
+            dns_servers: vec!["1.1.1.1".to_string()],
+        }),
+        "ikev2" => parse_ikev2_config(config),
         other => Err(format!("unsupported protocol: {other}")),
     }
+}
+
+/// Parse WireGuard config into VpnConfig.
+fn parse_wireguard_config(config: &str) -> Result<daemon_client::VpnConfig, String> {
+    let mut private_key = None;
+    let mut address = None;
+    let mut dns = vec![];
+    let mut public_key = None;
+    let mut endpoint = None;
+    let mut preshared_key = None;
+
+    for line in config.lines() {
+        let line = line.trim();
+        if line.starts_with("PrivateKey") {
+            private_key = line.split('=').nth(1).map(|s| s.trim().to_string());
+        } else if line.starts_with("Address") {
+            address = line.split('=').nth(1).map(|s| s.trim().split('/').next().unwrap_or("").to_string());
+        } else if line.starts_with("DNS") {
+            dns = line.split('=')
+                .nth(1)
+                .map(|s| s.split(',').map(|d| d.trim().to_string()).collect())
+                .unwrap_or_default();
+        } else if line.starts_with("PublicKey") {
+            public_key = line.split('=').nth(1).map(|s| s.trim().to_string());
+        } else if line.starts_with("PresharedKey") {
+            preshared_key = line.split('=').nth(1).map(|s| s.trim().to_string());
+        } else if line.starts_with("Endpoint") {
+            endpoint = line.split('=').nth(1).map(|s| s.trim().to_string());
+        }
+    }
+
+    let (server_endpoint, server_port) = endpoint
+        .as_ref()
+        .and_then(|e| {
+            let parts: Vec<&str> = e.rsplitn(2, ':').collect();
+            if parts.len() == 2 {
+                Some((parts[1].to_string(), parts[0].parse().unwrap_or(51820)))
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| (String::new(), 51820));
+
+    Ok(daemon_client::VpnConfig {
+        protocol: "wireguard".to_string(),
+        server_id: String::new(),
+        server_region: String::new(),
+        server_endpoint,
+        server_port,
+        wg_private_key: private_key,
+        wg_public_key: None,
+        wg_server_public_key: public_key,
+        wg_preshared_key: preshared_key,
+        assigned_ip: address,
+        ovpn_config: None,
+        ikev2_identity: None,
+        ikev2_remote_id: None,
+        dns_servers: if dns.is_empty() { vec!["1.1.1.1".to_string()] } else { dns },
+    })
+}
+
+/// Parse IKEv2 config into VpnConfig.
+fn parse_ikev2_config(config: &str) -> Result<daemon_client::VpnConfig, String> {
+    // IKEv2 config is typically just server info
+    // Format: server=endpoint;identity=...;remote_id=...
+    let mut server_endpoint = String::new();
+    let mut identity = None;
+    let mut remote_id = None;
+
+    for part in config.split(';') {
+        let kv: Vec<&str> = part.splitn(2, '=').collect();
+        if kv.len() == 2 {
+            match kv[0].trim() {
+                "server" | "endpoint" => server_endpoint = kv[1].trim().to_string(),
+                "identity" => identity = Some(kv[1].trim().to_string()),
+                "remote_id" => remote_id = Some(kv[1].trim().to_string()),
+                _ => {}
+            }
+        }
+    }
+
+    Ok(daemon_client::VpnConfig {
+        protocol: "ikev2".to_string(),
+        server_id: String::new(),
+        server_region: String::new(),
+        server_endpoint,
+        server_port: 500,
+        wg_private_key: None,
+        wg_public_key: None,
+        wg_server_public_key: None,
+        wg_preshared_key: None,
+        assigned_ip: None,
+        ovpn_config: None,
+        ikev2_identity: identity,
+        ikev2_remote_id: remote_id,
+        dns_servers: vec!["1.1.1.1".to_string()],
+    })
 }
 
 /// Status of VPN connection
@@ -535,8 +673,25 @@ fn check_openvpn_status() -> bool {
     }
 }
 
+/// Check VPN connection status via daemon.
 #[tauri::command]
 fn check_vpn_status() -> VpnConnectionStatus {
+    // Try to get status from daemon
+    match daemon_client::get_connection_status() {
+        Ok(status) => VpnConnectionStatus {
+            is_connected: status.state == "connected",
+            protocol: status.protocol,
+            interface_name: status.interface_name,
+        },
+        Err(_) => {
+            // Daemon not available, check legacy way as fallback
+            check_vpn_status_legacy()
+        }
+    }
+}
+
+/// Legacy VPN status check (fallback when daemon not running).
+fn check_vpn_status_legacy() -> VpnConnectionStatus {
     // Check WireGuard first
     if let Some(iface) = check_wireguard_status() {
         return VpnConnectionStatus {
@@ -563,14 +718,11 @@ fn check_vpn_status() -> VpnConnectionStatus {
     }
 }
 
+/// Disconnect VPN via daemon (required).
 #[tauri::command]
-fn disconnect_vpn(protocol: Option<String>) -> Result<(), String> {
-    match protocol.as_deref() {
-        Some("wireguard") | None => disconnect_wireguard_internal(),
-        Some("openvpn") => disconnect_openvpn(),
-        Some("ikev2") => disconnect_ikev2(),
-        Some(other) => Err(format!("unsupported protocol: {other}")),
-    }
+fn disconnect_vpn(_protocol: Option<String>) -> Result<(), String> {
+    // All disconnections go through daemon (protocol is ignored, daemon knows the active connection)
+    daemon_client::disconnect_vpn()
 }
 
 // Backwards-compatible wrappers used by older frontends.
@@ -584,6 +736,7 @@ fn disconnect_wireguard() -> Result<(), String> {
     disconnect_vpn(Some("wireguard".into()))
 }
 
+#[allow(dead_code)]
 fn run_command(program: &str, args: &[&str]) -> Result<(), String> {
     let status = std::process::Command::new(program)
         .args(args)
@@ -594,6 +747,486 @@ fn run_command(program: &str, args: &[&str]) -> Result<(), String> {
         return Err(format!("{program} exited with status {status}"));
     }
 
+    Ok(())
+}
+
+// ============ Daemon-related commands ============
+
+/// Check if daemon is available.
+#[tauri::command]
+fn is_daemon_available() -> bool {
+    daemon_client::is_daemon_available()
+}
+
+/// Get daemon status.
+#[tauri::command]
+fn get_daemon_status() -> Result<daemon_client::DaemonStatus, String> {
+    if !daemon_client::is_daemon_available() {
+        return Ok(daemon_client::DaemonStatus::default());
+    }
+    daemon_client::get_status()
+}
+
+/// Enable kill switch via daemon.
+#[tauri::command]
+fn enable_kill_switch(allow_lan: bool) -> Result<(), String> {
+    daemon_client::enable_kill_switch(allow_lan)
+}
+
+/// Disable kill switch via daemon.
+#[tauri::command]
+fn disable_kill_switch() -> Result<(), String> {
+    daemon_client::disable_kill_switch()
+}
+
+/// Restart daemon service.
+#[tauri::command]
+fn restart_daemon() -> Result<(), String> {
+    daemon_client::restart_daemon()
+}
+
+/// Get the sidecar binary name with target triple suffix.
+fn sidecar_binary_name() -> String {
+    let target = std::env::consts::ARCH;
+    let os = std::env::consts::OS;
+    
+    let triple = match (os, target) {
+        ("macos", "x86_64") => "x86_64-apple-darwin",
+        ("macos", "aarch64") => "aarch64-apple-darwin",
+        ("linux", "x86_64") => "x86_64-unknown-linux-gnu",
+        ("linux", "aarch64") => "aarch64-unknown-linux-gnu",
+        ("windows", "x86_64") => "x86_64-pc-windows-msvc",
+        ("windows", "aarch64") => "aarch64-pc-windows-msvc",
+        _ => "unknown",
+    };
+    
+    let ext = if os == "windows" { ".exe" } else { "" };
+    format!("vpnvpn-daemon-{}{}", triple, ext)
+}
+
+/// Find the daemon binary from multiple possible locations.
+/// In production builds, it's bundled as a Tauri sidecar.
+/// In development, we look for it in the cargo build output.
+fn find_daemon_binary() -> Result<PathBuf, String> {
+    let app_path = std::env::current_exe()
+        .map_err(|e| format!("Failed to get exe path: {e}"))?;
+
+    // List of possible daemon binary locations (in order of priority)
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    
+    // Get sidecar name for current platform
+    let sidecar_name = sidecar_binary_name();
+
+    #[cfg(target_os = "macos")]
+    {
+        // Production: Tauri sidecar in Contents/MacOS/
+        if let Some(exe_dir) = app_path.parent() {
+            candidates.push(exe_dir.join(&sidecar_name));
+            candidates.push(exe_dir.join("vpnvpn-daemon"));
+        }
+        // Production: bundled in app Contents/Library/LaunchServices/
+        if let Some(bundle_path) = app_path.parent().and_then(|p| p.parent()).and_then(|p| p.parent()) {
+            candidates.push(bundle_path.join("Contents/Library/LaunchServices/com.vpnvpn.daemon"));
+            candidates.push(bundle_path.join("Contents/Resources/vpnvpn-daemon"));
+            candidates.push(bundle_path.join(format!("Contents/MacOS/{}", sidecar_name)));
+        }
+        // Development: cargo build output (release)
+        if let Some(workspace_root) = find_workspace_root(&app_path) {
+            candidates.push(workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"));
+            candidates.push(workspace_root.join("apps/desktop/daemon/target/debug/vpnvpn-daemon"));
+            candidates.push(workspace_root.join("target/release/vpnvpn-daemon"));
+            candidates.push(workspace_root.join("target/debug/vpnvpn-daemon"));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Production: Tauri sidecar adjacent to executable
+        if let Some(exe_dir) = app_path.parent() {
+            candidates.push(exe_dir.join(&sidecar_name));
+            candidates.push(exe_dir.join("vpnvpn-daemon"));
+        }
+        // Development: cargo build output
+        if let Some(workspace_root) = find_workspace_root(&app_path) {
+            candidates.push(workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"));
+            candidates.push(workspace_root.join("apps/desktop/daemon/target/debug/vpnvpn-daemon"));
+            candidates.push(workspace_root.join("target/release/vpnvpn-daemon"));
+            candidates.push(workspace_root.join("target/debug/vpnvpn-daemon"));
+        }
+        // System paths (for AppImage or installed app)
+        candidates.push(PathBuf::from("/usr/lib/vpnvpn/vpnvpn-daemon"));
+        candidates.push(PathBuf::from("/opt/vpnvpn/vpnvpn-daemon"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // Production: Tauri sidecar adjacent to executable
+        if let Some(exe_dir) = app_path.parent() {
+            candidates.push(exe_dir.join(&sidecar_name));
+            candidates.push(exe_dir.join("vpnvpn-daemon.exe"));
+        }
+        // Development: cargo build output
+        if let Some(workspace_root) = find_workspace_root(&app_path) {
+            candidates.push(workspace_root.join(r"apps\desktop\daemon\target\release\vpnvpn-daemon.exe"));
+            candidates.push(workspace_root.join(r"apps\desktop\daemon\target\debug\vpnvpn-daemon.exe"));
+            candidates.push(workspace_root.join(r"target\release\vpnvpn-daemon.exe"));
+            candidates.push(workspace_root.join(r"target\debug\vpnvpn-daemon.exe"));
+        }
+    }
+
+    // Find the first existing candidate
+    for candidate in &candidates {
+        if candidate.exists() {
+            return Ok(candidate.clone());
+        }
+    }
+
+    // Return helpful error with searched paths
+    let searched = candidates
+        .iter()
+        .map(|p| format!("  - {}", p.display()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    
+    Err(format!(
+        "Daemon binary not found. Searched locations:\n{}\n\nHint: In development, build the daemon first with:\n  cd apps/desktop/daemon && cargo build --release",
+        searched
+    ))
+}
+
+/// Try to find the workspace root by looking for Cargo.toml or package.json
+fn find_workspace_root(start_path: &PathBuf) -> Option<PathBuf> {
+    let mut current = start_path.clone();
+    
+    // Go up the directory tree looking for workspace markers
+    for _ in 0..10 {
+        if let Some(parent) = current.parent() {
+            // Check for monorepo markers
+            if parent.join("turbo.json").exists() 
+                || parent.join("package.json").exists() && parent.join("apps").exists()
+                || parent.join("Cargo.toml").exists() && parent.join("apps").exists()
+            {
+                return Some(parent.to_path_buf());
+            }
+            current = parent.to_path_buf();
+        } else {
+            break;
+        }
+    }
+    None
+}
+
+/// Install the daemon service.
+#[tauri::command]
+fn install_daemon() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        install_daemon_macos()
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        install_daemon_linux()
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        install_daemon_windows()
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        Err("Platform not supported".to_string())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn install_daemon_macos() -> Result<(), String> {
+    let daemon_src = find_daemon_binary()?;
+
+    // Use osascript for privilege elevation
+    let script = format!(
+        r#"do shell script "
+            mkdir -p /Library/PrivilegedHelperTools &&
+            cp '{}' /Library/PrivilegedHelperTools/com.vpnvpn.daemon &&
+            chmod 755 /Library/PrivilegedHelperTools/com.vpnvpn.daemon &&
+            chown root:wheel /Library/PrivilegedHelperTools/com.vpnvpn.daemon &&
+            cat > /Library/LaunchDaemons/com.vpnvpn.daemon.plist << 'PLIST'
+<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+<dict>
+    <key>Label</key>
+    <string>com.vpnvpn.daemon</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Library/PrivilegedHelperTools/com.vpnvpn.daemon</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>
+PLIST
+            chmod 644 /Library/LaunchDaemons/com.vpnvpn.daemon.plist &&
+            launchctl load /Library/LaunchDaemons/com.vpnvpn.daemon.plist
+        " with administrator privileges"#,
+        daemon_src.display()
+    );
+
+    let status = std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(&script)
+        .status()
+        .map_err(|e| format!("Failed to run osascript: {e}"))?;
+
+    if !status.success() {
+        return Err("Installation cancelled or failed".to_string());
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn install_daemon_linux() -> Result<(), String> {
+    let daemon_src = find_daemon_binary()?;
+
+    let script = format!(
+        r#"pkexec sh -c '
+            cp "{}" /usr/local/bin/vpnvpn-daemon &&
+            chmod 755 /usr/local/bin/vpnvpn-daemon &&
+            chown root:root /usr/local/bin/vpnvpn-daemon &&
+            cat > /etc/systemd/system/vpnvpn-daemon.service << EOF
+[Unit]
+Description=vpnVPN Daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/vpnvpn-daemon
+Restart=always
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+
+[Install]
+WantedBy=multi-user.target
+EOF
+            systemctl daemon-reload &&
+            systemctl enable vpnvpn-daemon &&
+            systemctl start vpnvpn-daemon
+        '"#,
+        daemon_src.display()
+    );
+
+    let status = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(&script)
+        .status()
+        .map_err(|e| format!("Failed to run install script: {e}"))?;
+
+    if !status.success() {
+        return Err("Installation failed".to_string());
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn install_daemon_windows() -> Result<(), String> {
+    let daemon_src = find_daemon_binary()?;
+
+    let install_dir = r"C:\Program Files\vpnVPN";
+    let daemon_dst = format!(r"{}\vpnvpn-daemon.exe", install_dir);
+
+    // PowerShell script for elevated installation
+    let ps_script = format!(
+        r#"
+        $ErrorActionPreference = "Stop"
+        New-Item -ItemType Directory -Force -Path "{install_dir}" | Out-Null
+        Copy-Item -Path "{src}" -Destination "{dst}" -Force
+        if (Get-Service -Name "vpnvpn-daemon" -ErrorAction SilentlyContinue) {{
+            Stop-Service -Name "vpnvpn-daemon" -Force -ErrorAction SilentlyContinue
+            sc.exe delete vpnvpn-daemon
+            Start-Sleep -Seconds 2
+        }}
+        New-Service -Name "vpnvpn-daemon" -BinaryPathName "{dst}" -DisplayName "vpnVPN Daemon" -StartupType Automatic
+        Start-Service -Name "vpnvpn-daemon"
+        "#,
+        install_dir = install_dir,
+        src = daemon_src.display(),
+        dst = daemon_dst
+    );
+
+    // Run PowerShell elevated
+    let status = std::process::Command::new("powershell")
+        .args(["-Command", "Start-Process", "powershell", "-Verb", "RunAs", "-ArgumentList", &format!("'-Command {}'", ps_script.replace("'", "''"))])
+        .status()
+        .map_err(|e| format!("Failed to run PowerShell: {e}"))?;
+
+    if !status.success() {
+        return Err("Installation failed".to_string());
+    }
+
+    Ok(())
+}
+
+/// Uninstall the daemon service.
+#[tauri::command]
+fn uninstall_daemon() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let script = r#"do shell script "
+            launchctl unload /Library/LaunchDaemons/com.vpnvpn.daemon.plist 2>/dev/null || true &&
+            rm -f /Library/LaunchDaemons/com.vpnvpn.daemon.plist &&
+            rm -f /Library/PrivilegedHelperTools/com.vpnvpn.daemon &&
+            rm -f /var/run/vpnvpn-daemon.sock
+        " with administrator privileges"#;
+
+        let status = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(script)
+            .status()
+            .map_err(|e| format!("Failed to run osascript: {e}"))?;
+
+        if !status.success() {
+            return Err("Uninstallation cancelled or failed".to_string());
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let script = r#"pkexec sh -c '
+            systemctl stop vpnvpn-daemon 2>/dev/null || true &&
+            systemctl disable vpnvpn-daemon 2>/dev/null || true &&
+            rm -f /etc/systemd/system/vpnvpn-daemon.service &&
+            systemctl daemon-reload &&
+            rm -f /usr/local/bin/vpnvpn-daemon &&
+            rm -f /var/run/vpnvpn-daemon.sock
+        '"#;
+
+        let status = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(script)
+            .status()
+            .map_err(|e| format!("Failed to run uninstall script: {e}"))?;
+
+        if !status.success() {
+            return Err("Uninstallation failed".to_string());
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let ps_script = r#"
+            Stop-Service -Name "vpnvpn-daemon" -Force -ErrorAction SilentlyContinue
+            sc.exe delete vpnvpn-daemon
+            Remove-Item -Path "C:\Program Files\vpnVPN" -Recurse -Force -ErrorAction SilentlyContinue
+        "#;
+
+        let status = std::process::Command::new("powershell")
+            .args(["-Command", "Start-Process", "powershell", "-Verb", "RunAs", "-ArgumentList", &format!("'-Command {}'", ps_script.replace("'", "''"))])
+            .status()
+            .map_err(|e| format!("Failed to run PowerShell: {e}"))?;
+
+        if !status.success() {
+            return Err("Uninstallation failed".to_string());
+        }
+    }
+
+    Ok(())
+}
+
+/// Update daemon in development mode - builds and reinstalls.
+#[tauri::command]
+async fn update_daemon_dev() -> Result<(), String> {
+    // Find the daemon source directory
+    let daemon_dir = find_daemon_source_dir()?;
+    
+    // Build the daemon
+    let build_output = std::process::Command::new("cargo")
+        .arg("build")
+        .arg("--release")
+        .current_dir(&daemon_dir)
+        .output()
+        .map_err(|e| format!("Failed to run cargo build: {e}"))?;
+    
+    if !build_output.status.success() {
+        let stderr = String::from_utf8_lossy(&build_output.stderr);
+        return Err(format!("Daemon build failed:\n{stderr}"));
+    }
+    
+    // Reinstall the daemon
+    install_daemon()
+}
+
+/// Find the daemon source directory for development builds.
+fn find_daemon_source_dir() -> Result<PathBuf, String> {
+    // Try to find daemon dir relative to the src-tauri directory
+    let possible_paths = [
+        // From src-tauri directory
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../daemon"),
+        // Absolute path from workspace root
+        PathBuf::from("/Users/xnetcat/Projects/xnetcat/vpnVPN/apps/desktop/daemon"),
+    ];
+    
+    for path in &possible_paths {
+        if path.exists() && path.join("Cargo.toml").exists() {
+            return Ok(path.canonicalize().unwrap_or_else(|_| path.clone()));
+        }
+    }
+    
+    Err("Daemon source directory not found. This feature is only available in development.".to_string())
+}
+
+/// Check if running in development mode.
+#[tauri::command]
+fn is_development() -> bool {
+    cfg!(debug_assertions)
+}
+
+/// Load onboarding state from config.
+#[tauri::command]
+fn get_onboarding_state() -> Result<OnboardingState, String> {
+    load_onboarding_state()
+}
+
+/// Save onboarding state to config.
+#[tauri::command]
+fn save_onboarding_state(state: OnboardingState) -> Result<(), String> {
+    save_onboarding_state_internal(&state)
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+struct OnboardingState {
+    completed: bool,
+    current_step: String,
+    selected_protocol: Option<String>,
+    kill_switch_enabled: bool,
+    allow_lan: bool,
+    daemon_installed: bool,
+}
+
+fn onboarding_config_path() -> Result<PathBuf, String> {
+    config_path().map(|p| p.with_file_name("onboarding.json"))
+}
+
+fn load_onboarding_state() -> Result<OnboardingState, String> {
+    let path = onboarding_config_path()?;
+    if !path.exists() {
+        return Ok(OnboardingState::default());
+    }
+    let data = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read onboarding state: {e}"))?;
+    serde_json::from_str(&data)
+        .map_err(|e| format!("Failed to parse onboarding state: {e}"))
+}
+
+fn save_onboarding_state_internal(state: &OnboardingState) -> Result<(), String> {
+    let path = onboarding_config_path()?;
+    let data = serde_json::to_string_pretty(state)
+        .map_err(|e| format!("Failed to serialize onboarding state: {e}"))?;
+    std::fs::write(&path, data)
+        .map_err(|e| format!("Failed to write onboarding state: {e}"))?;
     Ok(())
 }
 
@@ -640,6 +1273,24 @@ mod tests {
     }
 }
 
+/// Update tray state from frontend
+#[tauri::command]
+fn update_tray_state(
+    app: tauri::AppHandle,
+    connected: bool,
+    kill_switch_enabled: bool,
+    auto_start_enabled: bool,
+    server_name: Option<String>,
+) -> Result<(), String> {
+    let state = tray::TrayState {
+        connected,
+        kill_switch_enabled,
+        auto_start_enabled,
+        server_name,
+    };
+    tray::update_tray_state(&app, &state)
+}
+
 #[cfg(not(test))]
 fn main() {
     tauri::Builder::default()
@@ -647,12 +1298,22 @@ fn main() {
         .plugin(tauri_plugin_deep_link::init())
         // Shell plugin for opening URLs in browser
         .plugin(tauri_plugin_shell::init())
-        .setup(|_app| {
+        .setup(|app| {
+            // Create system tray
+            match tray::create_tray(app.handle()) {
+                Ok(_tray) => {
+                    println!("System tray created successfully");
+                }
+                Err(e) => {
+                    eprintln!("Failed to create system tray: {}", e);
+                }
+            }
+
             // On Linux and Windows, ensure the statically configured schemes are
             // registered for the current executable (handy in dev and portable builds).
             #[cfg(any(windows, target_os = "linux"))]
             {
-                _app.deep_link().register_all()?;
+                app.deep_link().register_all()?;
             }
 
             Ok(())
@@ -667,7 +1328,21 @@ fn main() {
             apply_vpn_config,
             disconnect_vpn,
             apply_wireguard_config,
-            disconnect_wireguard
+            disconnect_wireguard,
+            // Daemon commands
+            is_daemon_available,
+            get_daemon_status,
+            enable_kill_switch,
+            disable_kill_switch,
+            restart_daemon,
+            install_daemon,
+            uninstall_daemon,
+            update_daemon_dev,
+            is_development,
+            get_onboarding_state,
+            save_onboarding_state,
+            // Tray commands
+            update_tray_state
         ])
         .run(tauri::generate_context!())
         .expect("error while running vpnVPN desktop application");

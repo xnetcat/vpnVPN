@@ -14,13 +14,16 @@ import {
   ExternalLink,
   RefreshCw,
   Bug,
+  Server,
 } from "lucide-react";
 import type {
   SettingsTab,
   Protocol,
   VpnToolsStatus,
   ViewState,
+  DaemonStatus,
 } from "../lib/types";
+import { ServiceTab } from "./ServiceTab";
 
 type DebugInfo = {
   isConnected: boolean;
@@ -55,6 +58,17 @@ type SettingsViewProps = {
   isRefreshingTools: boolean;
   debugInfo: DebugInfo | null;
   onBack: () => void;
+  // Daemon-related props
+  daemonStatus: DaemonStatus | null;
+  isDaemonLoading: boolean;
+  onRefreshDaemonStatus: () => Promise<void>;
+  onStartDaemon: () => Promise<void>;
+  onStopDaemon: () => Promise<void>;
+  onRestartDaemon: () => Promise<void>;
+  onRepairDaemon: () => Promise<void>;
+  onRequestPermissions: () => Promise<void>;
+  isDevelopment?: boolean;
+  onUpdateDaemon?: () => Promise<void>;
 };
 
 const PROTOCOL_OPTIONS = [
@@ -823,6 +837,16 @@ export function SettingsView({
   isRefreshingTools,
   debugInfo,
   onBack,
+  daemonStatus,
+  isDaemonLoading,
+  onRefreshDaemonStatus,
+  onStartDaemon,
+  onStopDaemon,
+  onRestartDaemon,
+  onRepairDaemon,
+  onRequestPermissions,
+  isDevelopment,
+  onUpdateDaemon,
 }: SettingsViewProps) {
   const isProduction = debugInfo?.isProduction ?? true;
 
@@ -833,6 +857,7 @@ export function SettingsView({
       label: "Connection",
       icon: <Wrench className="h-4 w-4" />,
     },
+    { id: "service", label: "Service", icon: <Server className="h-4 w-4" /> },
     { id: "about", label: "About", icon: <Info className="h-4 w-4" /> },
   ];
 
@@ -904,6 +929,20 @@ export function SettingsView({
               vpnTools={vpnTools}
               onRefreshTools={onRefreshTools}
               isRefreshingTools={isRefreshingTools}
+            />
+          )}
+          {activeTab === "service" && (
+            <ServiceTab
+              daemonStatus={daemonStatus}
+              isLoading={isDaemonLoading}
+              onRefreshStatus={onRefreshDaemonStatus}
+              onStartDaemon={onStartDaemon}
+              onStopDaemon={onStopDaemon}
+              onRestartDaemon={onRestartDaemon}
+              onRepairDaemon={onRepairDaemon}
+              onRequestPermissions={onRequestPermissions}
+              isDevelopment={isDevelopment}
+              onUpdateDaemon={onUpdateDaemon}
             />
           )}
           {activeTab === "about" && <AboutTab />}

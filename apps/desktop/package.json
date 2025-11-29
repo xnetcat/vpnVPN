@@ -7,13 +7,15 @@
     "dev:tauri": "tauri dev",
     "dev": "concurrently --kill-others --names \"vite,tauri\" --prefix-colors \"cyan,magenta\" \"bun run dev:vite\" \"bun run dev:tauri\"",
     "build:web": "vite build",
-    "build:tauri": "cd src-tauri && cargo tauri build",
+    "build:daemon": "cd daemon && cargo build --release",
+    "build:daemon:debug": "cd daemon && cargo build",
+    "build:tauri": "bun run build:daemon && cd src-tauri && cargo tauri build",
     "build": "bun run build:web && bun run build:tauri",
-    "build:release": "bun run build:web && cd src-tauri && cargo tauri build --release",
+    "build:release": "bun run build:web && bun run build:daemon && cd src-tauri && cargo tauri build --release",
     "preview": "vite preview",
     "test": "vitest run",
-    "lint": "biome lint . && cd src-tauri && cargo fmt --check",
-    "format": "biome format --write . && cd src-tauri && cargo fmt"
+    "lint": "biome lint . && cd src-tauri && cargo fmt --check && cd ../daemon && cargo fmt --check",
+    "format": "biome format --write . && cd src-tauri && cargo fmt && cd ../daemon && cargo fmt"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.11",

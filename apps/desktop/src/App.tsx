@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { Shield, Mail, Key, ArrowRight, Loader2 } from "lucide-react";
+import {
+  Shield,
+  Mail,
+  Key,
+  ArrowRight,
+  Loader2,
+  AlertTriangle,
+} from "lucide-react";
 
 import type { ViewState, AppView, SettingsTab } from "./lib/types";
 import { IS_PRODUCTION, API_BASE_URL } from "./lib/config";
@@ -8,6 +15,7 @@ import {
   disconnectVpn,
   checkVpnStatus,
   openInBrowser,
+  updateTrayState,
   log,
   logError,
 } from "./lib/tauri";
@@ -27,6 +35,8 @@ import {
   useServerPubkey,
   useAuth,
   useMachineId,
+  useDaemonStatus,
+  useOnboarding,
 } from "./lib/hooks";
 
 import { DesktopHeader } from "./components/DesktopHeader";
@@ -36,6 +46,7 @@ import { ServerMap } from "./components/ServerMap";
 import { ConnectionBar } from "./components/ConnectionBar";
 import { StatusPanel } from "./components/StatusPanel";
 import { ToastContainer, useToasts } from "./components/Toast";
+import { OnboardingView } from "./components/OnboardingView";
 
 // Login screen component with OTP-based authentication
 function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
@@ -313,9 +324,28 @@ export default function App() {
     checkAuth,
   } = useAuth();
 
-  // View state
+  // View state - initialize based on onboarding
   const [appView, setAppView] = useState<AppView>("main");
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
+
+  // Onboarding and daemon status
+  const {
+    state: onboardingState,
+    needsOnboarding,
+    completeOnboarding,
+  } = useOnboarding();
+  const {
+    status: daemonStatus,
+    isLoading: isDaemonLoading,
+    isDevelopment,
+    refreshStatus: refreshDaemonStatus,
+    startDaemon,
+    stopDaemon,
+    restartDaemon: restartDaemonFn,
+    repairDaemon,
+    requestPermissions,
+    updateDaemon,
+  } = useDaemonStatus();
 
   // VPN connection state
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -542,6 +572,101 @@ export default function App() {
     );
   }, [protocol]);
 
+  // Update system tray state when VPN status or settings change
+  useEffect(() => {
+    void updateTrayState({
+      connected: status === "connected",
+      killSwitchEnabled: daemonStatus?.kill_switch_active ?? false,
+      autoStartEnabled: autoConnect,
+      serverName: status === "connected" ? selectedServer?.region : undefined,
+    });
+  }, [
+    status,
+    daemonStatus?.kill_switch_active,
+    autoConnect,
+    selectedServer?.region,
+  ]);
+
+  // Listen for tray events
+  useEffect(() => {
+    let unlisten: (() => void)[] = [];
+
+    const setupListeners = async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+
+        // Connect from tray
+        const unlistenConnect = await listen("tray-connect", () => {
+          log("Tray: Connect requested");
+          if (status === "disconnected" && selectedServer) {
+            void handleConnect();
+          }
+        });
+        unlisten.push(unlistenConnect);
+
+        // Disconnect from tray
+        const unlistenDisconnect = await listen("tray-disconnect", () => {
+          log("Tray: Disconnect requested");
+          if (status === "connected") {
+            handleDisconnect();
+          }
+        });
+        unlisten.push(unlistenDisconnect);
+
+        // Toggle kill switch from tray
+        const unlistenKillSwitch = await listen(
+          "tray-toggle-kill-switch",
+          async () => {
+            log("Tray: Toggle kill switch");
+            try {
+              const { enableKillSwitch, disableKillSwitch } = await import(
+                "./lib/tauri"
+              );
+              if (daemonStatus?.kill_switch_active) {
+                await disableKillSwitch();
+              } else {
+                await enableKillSwitch(true);
+              }
+              refreshDaemonStatus();
+            } catch (e) {
+              logError("Failed to toggle kill switch", e);
+            }
+          }
+        );
+        unlisten.push(unlistenKillSwitch);
+
+        // Toggle auto-start from tray
+        const unlistenAutoStart = await listen("tray-toggle-auto-start", () => {
+          log("Tray: Toggle auto-start");
+          setAutoConnect(!autoConnect);
+        });
+        unlisten.push(unlistenAutoStart);
+
+        // Open settings from tray
+        const unlistenSettings = await listen("tray-open-settings", () => {
+          log("Tray: Open settings");
+          setAppView("settings");
+        });
+        unlisten.push(unlistenSettings);
+      } catch (e) {
+        logError("Failed to set up tray listeners", e);
+      }
+    };
+
+    void setupListeners();
+
+    return () => {
+      unlisten.forEach((fn) => fn());
+    };
+  }, [
+    status,
+    selectedServer,
+    daemonStatus?.kill_switch_active,
+    autoConnect,
+    handleDisconnect,
+    refreshDaemonStatus,
+  ]);
+
   const handleSelectServer = useCallback((id: string) => {
     setSelectedId(id);
   }, []);
@@ -590,6 +715,29 @@ export default function App() {
     return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
   }
 
+  // Show onboarding if not completed
+  if (needsOnboarding) {
+    return (
+      <OnboardingView
+        onComplete={async (state) => {
+          await completeOnboarding({
+            completed: true,
+            current_step: "complete",
+            selected_protocol: state.selected_protocol,
+            kill_switch_enabled: state.kill_switch_enabled,
+            allow_lan: state.allow_lan,
+            daemon_installed: state.daemon_installed,
+          });
+          // Apply settings from onboarding
+          if (state.selected_protocol) {
+            setProtocol(state.selected_protocol);
+          }
+        }}
+        initialState={onboardingState || undefined}
+      />
+    );
+  }
+
   // Settings view
   if (appView === "settings") {
     return (
@@ -612,15 +760,52 @@ export default function App() {
           isRefreshingTools={isRefreshing}
           debugInfo={debugInfo}
           onBack={() => setAppView("main")}
+          daemonStatus={daemonStatus}
+          isDaemonLoading={isDaemonLoading}
+          onRefreshDaemonStatus={refreshDaemonStatus}
+          onStartDaemon={startDaemon}
+          onStopDaemon={stopDaemon}
+          onRestartDaemon={restartDaemonFn}
+          onRepairDaemon={repairDaemon}
+          onRequestPermissions={requestPermissions}
+          isDevelopment={isDevelopment}
+          onUpdateDaemon={updateDaemon}
         />
       </div>
     );
   }
 
+  // Check if daemon is not running
+  const isDaemonNotRunning =
+    !isDaemonLoading && (!daemonStatus || !daemonStatus.running);
+
   // Main view
   return (
     <div className="flex h-screen flex-col bg-slate-950 text-slate-50">
       <ToastContainer toasts={toasts} onClose={removeToast} />
+
+      {/* Daemon Warning Banner */}
+      {isDaemonNotRunning && (
+        <div className="flex items-center justify-between border-b border-amber-500/30 bg-amber-500/10 px-4 py-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-400" />
+            <span className="text-sm text-amber-300">
+              VPN service is not running. Kill switch and VPN connections
+              require the service to be active.
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              setAppView("settings");
+              setSettingsTab("service");
+            }}
+            className="rounded-lg bg-amber-500/20 px-3 py-1 text-xs font-medium text-amber-300 transition-colors hover:bg-amber-500/30"
+          >
+            Fix Now
+          </button>
+        </div>
+      )}
+
       <DesktopHeader
         status={status}
         onSettingsClick={() => setAppView("settings")}

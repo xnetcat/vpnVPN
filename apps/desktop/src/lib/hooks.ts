@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import type { Protocol, VpnToolsStatus, VpnConnectionStatus, MapServer } from "./types";
+import type { Protocol, VpnToolsStatus, VpnConnectionStatus, MapServer, DaemonStatus, OnboardingState } from "./types";
 import { TIMEZONE_TO_COUNTRY } from "./constants";
 import { API_BASE_URL, WG_SERVER_PUBLIC_KEY } from "./config";
 import {
@@ -8,6 +8,13 @@ import {
   getDesktopSettings,
   updateDesktopSettings,
   getMachineId,
+  getDaemonStatus,
+  getOnboardingState,
+  saveOnboardingState,
+  installDaemon,
+  restartDaemon,
+  isDevelopmentMode,
+  updateDaemonDev,
   log,
   logError,
 } from "./tauri";
@@ -373,4 +380,153 @@ export function useAuth() {
   }, []);
 
   return { isAuthenticated, user, isLoading, checkAuth, signOut };
+}
+
+// Hook to manage daemon status
+export function useDaemonStatus() {
+  const [status, setStatus] = useState<DaemonStatus | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDev, setIsDev] = useState(false);
+
+  const refreshStatus = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const daemonStatus = await getDaemonStatus();
+      setStatus(daemonStatus);
+    } catch (e) {
+      logError("Failed to get daemon status:", e);
+      setStatus(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshStatus();
+    // Check if development mode
+    isDevelopmentMode().then(setIsDev).catch(() => setIsDev(false));
+    // Poll every 10 seconds
+    const interval = setInterval(() => void refreshStatus(), 10000);
+    return () => clearInterval(interval);
+  }, [refreshStatus]);
+
+  const handleStartDaemon = useCallback(async () => {
+    try {
+      await installDaemon();
+      await refreshStatus();
+    } catch (e) {
+      logError("Failed to start daemon:", e);
+      throw e;
+    }
+  }, [refreshStatus]);
+
+  const handleStopDaemon = useCallback(async () => {
+    // Stop is typically done by uninstalling on most platforms
+    logError("Stop daemon not directly supported - use restart or uninstall");
+  }, []);
+
+  const handleRestartDaemon = useCallback(async () => {
+    try {
+      await restartDaemon();
+      // Wait a bit for restart
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await refreshStatus();
+    } catch (e) {
+      logError("Failed to restart daemon:", e);
+      throw e;
+    }
+  }, [refreshStatus]);
+
+  const handleRepairDaemon = useCallback(async () => {
+    try {
+      await installDaemon();
+      await refreshStatus();
+    } catch (e) {
+      logError("Failed to repair daemon:", e);
+      throw e;
+    }
+  }, [refreshStatus]);
+
+  const handleRequestPermissions = useCallback(async () => {
+    // Permissions are typically granted during install
+    await handleRepairDaemon();
+  }, [handleRepairDaemon]);
+
+  const handleUpdateDaemon = useCallback(async () => {
+    try {
+      await updateDaemonDev();
+      // Wait a bit for restart
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await refreshStatus();
+    } catch (e) {
+      logError("Failed to update daemon:", e);
+      throw e;
+    }
+  }, [refreshStatus]);
+
+  return {
+    status,
+    isLoading,
+    isDevelopment: isDev,
+    refreshStatus,
+    startDaemon: handleStartDaemon,
+    stopDaemon: handleStopDaemon,
+    restartDaemon: handleRestartDaemon,
+    repairDaemon: handleRepairDaemon,
+    requestPermissions: handleRequestPermissions,
+    updateDaemon: handleUpdateDaemon,
+  };
+}
+
+// Hook to manage onboarding state
+export function useOnboarding() {
+  const [state, setState] = useState<OnboardingState | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const onboardingState = await getOnboardingState();
+        setState(onboardingState);
+      } catch (e) {
+        logError("Failed to get onboarding state:", e);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, []);
+
+  const completeOnboarding = useCallback(async (newState: OnboardingState) => {
+    try {
+      await saveOnboardingState(newState);
+      setState(newState);
+    } catch (e) {
+      logError("Failed to save onboarding state:", e);
+    }
+  }, []);
+
+  const resetOnboarding = useCallback(async () => {
+    const defaultState: OnboardingState = {
+      completed: false,
+      current_step: "welcome",
+      selected_protocol: null,
+      kill_switch_enabled: false,
+      allow_lan: true,
+      daemon_installed: false,
+    };
+    try {
+      await saveOnboardingState(defaultState);
+      setState(defaultState);
+    } catch (e) {
+      logError("Failed to reset onboarding state:", e);
+    }
+  }, []);
+
+  return {
+    state,
+    isLoading,
+    needsOnboarding: !isLoading && (!state || !state.completed),
+    completeOnboarding,
+    resetOnboarding,
+  };
 }
