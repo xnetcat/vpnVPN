@@ -14,7 +14,11 @@ import {
   Loader2,
   Code,
   Terminal,
+  FileText,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+import { getDaemonLogs } from "../lib/tauri";
 
 type DaemonStatus = {
   running: boolean;
@@ -132,6 +136,28 @@ export function ServiceTab({
   onUpdateDaemon,
 }: ServiceTabProps) {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [showLogs, setShowLogs] = useState(false);
+  const [logs, setLogs] = useState<string>("");
+  const [logsLoading, setLogsLoading] = useState(false);
+
+  const handleViewLogs = async () => {
+    if (showLogs) {
+      setShowLogs(false);
+      return;
+    }
+    
+    setLogsLoading(true);
+    try {
+      const logContent = await getDaemonLogs();
+      setLogs(logContent);
+      setShowLogs(true);
+    } catch (e) {
+      setLogs(`Error loading logs: ${e}`);
+      setShowLogs(true);
+    } finally {
+      setLogsLoading(false);
+    }
+  };
 
   const handleAction = async (action: string, handler: () => Promise<void>) => {
     setActionLoading(action);
@@ -309,6 +335,41 @@ export function ServiceTab({
           </div>
         </div>
       )}
+
+      {/* Daemon Logs */}
+      <div className="border-t border-slate-800 pt-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-slate-400" />
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+              Daemon Logs
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={handleViewLogs}
+            disabled={logsLoading}
+            className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-50"
+          >
+            {logsLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : showLogs ? (
+              <ChevronUp className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
+            {showLogs ? "Hide Logs" : "View Logs"}
+          </button>
+        </div>
+        
+        {showLogs && (
+          <div className="rounded-xl border border-slate-700 bg-slate-950 p-4">
+            <pre className="max-h-96 overflow-auto whitespace-pre-wrap font-mono text-xs text-slate-300">
+              {logs || "No logs available"}
+            </pre>
+          </div>
+        )}
+      </div>
 
       {/* Development Tools */}
       {isDevelopment && onUpdateDaemon && (

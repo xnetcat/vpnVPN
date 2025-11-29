@@ -10,8 +10,13 @@ export function buildWireGuardConfig(params: {
   privateKey: string;
   assignedIp: string;
   serverPublicKeyOverride?: string;
+  endpointOverride?: string;
+  portOverride?: number;
 }) {
-  const endpoint = WG_ENDPOINT;
+  // Use override endpoint if provided, otherwise fall back to env config
+  const endpoint = params.endpointOverride
+    ? `${params.endpointOverride}:${params.portOverride ?? 51820}`
+    : WG_ENDPOINT;
   const serverPublicKey =
     params.serverPublicKeyOverride || WG_SERVER_PUBLIC_KEY;
 

@@ -761,10 +761,84 @@ fn is_daemon_available() -> bool {
 /// Get daemon status.
 #[tauri::command]
 fn get_daemon_status() -> Result<daemon_client::DaemonStatus, String> {
+    eprintln!("[get_daemon_status] Called");
+    
     if !daemon_client::is_daemon_available() {
+        eprintln!("[get_daemon_status] Daemon not available, returning default status");
         return Ok(daemon_client::DaemonStatus::default());
     }
-    daemon_client::get_status()
+    
+    eprintln!("[get_daemon_status] Daemon available, getting status");
+    let result = daemon_client::get_status();
+    eprintln!("[get_daemon_status] Result: {:?}", result);
+    result
+}
+
+/// Get daemon logs (macOS only).
+#[tauri::command]
+fn get_daemon_logs() -> Result<String, String> {
+    eprintln!("[get_daemon_logs] Called");
+    
+    #[cfg(target_os = "macos")]
+    {
+        let mut logs = String::new();
+        
+        // Read stdout log
+        if let Ok(stdout) = std::fs::read_to_string("/var/log/vpnvpn-daemon.log") {
+            logs.push_str("=== STDOUT LOG ===\n");
+            // Get last 100 lines
+            let lines: Vec<&str> = stdout.lines().collect();
+            let start = if lines.len() > 100 { lines.len() - 100 } else { 0 };
+            for line in &lines[start..] {
+                logs.push_str(line);
+                logs.push('\n');
+            }
+        } else {
+            logs.push_str("=== STDOUT LOG ===\n(not found)\n");
+        }
+        
+        // Read stderr log
+        if let Ok(stderr) = std::fs::read_to_string("/var/log/vpnvpn-daemon.error.log") {
+            logs.push_str("\n=== STDERR LOG ===\n");
+            let lines: Vec<&str> = stderr.lines().collect();
+            let start = if lines.len() > 100 { lines.len() - 100 } else { 0 };
+            for line in &lines[start..] {
+                logs.push_str(line);
+                logs.push('\n');
+            }
+        } else {
+            logs.push_str("\n=== STDERR LOG ===\n(not found)\n");
+        }
+        
+        // Get launchctl info
+        if let Ok(output) = std::process::Command::new("launchctl")
+            .args(["list", "com.vpnvpn.daemon"])
+            .output()
+        {
+            logs.push_str("\n=== LAUNCHCTL STATUS ===\n");
+            logs.push_str(&String::from_utf8_lossy(&output.stdout));
+            if !output.stderr.is_empty() {
+                logs.push_str(&String::from_utf8_lossy(&output.stderr));
+            }
+        }
+        
+        Ok(logs)
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        let output = std::process::Command::new("journalctl")
+            .args(["-u", "vpnvpn-daemon", "-n", "100", "--no-pager"])
+            .output()
+            .map_err(|e| format!("Failed to get logs: {}", e))?;
+        
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        Ok("Windows log viewing not yet implemented".to_string())
+    }
 }
 
 /// Enable kill switch via daemon.
@@ -942,15 +1016,21 @@ fn install_daemon() -> Result<(), String> {
 
 #[cfg(target_os = "macos")]
 fn install_daemon_macos() -> Result<(), String> {
+    eprintln!("[install_daemon_macos] Starting daemon installation...");
+    
     let daemon_src = find_daemon_binary()?;
+    eprintln!("[install_daemon_macos] Found daemon binary at: {}", daemon_src.display());
 
     // Use osascript for privilege elevation
     let script = format!(
         r#"do shell script "
+            echo '[install] Creating directories...' >&2 &&
             mkdir -p /Library/PrivilegedHelperTools &&
+            echo '[install] Copying daemon binary...' >&2 &&
             cp '{}' /Library/PrivilegedHelperTools/com.vpnvpn.daemon &&
             chmod 755 /Library/PrivilegedHelperTools/com.vpnvpn.daemon &&
             chown root:wheel /Library/PrivilegedHelperTools/com.vpnvpn.daemon &&
+            echo '[install] Creating LaunchDaemon plist...' >&2 &&
             cat > /Library/LaunchDaemons/com.vpnvpn.daemon.plist << 'PLIST'
 <?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
@@ -966,25 +1046,93 @@ fn install_daemon_macos() -> Result<(), String> {
     <true/>
     <key>KeepAlive</key>
     <true/>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/var/log/vpnvpn-daemon.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/vpnvpn-daemon.error.log</string>
 </dict>
 </plist>
 PLIST
             chmod 644 /Library/LaunchDaemons/com.vpnvpn.daemon.plist &&
-            launchctl load /Library/LaunchDaemons/com.vpnvpn.daemon.plist
+            echo '[install] Unloading any existing daemon...' >&2 &&
+            launchctl unload /Library/LaunchDaemons/com.vpnvpn.daemon.plist 2>/dev/null || true &&
+            echo '[install] Loading daemon...' >&2 &&
+            launchctl load /Library/LaunchDaemons/com.vpnvpn.daemon.plist &&
+            echo '[install] Checking daemon status...' >&2 &&
+            sleep 1 &&
+            launchctl list | grep com.vpnvpn.daemon &&
+            echo '[install] Installation complete!' >&2
         " with administrator privileges"#,
         daemon_src.display()
     );
 
-    let status = std::process::Command::new("osascript")
+    eprintln!("[install_daemon_macos] Running osascript for privilege elevation...");
+    
+    let output = std::process::Command::new("osascript")
         .arg("-e")
         .arg(&script)
-        .status()
+        .output()
         .map_err(|e| format!("Failed to run osascript: {e}"))?;
 
-    if !status.success() {
-        return Err("Installation cancelled or failed".to_string());
+    eprintln!("[install_daemon_macos] osascript exit code: {:?}", output.status.code());
+    if !output.stdout.is_empty() {
+        eprintln!("[install_daemon_macos] stdout: {}", String::from_utf8_lossy(&output.stdout));
+    }
+    if !output.stderr.is_empty() {
+        eprintln!("[install_daemon_macos] stderr: {}", String::from_utf8_lossy(&output.stderr));
     }
 
+    if !output.status.success() {
+        return Err(format!(
+            "Installation cancelled or failed. Exit code: {:?}\nstderr: {}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    // Verify the daemon is running
+    eprintln!("[install_daemon_macos] Verifying daemon is running...");
+    std::thread::sleep(std::time::Duration::from_secs(2));
+    
+    let check = std::process::Command::new("launchctl")
+        .args(["list", "com.vpnvpn.daemon"])
+        .output();
+    
+    match check {
+        Ok(out) => {
+            eprintln!("[install_daemon_macos] launchctl list output: {}", String::from_utf8_lossy(&out.stdout));
+            if out.status.success() {
+                eprintln!("[install_daemon_macos] Daemon appears to be loaded");
+            } else {
+                eprintln!("[install_daemon_macos] WARNING: Daemon may not be loaded: {}", String::from_utf8_lossy(&out.stderr));
+            }
+        }
+        Err(e) => {
+            eprintln!("[install_daemon_macos] WARNING: Could not check daemon status: {e}");
+        }
+    }
+    
+    // Check if socket exists
+    let socket_path = "/var/run/vpnvpn-daemon.sock";
+    for i in 0..5 {
+        if std::path::Path::new(socket_path).exists() {
+            eprintln!("[install_daemon_macos] Socket file found at {}", socket_path);
+            break;
+        }
+        eprintln!("[install_daemon_macos] Waiting for socket file... attempt {}/5", i + 1);
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+    
+    if !std::path::Path::new(socket_path).exists() {
+        eprintln!("[install_daemon_macos] WARNING: Socket file not found at {}. Check /var/log/vpnvpn-daemon.error.log for errors.", socket_path);
+    }
+
+    eprintln!("[install_daemon_macos] Installation completed successfully");
     Ok(())
 }
 
@@ -1332,6 +1480,7 @@ fn main() {
             // Daemon commands
             is_daemon_available,
             get_daemon_status,
+            get_daemon_logs,
             enable_kill_switch,
             disable_kill_switch,
             restart_daemon,

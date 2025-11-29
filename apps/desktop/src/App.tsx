@@ -469,6 +469,9 @@ export default function App() {
           privateKey: result.privateKey,
           assignedIp: result.assignedIp,
           serverPublicKeyOverride: wgServerPublicKey || undefined,
+          // Use server's publicIp if available (for dynamic server selection)
+          endpointOverride: selectedServer.publicIp || undefined,
+          portOverride: selectedServer.metadata?.port,
         });
       } else if (protocol === "openvpn") {
         cfg = buildOpenVpnConfig({

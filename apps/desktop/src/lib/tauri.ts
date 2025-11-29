@@ -135,6 +135,16 @@ export async function getDaemonStatus(): Promise<DaemonStatus | null> {
   }
 }
 
+// Get daemon logs (for debugging)
+export async function getDaemonLogs(): Promise<string> {
+  try {
+    return await invoke<string>("get_daemon_logs");
+  } catch (e) {
+    logError("Failed to get daemon logs", e);
+    return `Error getting logs: ${e}`;
+  }
+}
+
 // Enable kill switch
 export async function enableKillSwitch(allowLan: boolean): Promise<void> {
   await invoke("enable_kill_switch", { allowLan });

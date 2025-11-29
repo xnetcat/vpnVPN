@@ -9,30 +9,42 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 use vpnvpn_shared::ipc::{DaemonRequest, DaemonResponse, JsonRpcRequest, JsonRpcResponse};
 
-const SOCKET_PATH: &str = "/var/run/vpnvpn-daemon.sock";
-
 /// Run the Unix Domain Socket server.
 pub async fn run_server(state: Arc<RwLock<DaemonState>>) -> Result<()> {
+    let socket_path = crate::get_socket_path();
+    
+    info!("Starting IPC server...");
+    
     // Remove existing socket file
-    let _ = std::fs::remove_file(SOCKET_PATH);
+    if let Err(e) = std::fs::remove_file(&socket_path) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            warn!("Failed to remove existing socket: {}", e);
+        }
+    }
 
     // Create parent directory if needed
-    if let Some(parent) = std::path::Path::new(SOCKET_PATH).parent() {
+    if let Some(parent) = std::path::Path::new(&socket_path).parent() {
+        info!("Creating directory: {:?}", parent);
         std::fs::create_dir_all(parent)?;
     }
 
     // Bind to socket
-    let listener = UnixListener::bind(SOCKET_PATH)?;
+    info!("Binding to socket: {}", socket_path);
+    let listener = UnixListener::bind(&socket_path)?;
+    info!("Socket bound successfully");
 
-    // Set socket permissions (only owner can access)
+    // Set socket permissions (world readable/writable so unprivileged GUI can connect)
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let permissions = std::fs::Permissions::from_mode(0o700);
-        std::fs::set_permissions(SOCKET_PATH, permissions)?;
+        // 0o666 allows any user to read/write to the socket
+        // Security is provided by the directory permissions and authentication
+        let permissions = std::fs::Permissions::from_mode(0o666);
+        std::fs::set_permissions(&socket_path, permissions)?;
+        info!("Socket permissions set to 0666");
     }
 
-    info!("IPC server listening on {}", SOCKET_PATH);
+    info!("IPC server listening on {}", socket_path);
 
     loop {
         match listener.accept().await {

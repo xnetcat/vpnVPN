@@ -5,6 +5,18 @@
 //! - Kill-switch and firewall rules
 //! - Credential storage
 //! - Network routing
+//!
+//! # Development Mode
+//!
+//! Run with `--dev` flag to use a user-accessible socket path:
+//! ```bash
+//! sudo cargo run -- --dev
+//! ```
+//!
+//! For hot reload during development:
+//! ```bash
+//! sudo cargo watch -x 'run -- --dev'
+//! ```
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -17,19 +29,66 @@ mod update;
 mod vpn;
 
 use anyhow::Result;
+use clap::Parser;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use state::DaemonState;
 
 /// Daemon version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Command-line arguments for the daemon.
+#[derive(Parser, Debug)]
+#[command(name = "vpnvpn-daemon")]
+#[command(about = "vpnVPN privileged daemon for VPN management")]
+#[command(version = VERSION)]
+pub struct Args {
+    /// Run in development mode with user-accessible socket
+    #[arg(long, short)]
+    pub dev: bool,
+
+    /// Custom socket path (overrides default)
+    #[arg(long)]
+    pub socket: Option<String>,
+
+    /// Log level (trace, debug, info, warn, error)
+    #[arg(long, default_value = "info")]
+    pub log_level: String,
+}
+
+/// Global config set from CLI args
+pub static DEV_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Get the socket path based on mode
+pub fn get_socket_path() -> String {
+    if DEV_MODE.load(std::sync::atomic::Ordering::Relaxed) {
+        // Dev mode: use /tmp for easy access without root
+        "/tmp/vpnvpn-daemon.sock".to_string()
+    } else {
+        // Production: use /var/run (requires root)
+        "/var/run/vpnvpn-daemon.sock".to_string()
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logging
-    init_logging();
+    let args = Args::parse();
+
+    // Set dev mode flag
+    DEV_MODE.store(args.dev, std::sync::atomic::Ordering::Relaxed);
+
+    // Initialize logging with specified level
+    init_logging(&args.log_level);
+
+    if args.dev {
+        warn!("===========================================");
+        warn!("  RUNNING IN DEVELOPMENT MODE");
+        warn!("  Socket: {}", get_socket_path());
+        warn!("  Hot reload: sudo cargo watch -x 'run -- --dev'");
+        warn!("===========================================");
+    }
 
     info!("vpnVPN Daemon v{} starting...", VERSION);
 
@@ -92,13 +151,18 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn init_logging() {
+fn init_logging(level: &str) {
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    // Use RUST_LOG env var if set, otherwise use CLI argument
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(level));
 
     tracing_subscriber::registry()
-        .with(fmt::layer().with_target(true).with_thread_ids(true))
+        .with(fmt::layer()
+            .with_target(true)
+            .with_thread_ids(true)
+            .with_ansi(true))  // Enable colors in terminal
         .with(filter)
         .init();
 }

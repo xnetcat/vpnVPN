@@ -9,7 +9,24 @@ use std::os::unix::net::UnixStream;
 
 static REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
+/// Production socket path (requires root daemon)
 const SOCKET_PATH: &str = "/var/run/vpnvpn-daemon.sock";
+
+/// Development socket path (user-accessible, for hot reload)
+const DEV_SOCKET_PATH: &str = "/tmp/vpnvpn-daemon.sock";
+
+/// Get the active socket path, preferring dev socket if available.
+/// This allows hot reload development without touching the production daemon.
+fn get_socket_path() -> &'static str {
+    // In dev, prefer the /tmp socket if it exists
+    if std::path::Path::new(DEV_SOCKET_PATH).exists() {
+        eprintln!("[daemon_client] Using dev socket: {}", DEV_SOCKET_PATH);
+        return DEV_SOCKET_PATH;
+    }
+    
+    // Fall back to production socket
+    SOCKET_PATH
+}
 
 #[derive(Debug, Serialize)]
 struct JsonRpcRequest {
@@ -58,16 +75,45 @@ impl Default for DaemonStatus {
     }
 }
 
-/// Check if daemon is available.
+/// Check if daemon is available (checks dev socket first, then production).
 pub fn is_daemon_available() -> bool {
+    eprintln!("[daemon_client] Checking if daemon is available...");
+    
     #[cfg(unix)]
     {
-        std::path::Path::new(SOCKET_PATH).exists()
+        // Check dev socket first
+        if std::path::Path::new(DEV_SOCKET_PATH).exists() {
+            eprintln!("[daemon_client] Dev socket {} exists, trying to connect...", DEV_SOCKET_PATH);
+            if let Ok(_) = UnixStream::connect(DEV_SOCKET_PATH) {
+                eprintln!("[daemon_client] Successfully connected to dev socket");
+                return true;
+            }
+        }
+        
+        // Check production socket
+        let socket_exists = std::path::Path::new(SOCKET_PATH).exists();
+        eprintln!("[daemon_client] Production socket {} exists: {}", SOCKET_PATH, socket_exists);
+        
+        if socket_exists {
+            match UnixStream::connect(SOCKET_PATH) {
+                Ok(_) => {
+                    eprintln!("[daemon_client] Successfully connected to production socket");
+                    true
+                }
+                Err(e) => {
+                    eprintln!("[daemon_client] Failed to connect to production socket: {}", e);
+                    false
+                }
+            }
+        } else {
+            false
+        }
     }
 
     #[cfg(windows)]
     {
         // Try to connect to named pipe
+        eprintln!("[daemon_client] Windows daemon check not yet implemented");
         false // TODO: Implement Windows named pipe check
     }
 }
@@ -75,9 +121,17 @@ pub fn is_daemon_available() -> bool {
 /// Send a request to the daemon.
 #[cfg(unix)]
 fn send_request(method: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
+    eprintln!("[daemon_client] send_request: method={}", method);
+    
+    let socket_path = get_socket_path();
+    
     // Connect to socket
-    let mut stream =
-        UnixStream::connect(SOCKET_PATH).map_err(|e| format!("Failed to connect to daemon: {}", e))?;
+    eprintln!("[daemon_client] Connecting to socket: {}", socket_path);
+    let mut stream = UnixStream::connect(socket_path).map_err(|e| {
+        eprintln!("[daemon_client] Failed to connect: {}", e);
+        format!("Failed to connect to daemon: {}", e)
+    })?;
+    eprintln!("[daemon_client] Connected to socket");
 
     stream
         .set_read_timeout(Some(std::time::Duration::from_secs(10)))
@@ -98,6 +152,8 @@ fn send_request(method: &str, params: serde_json::Value) -> Result<serde_json::V
     let request_json =
         serde_json::to_string(&request).map_err(|e| format!("Failed to serialize request: {}", e))?;
 
+    eprintln!("[daemon_client] Sending request: {}", request_json);
+    
     stream
         .write_all(request_json.as_bytes())
         .map_err(|e| format!("Failed to send request: {}", e))?;
@@ -105,22 +161,34 @@ fn send_request(method: &str, params: serde_json::Value) -> Result<serde_json::V
         .write_all(b"\n")
         .map_err(|e| format!("Failed to send newline: {}", e))?;
     stream.flush().map_err(|e| format!("Failed to flush: {}", e))?;
+    
+    eprintln!("[daemon_client] Request sent, waiting for response...");
 
     // Read response
     let mut reader = BufReader::new(stream);
     let mut response_line = String::new();
     reader
         .read_line(&mut response_line)
-        .map_err(|e| format!("Failed to read response: {}", e))?;
+        .map_err(|e| {
+            eprintln!("[daemon_client] Failed to read response: {}", e);
+            format!("Failed to read response: {}", e)
+        })?;
+
+    eprintln!("[daemon_client] Received response: {}", response_line.trim());
 
     // Parse response
     let response: JsonRpcResponse = serde_json::from_str(&response_line)
-        .map_err(|e| format!("Failed to parse response: {}", e))?;
+        .map_err(|e| {
+            eprintln!("[daemon_client] Failed to parse response: {}", e);
+            format!("Failed to parse response: {}", e)
+        })?;
 
     if let Some(error) = response.error {
+        eprintln!("[daemon_client] Daemon returned error: {} - {}", error.code, error.message);
         return Err(format!("Daemon error ({}): {}", error.code, error.message));
     }
 
+    eprintln!("[daemon_client] Request successful");
     response.result.ok_or_else(|| "Empty response".to_string())
 }
 
@@ -143,15 +211,27 @@ pub fn ping() -> Result<(), String> {
 
 /// Get daemon status.
 pub fn get_status() -> Result<DaemonStatus, String> {
+    eprintln!("[daemon_client] Getting daemon status...");
+    
     let result = send_request("get_status", serde_json::Value::Null)?;
+
+    eprintln!("[daemon_client] Raw status result: {:?}", result);
 
     // Extract nested status from response
     if let Some(status_obj) = result.get("Status") {
+        eprintln!("[daemon_client] Found Status object: {:?}", status_obj);
         serde_json::from_value(status_obj.clone())
-            .map_err(|e| format!("Failed to parse status: {}", e))
+            .map_err(|e| {
+                eprintln!("[daemon_client] Failed to parse Status: {}", e);
+                format!("Failed to parse status: {}", e)
+            })
     } else {
         // Try parsing the whole result
-        serde_json::from_value(result).map_err(|e| format!("Failed to parse status: {}", e))
+        eprintln!("[daemon_client] No Status object, trying to parse whole result");
+        serde_json::from_value(result.clone()).map_err(|e| {
+            eprintln!("[daemon_client] Failed to parse result as DaemonStatus: {}", e);
+            format!("Failed to parse status: {}", e)
+        })
     }
 }
 

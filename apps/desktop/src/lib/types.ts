@@ -7,6 +7,11 @@ export type MapServer = {
   country?: string;
   status: string;
   sessions: number;
+  publicIp?: string | null;
+  metadata?: {
+    port?: number;
+    [key: string]: unknown;
+  };
 };
 
 export type VpnToolsStatus = {

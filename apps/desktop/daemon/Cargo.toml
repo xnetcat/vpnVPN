@@ -12,6 +12,9 @@ path = "src/main.rs"
 # Shared types
 vpnvpn-shared = { path = "../shared" }
 
+# CLI argument parsing
+clap = { version = "4.5", features = ["derive"] }
+
 # Async runtime
 tokio = { version = "1.44", features = ["full", "signal"] }
 

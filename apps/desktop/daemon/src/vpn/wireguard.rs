@@ -1,10 +1,50 @@
 //! WireGuard VPN backend.
 
 use anyhow::Result;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use vpnvpn_shared::protocol::{ConnectionState, ConnectionStatus, Protocol, VpnConfig};
 
 const INTERFACE_NAME: &str = "vpnvpn-wg0";
+
+/// Find wg-quick binary in common locations.
+fn find_wg_quick() -> Result<String> {
+    let paths = [
+        "/opt/homebrew/bin/wg-quick",  // macOS ARM Homebrew
+        "/usr/local/bin/wg-quick",      // macOS Intel Homebrew / Linux
+        "/usr/bin/wg-quick",            // Linux system
+        "/bin/wg-quick",                // Linux system
+    ];
+
+    for path in &paths {
+        if std::path::Path::new(path).exists() {
+            info!("Found wg-quick at: {}", path);
+            return Ok(path.to_string());
+        }
+    }
+
+    // Fall back to PATH lookup
+    warn!("wg-quick not found in common paths, trying PATH lookup");
+    Ok("wg-quick".to_string())
+}
+
+/// Find wg binary in common locations.
+fn find_wg() -> Result<String> {
+    let paths = [
+        "/opt/homebrew/bin/wg",  // macOS ARM Homebrew
+        "/usr/local/bin/wg",      // macOS Intel Homebrew / Linux
+        "/usr/bin/wg",            // Linux system
+        "/bin/wg",                // Linux system
+    ];
+
+    for path in &paths {
+        if std::path::Path::new(path).exists() {
+            return Ok(path.to_string());
+        }
+    }
+
+    // Fall back to PATH lookup
+    Ok("wg".to_string())
+}
 
 /// Connect to WireGuard VPN.
 pub async fn connect(config: &VpnConfig) -> Result<ConnectionStatus> {
@@ -65,8 +105,10 @@ pub async fn disconnect() -> Result<()> {
 
 /// Check WireGuard connection status.
 pub async fn check_status() -> Result<ConnectionStatus> {
+    let wg = find_wg()?;
+
     // Check if interface exists and has a handshake
-    let output = tokio::process::Command::new("wg")
+    let output = tokio::process::Command::new(&wg)
         .args(["show", INTERFACE_NAME])
         .output()
         .await;
@@ -171,25 +213,49 @@ fn get_config_path() -> Result<std::path::PathBuf> {
 
 #[cfg(target_os = "macos")]
 async fn apply_macos(config_path: &std::path::Path) -> Result<()> {
+    // Check if running as root
+    if !nix::unistd::geteuid().is_root() {
+        return Err(anyhow::anyhow!(
+            "VPN operations require root privileges. Run the daemon with: sudo bun run dev:daemon:watch"
+        ));
+    }
+
+    let wg_quick = find_wg_quick()?;
+    info!("Using wg-quick at: {}", wg_quick);
+
     // Use wg-quick to bring up the interface
-    let output = tokio::process::Command::new("wg-quick")
+    let output = tokio::process::Command::new(&wg_quick)
         .args(["up", config_path.to_str().unwrap()])
         .output()
         .await?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        error!("wg-quick up failed. stderr: {}, stdout: {}", stderr, stdout);
+        
+        // Provide helpful error messages
+        if stderr.contains("sudo") || stderr.contains("password") {
+            return Err(anyhow::anyhow!(
+                "VPN requires root privileges. Run daemon with: sudo bun run dev:daemon:watch"
+            ));
+        }
+        
         return Err(anyhow::anyhow!("wg-quick up failed: {}", stderr));
     }
 
+    info!("wg-quick up succeeded");
     Ok(())
 }
 
 #[cfg(target_os = "macos")]
 async fn disconnect_macos() -> Result<()> {
+    let wg_quick = find_wg_quick()?;
     let config_path = get_config_path()?;
 
-    let _ = tokio::process::Command::new("wg-quick")
+    info!("Disconnecting WireGuard with: {} down {:?}", wg_quick, config_path);
+
+    let _ = tokio::process::Command::new(&wg_quick)
         .args(["down", config_path.to_str().unwrap()])
         .output()
         .await;
@@ -199,24 +265,48 @@ async fn disconnect_macos() -> Result<()> {
 
 #[cfg(target_os = "linux")]
 async fn apply_linux(config_path: &std::path::Path) -> Result<()> {
-    let output = tokio::process::Command::new("wg-quick")
+    // Check if running as root
+    if !nix::unistd::geteuid().is_root() {
+        return Err(anyhow::anyhow!(
+            "VPN operations require root privileges. Run the daemon with: sudo bun run dev:daemon:watch"
+        ));
+    }
+
+    let wg_quick = find_wg_quick()?;
+    info!("Using wg-quick at: {}", wg_quick);
+
+    let output = tokio::process::Command::new(&wg_quick)
         .args(["up", config_path.to_str().unwrap()])
         .output()
         .await?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        error!("wg-quick up failed. stderr: {}, stdout: {}", stderr, stdout);
+        
+        // Provide helpful error messages
+        if stderr.contains("sudo") || stderr.contains("permission") {
+            return Err(anyhow::anyhow!(
+                "VPN requires root privileges. Run daemon with: sudo bun run dev:daemon:watch"
+            ));
+        }
+        
         return Err(anyhow::anyhow!("wg-quick up failed: {}", stderr));
     }
 
+    info!("wg-quick up succeeded");
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
 async fn disconnect_linux() -> Result<()> {
+    let wg_quick = find_wg_quick()?;
     let config_path = get_config_path()?;
 
-    let _ = tokio::process::Command::new("wg-quick")
+    info!("Disconnecting WireGuard with: {} down {:?}", wg_quick, config_path);
+
+    let _ = tokio::process::Command::new(&wg_quick)
         .args(["down", config_path.to_str().unwrap()])
         .output()
         .await;

@@ -36,9 +36,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": [
-      "binaries/vpnvpn-daemon"
-    ],
+    "externalBin": ["binaries/vpnvpn-daemon"],
     "resources": [],
     "macOS": {
       "entitlements": null,

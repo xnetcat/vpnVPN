@@ -12,6 +12,9 @@ package-lock.json
 target/
 Cargo.lock
 
+# Tauri sidecar binaries (generated during build)
+apps/desktop/src-tauri/binaries/
+
 # Pulumi
 infra/pulumi/bin/
 .pulumi/
