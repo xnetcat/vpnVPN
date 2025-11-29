@@ -59,6 +59,11 @@ impl JsonRpcRequest {
                 ("update_settings", serde_json::to_value(&request).unwrap())
             }
             DaemonRequest::GetSettings => ("get_settings", serde_json::Value::Null),
+            DaemonRequest::GetVpnTools => ("get_vpn_tools", serde_json::Value::Null),
+            DaemonRequest::RefreshVpnTools => ("refresh_vpn_tools", serde_json::Value::Null),
+            DaemonRequest::UpdateBinaryPaths { .. } => {
+                ("update_binary_paths", serde_json::to_value(&request).unwrap())
+            }
             DaemonRequest::StoreCredential { .. } => {
                 ("store_credential", serde_json::to_value(&request).unwrap())
             }
@@ -148,6 +153,13 @@ pub enum DaemonRequest {
     },
     GetSettings,
 
+    // VPN Tools
+    GetVpnTools,
+    RefreshVpnTools,
+    UpdateBinaryPaths {
+        paths: crate::config::VpnBinaryPaths,
+    },
+
     // Credentials
     StoreCredential {
         key: String,
@@ -185,6 +197,7 @@ pub enum DaemonResponse {
     Status(DaemonStatus),
     ConnectionStatus(ConnectionStatus),
     Settings(DaemonSettings),
+    VpnTools(crate::config::VpnToolsStatus),
     Credential {
         value: Option<String>,
     },

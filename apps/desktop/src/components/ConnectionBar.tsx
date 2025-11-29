@@ -30,19 +30,19 @@ export function ConnectionBar({
     if (!vpnTools) return false;
     switch (protocol) {
       case "wireguard":
-        return vpnTools.wireguard_available;
+        return vpnTools.wireguard.available;
       case "openvpn":
-        return vpnTools.openvpn_available;
+        return vpnTools.openvpn.available;
       case "ikev2":
-        return vpnTools.ikev2_available;
+        return vpnTools.ikev2.available;
     }
   };
 
   // Check if any VPN tool is available
   const hasAnyTool = vpnTools
-    ? vpnTools.wireguard_available ||
-      vpnTools.openvpn_available ||
-      vpnTools.ikev2_available
+    ? vpnTools.wireguard.available ||
+      vpnTools.openvpn.available ||
+      vpnTools.ikev2.available
     : false;
 
   // Determine if connect should be disabled

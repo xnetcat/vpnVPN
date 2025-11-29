@@ -10,6 +10,12 @@ export const WG_ENDPOINT = import.meta.env.VITE_WG_ENDPOINT ?? "";
 export const WG_SERVER_PUBLIC_KEY =
   import.meta.env.VITE_WG_SERVER_PUBLIC_KEY ?? "";
 
+// Log configuration on load (for debugging)
+console.log("[config] Environment loaded:");
+console.log("[config]   API_BASE_URL:", API_BASE_URL);
+console.log("[config]   WG_ENDPOINT:", WG_ENDPOINT || "(empty)");
+console.log("[config]   WG_SERVER_PUBLIC_KEY:", WG_SERVER_PUBLIC_KEY ? "(set)" : "(empty)");
+
 // OpenVPN configuration
 export const OVPN_REMOTE = import.meta.env.VITE_OVPN_REMOTE ?? "<vpn-hostname>";
 export const OVPN_PORT = import.meta.env.VITE_OVPN_PORT ?? "1194";

@@ -3,6 +3,8 @@ import { open } from "@tauri-apps/plugin-shell";
 import type {
   Protocol,
   VpnToolsStatus,
+  VpnToolsStatusLegacy,
+  VpnBinaryPaths,
   DesktopSettings,
   VpnConnectionStatus,
 } from "./types";
@@ -28,13 +30,140 @@ export async function disconnectVpn(protocol: Protocol): Promise<void> {
   await invoke("disconnect_vpn", { protocol });
 }
 
-// VPN tools detection
+// VPN tools detection - uses daemon when available, falls back to basic detection
 export async function detectVpnTools(): Promise<VpnToolsStatus | null> {
   try {
-    return await invoke<VpnToolsStatus>("detect_vpn_tools");
+    // Get tools from Tauri which delegates to daemon if available
+    const legacy = await invoke<VpnToolsStatusLegacy>("detect_vpn_tools");
+
+    if (legacy) {
+      return {
+        wireguard: {
+          available: legacy.wireguard_available,
+          path: legacy.wireguard_path,
+          version: null,
+          custom_path: null,
+          error: legacy.wireguard_available ? null : "WireGuard not found",
+        },
+        openvpn: {
+          available: legacy.openvpn_available,
+          path: legacy.openvpn_path,
+          version: null,
+          custom_path: null,
+          error: legacy.openvpn_available ? null : "OpenVPN not found",
+        },
+        ikev2: {
+          available: legacy.ikev2_available,
+          path: legacy.ikev2_path,
+          version: null,
+          custom_path: null,
+          error: legacy.ikev2_available ? null : "IKEv2 tool not found",
+        },
+      };
+    }
+
+    return null;
   } catch (e) {
     logError("Failed to detect VPN tools", e);
     return null;
+  }
+}
+
+// Get detailed VPN tools info from daemon (includes version, custom paths, errors)
+export async function getVpnToolsDetailed(): Promise<VpnToolsStatus | null> {
+  try {
+    return await invoke<VpnToolsStatus>("get_vpn_tools_detailed");
+  } catch (e) {
+    logError("Failed to get detailed VPN tools", e);
+    return null;
+  }
+}
+
+// Refresh VPN tools detection (triggers daemon to re-scan)
+export async function refreshVpnTools(): Promise<VpnToolsStatus | null> {
+  try {
+    const legacy = await invoke<VpnToolsStatusLegacy>("refresh_vpn_tools");
+
+    if (legacy) {
+      return {
+        wireguard: {
+          available: legacy.wireguard_available,
+          path: legacy.wireguard_path,
+          version: null,
+          custom_path: null,
+          error: legacy.wireguard_available ? null : "WireGuard not found",
+        },
+        openvpn: {
+          available: legacy.openvpn_available,
+          path: legacy.openvpn_path,
+          version: null,
+          custom_path: null,
+          error: legacy.openvpn_available ? null : "OpenVPN not found",
+        },
+        ikev2: {
+          available: legacy.ikev2_available,
+          path: legacy.ikev2_path,
+          version: null,
+          custom_path: null,
+          error: legacy.ikev2_available ? null : "IKEv2 tool not found",
+        },
+      };
+    }
+
+    return null;
+  } catch (e) {
+    logError("Failed to refresh VPN tools", e);
+    return null;
+  }
+}
+
+// Update VPN binary paths in daemon and return refreshed tools status
+export async function updateVpnBinaryPaths(
+  paths: VpnBinaryPaths
+): Promise<VpnToolsStatus | null> {
+  try {
+    log("Updating VPN binary paths:", paths);
+
+    const legacy = await invoke<VpnToolsStatusLegacy>(
+      "update_vpn_binary_paths",
+      {
+        wgQuickPath: paths.wg_quick_path ?? null,
+        wireguardCliPath: paths.wireguard_cli_path ?? null,
+        openvpnPath: paths.openvpn_path ?? null,
+        ikev2Path: paths.ikev2_path ?? null,
+      }
+    );
+
+    if (legacy) {
+      return {
+        wireguard: {
+          available: legacy.wireguard_available,
+          path: legacy.wireguard_path,
+          version: null,
+          custom_path: paths.wg_quick_path ?? paths.wireguard_cli_path ?? null,
+          error: legacy.wireguard_available ? null : "WireGuard not found",
+        },
+        openvpn: {
+          available: legacy.openvpn_available,
+          path: legacy.openvpn_path,
+          version: null,
+          custom_path: paths.openvpn_path ?? null,
+          error: legacy.openvpn_available ? null : "OpenVPN not found",
+        },
+        ikev2: {
+          available: legacy.ikev2_available,
+          path: legacy.ikev2_path,
+          version: null,
+          custom_path: paths.ikev2_path ?? null,
+          error: legacy.ikev2_available ? null : "IKEv2 tool not found",
+        },
+      };
+    }
+
+    return null;
+  } catch (e) {
+    logError("Failed to update VPN binary paths", e);
+    throw e; // Re-throw so caller knows it failed
   }
 }
 
@@ -181,7 +310,9 @@ export async function getOnboardingState(): Promise<OnboardingState | null> {
 }
 
 // Save onboarding state
-export async function saveOnboardingState(state: OnboardingState): Promise<void> {
+export async function saveOnboardingState(
+  state: OnboardingState
+): Promise<void> {
   await invoke("save_onboarding_state", { state });
 }
 
@@ -220,4 +351,3 @@ export async function updateTrayState(params: {
     logError("Failed to update tray state", e);
   }
 }
-

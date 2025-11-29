@@ -358,7 +358,13 @@ export default function App() {
 
   // Custom hooks
   const userCountry = useUserCountry();
-  const { vpnTools, refreshTools, isRefreshing } = useVpnTools();
+  const {
+    vpnTools,
+    refreshTools,
+    updateBinaryPaths,
+    isRefreshing,
+    isUpdating,
+  } = useVpnTools();
   const vpnConnectionStatus = useVpnConnectionStatus(status);
   const {
     protocol,
@@ -398,11 +404,11 @@ export default function App() {
     if (!vpnTools) return false;
     switch (protocol) {
       case "wireguard":
-        return vpnTools.wireguard_available;
+        return vpnTools.wireguard.available;
       case "openvpn":
-        return vpnTools.openvpn_available;
+        return vpnTools.openvpn.available;
       case "ikev2":
-        return vpnTools.ikev2_available;
+        return vpnTools.ikev2.available;
     }
   }, [vpnTools, protocol]);
 
@@ -442,7 +448,7 @@ export default function App() {
     }
     // IKEv2 note: When CLI tool is available, we can open the config file
     // but cannot verify connection status programmatically
-    if (protocol === "ikev2" && !vpnTools?.ikev2_available) {
+    if (protocol === "ikev2" && !vpnTools?.ikev2.available) {
       showError(
         "IKEv2/IPsec is not available on this system. Please install strongSwan or use a different protocol."
       );
@@ -465,6 +471,17 @@ export default function App() {
 
       let cfg: string;
       if (protocol === "wireguard") {
+        console.log("[App] Building WireGuard config with:");
+        console.log(
+          "[App]   selectedServer.publicIp:",
+          selectedServer.publicIp
+        );
+        console.log(
+          "[App]   selectedServer.metadata:",
+          selectedServer.metadata
+        );
+        console.log("[App]   wgServerPublicKey:", wgServerPublicKey);
+
         cfg = buildWireGuardConfig({
           privateKey: result.privateKey,
           assignedIp: result.assignedIp,
@@ -473,6 +490,8 @@ export default function App() {
           endpointOverride: selectedServer.publicIp || undefined,
           portOverride: selectedServer.metadata?.port,
         });
+
+        console.log("[App] Generated WireGuard config:\n", cfg);
       } else if (protocol === "openvpn") {
         cfg = buildOpenVpnConfig({
           assignedIp: result.assignedIp,

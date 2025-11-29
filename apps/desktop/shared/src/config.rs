@@ -168,6 +168,10 @@ pub struct DaemonSettings {
 
     /// Firewall persistence mode.
     pub firewall_persistence: FirewallPersistence,
+
+    /// Custom binary paths for VPN tools.
+    #[serde(default)]
+    pub binary_paths: VpnBinaryPaths,
 }
 
 impl Default for DaemonSettings {
@@ -183,6 +187,7 @@ impl Default for DaemonSettings {
             block_webrtc: false,
             log_level: LogLevel::Info,
             firewall_persistence: FirewallPersistence::SessionOnly,
+            binary_paths: VpnBinaryPaths::default(),
         }
     }
 }
@@ -333,6 +338,9 @@ pub struct DaemonStatus {
 
     /// Platform-specific status info.
     pub platform_info: PlatformInfo,
+
+    /// VPN tools availability status.
+    pub vpn_tools: VpnToolsStatus,
 }
 
 impl Default for DaemonStatus {
@@ -346,6 +354,7 @@ impl Default for DaemonStatus {
             connection: crate::ConnectionStatus::default(),
             kill_switch_active: false,
             platform_info: PlatformInfo::default(),
+            vpn_tools: VpnToolsStatus::default(),
         }
     }
 }
@@ -367,5 +376,53 @@ pub struct PlatformInfo {
 
     /// Path to service configuration (plist, unit file, etc.).
     pub service_config_path: Option<String>,
+}
+
+/// Status of VPN tools/binaries available on the system.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct VpnToolsStatus {
+    /// WireGuard tool availability.
+    pub wireguard: VpnToolInfo,
+
+    /// OpenVPN tool availability.
+    pub openvpn: VpnToolInfo,
+
+    /// IKEv2/IPsec tool availability.
+    pub ikev2: VpnToolInfo,
+}
+
+/// Information about a single VPN tool.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct VpnToolInfo {
+    /// Whether the tool is available.
+    pub available: bool,
+
+    /// Detected binary path.
+    pub path: Option<String>,
+
+    /// Tool version (if detectable).
+    pub version: Option<String>,
+
+    /// Custom path override (from settings).
+    pub custom_path: Option<String>,
+
+    /// Error message if detection failed.
+    pub error: Option<String>,
+}
+
+/// Custom binary paths configuration for VPN tools.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct VpnBinaryPaths {
+    /// Custom path to wg-quick binary (macOS/Linux).
+    pub wg_quick_path: Option<String>,
+
+    /// Custom path to wireguard.exe binary (Windows).
+    pub wireguard_cli_path: Option<String>,
+
+    /// Custom path to openvpn binary.
+    pub openvpn_path: Option<String>,
+
+    /// Custom path to IKEv2 tool (ipsec, networksetup, etc.).
+    pub ikev2_path: Option<String>,
 }
 

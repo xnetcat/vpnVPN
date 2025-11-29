@@ -147,8 +147,12 @@ fn get_config_path() -> Result<std::path::PathBuf> {
 
 #[cfg(unix)]
 async fn start_openvpn_unix(config_path: &std::path::Path) -> Result<()> {
+    // Get openvpn path using the tools module
+    let openvpn_path = get_openvpn_path()?;
+    info!("Using openvpn at: {:?}", openvpn_path);
+
     // Start openvpn as daemon
-    let output = tokio::process::Command::new("openvpn")
+    let output = tokio::process::Command::new(&openvpn_path)
         .args([
             "--config",
             config_path.to_str().unwrap(),
@@ -161,10 +165,54 @@ async fn start_openvpn_unix(config_path: &std::path::Path) -> Result<()> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(anyhow::anyhow!("openvpn start failed: {}", stderr));
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        error!("OpenVPN failed - stderr: {}, stdout: {}", stderr, stdout);
+        return Err(anyhow::anyhow!(
+            "openvpn start failed: {}{}",
+            stderr,
+            if stderr.is_empty() && stdout.is_empty() {
+                "Check /var/log/vpnvpn-openvpn.log for details"
+            } else {
+                ""
+            }
+        ));
     }
 
     Ok(())
+}
+
+#[cfg(unix)]
+fn get_openvpn_path() -> Result<std::path::PathBuf> {
+    use vpnvpn_shared::config::VpnBinaryPaths;
+
+    // Use tools module for detection
+    let default_paths = VpnBinaryPaths::default();
+    if let Some(path) = crate::tools::get_openvpn_path(&default_paths) {
+        return Ok(path);
+    }
+
+    // Fallback: try common paths
+    let paths = [
+        "/opt/homebrew/sbin/openvpn",
+        "/opt/homebrew/bin/openvpn",
+        "/usr/local/sbin/openvpn",
+        "/usr/local/bin/openvpn",
+        "/usr/sbin/openvpn",
+        "/usr/bin/openvpn",
+        "/sbin/openvpn",
+        "/bin/openvpn",
+    ];
+
+    for path in paths {
+        let p = std::path::Path::new(path);
+        if p.exists() {
+            return Ok(p.to_path_buf());
+        }
+    }
+
+    Err(anyhow::anyhow!(
+        "OpenVPN not found. Please install it:\n  - macOS: brew install openvpn\n  - Ubuntu/Debian: sudo apt install openvpn\n\nAlternatively, use WireGuard which is configured for the local dev stack."
+    ))
 }
 
 #[cfg(windows)]

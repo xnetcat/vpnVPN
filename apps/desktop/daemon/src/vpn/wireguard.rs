@@ -2,12 +2,22 @@
 
 use anyhow::Result;
 use tracing::{debug, error, info, warn};
+use vpnvpn_shared::config::VpnBinaryPaths;
 use vpnvpn_shared::protocol::{ConnectionState, ConnectionStatus, Protocol, VpnConfig};
 
 const INTERFACE_NAME: &str = "vpnvpn-wg0";
 
-/// Find wg-quick binary in common locations.
-fn find_wg_quick() -> Result<String> {
+/// Get wg-quick path using the tools detection module.
+fn get_wg_quick_path() -> Result<String> {
+    // Use default paths - in production, the daemon state holds the actual paths
+    let default_paths = VpnBinaryPaths::default();
+    
+    if let Some(path) = crate::tools::get_wireguard_path(&default_paths) {
+        info!("Using wg-quick at: {:?}", path);
+        return Ok(path.to_string_lossy().to_string());
+    }
+
+    // Fallback: try common paths
     let paths = [
         "/opt/homebrew/bin/wg-quick",  // macOS ARM Homebrew
         "/usr/local/bin/wg-quick",      // macOS Intel Homebrew / Linux
@@ -22,9 +32,10 @@ fn find_wg_quick() -> Result<String> {
         }
     }
 
-    // Fall back to PATH lookup
-    warn!("wg-quick not found in common paths, trying PATH lookup");
-    Ok("wg-quick".to_string())
+    warn!("wg-quick not found. Install WireGuard or set a custom path.");
+    Err(anyhow::anyhow!(
+        "wg-quick not found. Install WireGuard:\n  - macOS: brew install wireguard-tools\n  - Linux: sudo apt install wireguard-tools"
+    ))
 }
 
 /// Find wg binary in common locations.
@@ -220,7 +231,7 @@ async fn apply_macos(config_path: &std::path::Path) -> Result<()> {
         ));
     }
 
-    let wg_quick = find_wg_quick()?;
+    let wg_quick = get_wg_quick_path()?;
     info!("Using wg-quick at: {}", wg_quick);
 
     // Use wg-quick to bring up the interface
@@ -250,7 +261,7 @@ async fn apply_macos(config_path: &std::path::Path) -> Result<()> {
 
 #[cfg(target_os = "macos")]
 async fn disconnect_macos() -> Result<()> {
-    let wg_quick = find_wg_quick()?;
+    let wg_quick = get_wg_quick_path()?;
     let config_path = get_config_path()?;
 
     info!("Disconnecting WireGuard with: {} down {:?}", wg_quick, config_path);

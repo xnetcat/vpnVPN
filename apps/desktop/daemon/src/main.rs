@@ -25,6 +25,7 @@ mod firewall;
 mod ipc;
 mod platform;
 mod state;
+mod tools;
 mod update;
 mod vpn;
 

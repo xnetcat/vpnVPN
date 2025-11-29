@@ -1,9 +1,18 @@
 import { useEffect, useState, useCallback } from "react";
-import type { Protocol, VpnToolsStatus, VpnConnectionStatus, MapServer, DaemonStatus, OnboardingState } from "./types";
+import type {
+  Protocol,
+  VpnToolsStatus,
+  VpnConnectionStatus,
+  MapServer,
+  DaemonStatus,
+  OnboardingState,
+} from "./types";
 import { TIMEZONE_TO_COUNTRY } from "./constants";
 import { API_BASE_URL, WG_SERVER_PUBLIC_KEY } from "./config";
 import {
   detectVpnTools,
+  refreshVpnTools as refreshVpnToolsTauri,
+  updateVpnBinaryPaths,
   checkVpnStatus,
   getDesktopSettings,
   updateDesktopSettings,
@@ -18,6 +27,7 @@ import {
   log,
   logError,
 } from "./tauri";
+import type { VpnBinaryPaths } from "./types";
 import {
   authFetch,
   getStoredSessionToken,
@@ -41,19 +51,27 @@ export function useUserCountry(): string | null {
   return userCountry;
 }
 
-// Hook to detect VPN tools availability with refresh capability
+// Hook to detect VPN tools availability with refresh and update capability
 export function useVpnTools(): {
   vpnTools: VpnToolsStatus | null;
   refreshTools: () => Promise<void>;
+  updateBinaryPaths: (paths: VpnBinaryPaths) => Promise<void>;
   isRefreshing: boolean;
+  isUpdating: boolean;
 } {
   const [vpnTools, setVpnTools] = useState<VpnToolsStatus | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
+  // Initial detection
   const refreshTools = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const tools = await detectVpnTools();
+      // Try daemon refresh first, fall back to basic detection
+      let tools = await refreshVpnToolsTauri();
+      if (!tools) {
+        tools = await detectVpnTools();
+      }
       if (tools) {
         setVpnTools(tools);
         log("Detected VPN tools:", tools);
@@ -63,11 +81,32 @@ export function useVpnTools(): {
     }
   }, []);
 
+  // Update binary paths and refresh
+  const updateBinaryPaths = useCallback(async (paths: VpnBinaryPaths) => {
+    setIsUpdating(true);
+    try {
+      log("Updating binary paths:", paths);
+      const tools = await updateVpnBinaryPaths(paths);
+      if (tools) {
+        setVpnTools(tools);
+        log("Updated VPN tools after path change:", tools);
+      }
+    } finally {
+      setIsUpdating(false);
+    }
+  }, []);
+
   useEffect(() => {
     void refreshTools();
   }, [refreshTools]);
 
-  return { vpnTools, refreshTools, isRefreshing };
+  return {
+    vpnTools,
+    refreshTools,
+    updateBinaryPaths,
+    isRefreshing,
+    isUpdating,
+  };
 }
 
 // Hook to check actual VPN connection status from the system
@@ -144,7 +183,14 @@ export function useDesktopSettings() {
       openvpnPath,
       wireguardCliPath,
     });
-  }, [protocol, autoConnect, wgQuickPath, openvpnPath, wireguardCliPath, isLoaded]);
+  }, [
+    protocol,
+    autoConnect,
+    wgQuickPath,
+    openvpnPath,
+    wireguardCliPath,
+    isLoaded,
+  ]);
 
   return {
     protocol,
@@ -175,7 +221,8 @@ export function useServers() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       // Handle tRPC response format
-      const result = data?.result?.data?.json ?? data?.result?.data ?? data ?? [];
+      const result =
+        data?.result?.data?.json ?? data?.result?.data ?? data ?? [];
       setServers(Array.isArray(result) ? result : []);
     } catch (e: any) {
       logError("Failed to fetch servers:", e);
@@ -219,11 +266,14 @@ export function useDeviceRegistration() {
       setIsLoading(true);
       setError(null);
       try {
-        const res = await authFetch(`${API_BASE_URL}/api/trpc/device.register`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ json: params }),
-        });
+        const res = await authFetch(
+          `${API_BASE_URL}/api/trpc/device.register`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ json: params }),
+          }
+        );
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err?.error?.message ?? `HTTP ${res.status}`);
@@ -279,7 +329,13 @@ export function useDeviceRegistration() {
     }
   }, []);
 
-  return { registerDevice, confirmConnection, cancelConnection, isLoading, error };
+  return {
+    registerDevice,
+    confirmConnection,
+    cancelConnection,
+    isLoading,
+    error,
+  };
 }
 
 // Hook to get server public key
@@ -291,10 +347,13 @@ export function useServerPubkey() {
 
     (async () => {
       try {
-        const res = await authFetch(`${API_BASE_URL}/api/trpc/desktop.serverPubkey`);
+        const res = await authFetch(
+          `${API_BASE_URL}/api/trpc/desktop.serverPubkey`
+        );
         if (!res.ok) return;
         const data = await res.json();
-        const key = data?.result?.data?.json?.publicKey ?? data?.result?.data?.publicKey;
+        const key =
+          data?.result?.data?.json?.publicKey ?? data?.result?.data?.publicKey;
         if (key) setPubkey(key);
       } catch (e) {
         logError("Failed to fetch server pubkey:", e);
@@ -308,16 +367,20 @@ export function useServerPubkey() {
 // Hook to check authentication status
 export function useAuth() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [user, setUser] = useState<{ id: string; email?: string; name?: string } | null>(null);
+  const [user, setUser] = useState<{
+    id: string;
+    email?: string;
+    name?: string;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const checkAuth = useCallback(async () => {
     setIsLoading(true);
-    
+
     // First check if we have a stored token
     const storedToken = getStoredSessionToken();
     const storedUser = getStoredUser();
-    
+
     if (!storedToken) {
       setIsAuthenticated(false);
       setUser(null);
@@ -404,7 +467,9 @@ export function useDaemonStatus() {
   useEffect(() => {
     void refreshStatus();
     // Check if development mode
-    isDevelopmentMode().then(setIsDev).catch(() => setIsDev(false));
+    isDevelopmentMode()
+      .then(setIsDev)
+      .catch(() => setIsDev(false));
     // Poll every 10 seconds
     const interval = setInterval(() => void refreshStatus(), 10000);
     return () => clearInterval(interval);

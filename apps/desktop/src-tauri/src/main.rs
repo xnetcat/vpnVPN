@@ -41,7 +41,7 @@ fn get_machine_id() -> String {
     }
 }
 
-/// Status of VPN tool availability on the system.
+/// Status of VPN tool availability on the system (legacy format for frontend compatibility).
 #[derive(Serialize, Clone)]
 struct VpnToolsStatus {
     wireguard_available: bool,
@@ -52,166 +52,200 @@ struct VpnToolsStatus {
     ikev2_path: Option<String>,
 }
 
-/// Check if a command exists and is executable.
-fn command_exists(cmd: &str) -> Option<String> {
-    #[cfg(target_os = "windows")]
-    {
-        // On Windows, try `where` to find the command
-        let output = std::process::Command::new("where").arg(cmd).output().ok()?;
-        if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .next()?
-                .trim()
-                .to_string();
-            if !path.is_empty() {
-                return Some(path);
-            }
-        }
-        None
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        // On Unix, use `which` to find the command
-        let output = std::process::Command::new("which").arg(cmd).output().ok()?;
-        if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !path.is_empty() {
-                return Some(path);
-            }
-        }
-        None
-    }
-}
-
-/// Check common installation paths for a command (useful when PATH is not set properly)
-fn check_common_paths(cmd: &str) -> Option<String> {
-    let common_paths = [
-        // Homebrew on Apple Silicon
-        format!("/opt/homebrew/bin/{}", cmd),
-        // Homebrew on Intel Mac / Linux
-        format!("/usr/local/bin/{}", cmd),
-        // Standard Unix paths
-        format!("/usr/bin/{}", cmd),
-        format!("/bin/{}", cmd),
-        // Additional Linux paths
-        format!("/usr/sbin/{}", cmd),
-        format!("/sbin/{}", cmd),
-    ];
-
-    common_paths
-        .into_iter()
-        .find(|path| std::path::Path::new(path).exists())
-}
-
-/// Find a command by checking PATH first, then common locations
-fn find_command(cmd: &str) -> Option<String> {
-    command_exists(cmd).or_else(|| check_common_paths(cmd))
-}
-
-/// Helper to get a non-empty custom path from settings
-fn non_empty_path(path: Option<&str>) -> Option<&str> {
-    path.filter(|p| !p.trim().is_empty())
-}
-
+/// Detect VPN tools - delegates to daemon if available, otherwise uses fallback detection.
 #[tauri::command]
 fn detect_vpn_tools() -> VpnToolsStatus {
-    let settings = load_settings().unwrap_or_default();
-
-    // Check WireGuard availability
-    let (wireguard_available, wireguard_path) = {
-        #[cfg(target_os = "windows")]
-        {
-            // On Windows, check for wireguard.exe CLI
-            let custom_path = non_empty_path(settings.wireguard_cli_path.as_deref());
-            if let Some(path) = custom_path {
-                if std::path::Path::new(path).exists() {
-                    (true, Some(path.to_string()))
-                } else {
-                    // Custom path invalid, fall back to auto-detection
-                    let found = find_command("wireguard.exe").or_else(|| find_command("wireguard"));
-                    (found.is_some(), found)
-                }
-            } else {
-                let found = find_command("wireguard.exe").or_else(|| find_command("wireguard"));
-                (found.is_some(), found)
+    eprintln!("[tauri] detect_vpn_tools called");
+    
+    // Try to get tools from daemon first
+    if daemon_client::is_daemon_available() {
+        eprintln!("[tauri] Daemon available, getting tools from daemon");
+        
+        match daemon_client::get_vpn_tools() {
+            Ok(tools) => {
+                eprintln!("[tauri] Got tools from daemon: {:?}", tools);
+                return VpnToolsStatus {
+                    wireguard_available: tools.wireguard.available,
+                    wireguard_path: tools.wireguard.path,
+                    openvpn_available: tools.openvpn.available,
+                    openvpn_path: tools.openvpn.path,
+                    ikev2_available: tools.ikev2.available,
+                    ikev2_path: tools.ikev2.path,
+                };
+            }
+            Err(e) => {
+                eprintln!("[tauri] Failed to get tools from daemon: {}, using fallback", e);
             }
         }
-        #[cfg(not(target_os = "windows"))]
-        {
-            // On Linux/macOS, check for wg-quick
-            let custom_path = non_empty_path(settings.wg_quick_path.as_deref());
-            if let Some(path) = custom_path {
-                if std::path::Path::new(path).exists() || find_command(path).is_some() {
-                    (true, Some(path.to_string()))
-                } else {
-                    // Custom path invalid, fall back to auto-detection
-                    let found = find_command("wg-quick");
-                    (found.is_some(), found)
-                }
-            } else {
-                let found = find_command("wg-quick");
-                (found.is_some(), found)
-            }
-        }
-    };
-
-    // Check OpenVPN availability
-    let (openvpn_available, openvpn_path) = {
-        let custom_path = non_empty_path(settings.openvpn_path.as_deref());
-        if let Some(path) = custom_path {
-            if std::path::Path::new(path).exists() || find_command(path).is_some() {
-                (true, Some(path.to_string()))
-            } else {
-                // Custom path invalid, fall back to auto-detection
-                #[cfg(target_os = "windows")]
-                let found = find_command("openvpn.exe").or_else(|| find_command("openvpn"));
-                #[cfg(not(target_os = "windows"))]
-                let found = find_command("openvpn");
-                (found.is_some(), found)
-            }
-        } else {
-            #[cfg(target_os = "windows")]
-            let found = find_command("openvpn.exe").or_else(|| find_command("openvpn"));
-            #[cfg(not(target_os = "windows"))]
-            let found = find_command("openvpn");
-            (found.is_some(), found)
-        }
-    };
-
-    // Check IKEv2/IPsec availability
-    let (ikev2_available, ikev2_path) = {
-        #[cfg(target_os = "macos")]
-        {
-            // macOS has built-in IKEv2 support via System Preferences / networksetup
-            let found = find_command("networksetup");
-            (found.is_some(), found)
-        }
-        #[cfg(target_os = "linux")]
-        {
-            // Linux typically uses strongSwan (ipsec command)
-            let found = find_command("ipsec")
-                .or_else(|| find_command("strongswan"))
-                .or_else(|| find_command("nmcli"));
-            (found.is_some(), found)
-        }
-        #[cfg(target_os = "windows")]
-        {
-            // Windows has built-in IKEv2 support via rasdial/PowerShell
-            let found = find_command("rasdial");
-            (found.is_some(), found)
-        }
-    };
-
-    VpnToolsStatus {
-        wireguard_available,
-        wireguard_path,
-        openvpn_available,
-        openvpn_path,
-        ikev2_available,
-        ikev2_path,
+    } else {
+        eprintln!("[tauri] Daemon not available, using fallback detection");
     }
+    
+    // Fallback: basic detection when daemon is not available
+    detect_vpn_tools_fallback()
+}
+
+/// Fallback VPN tool detection when daemon is not running.
+/// This is a simplified version that doesn't support custom paths.
+fn detect_vpn_tools_fallback() -> VpnToolsStatus {
+    VpnToolsStatus {
+        wireguard_available: find_command_basic("wg-quick").is_some(),
+        wireguard_path: find_command_basic("wg-quick"),
+        openvpn_available: find_command_basic("openvpn").is_some(),
+        openvpn_path: find_command_basic("openvpn"),
+        ikev2_available: find_command_basic_ikev2(),
+        ikev2_path: get_ikev2_path_basic(),
+    }
+}
+
+/// Basic command detection for fallback mode.
+fn find_command_basic(cmd: &str) -> Option<String> {
+    // Check common paths
+    let common_paths = [
+        format!("/opt/homebrew/bin/{}", cmd),
+        format!("/opt/homebrew/sbin/{}", cmd),
+        format!("/usr/local/bin/{}", cmd),
+        format!("/usr/local/sbin/{}", cmd),
+        format!("/usr/bin/{}", cmd),
+        format!("/usr/sbin/{}", cmd),
+        format!("/bin/{}", cmd),
+        format!("/sbin/{}", cmd),
+    ];
+    
+    for path in common_paths {
+        if std::path::Path::new(&path).exists() {
+            return Some(path);
+        }
+    }
+    
+    // Try which command
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Ok(output) = std::process::Command::new("which").arg(cmd).output() {
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !path.is_empty() {
+                    return Some(path);
+                }
+            }
+        }
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(output) = std::process::Command::new("where").arg(cmd).output() {
+            if output.status.success() {
+                if let Some(path) = String::from_utf8_lossy(&output.stdout).lines().next() {
+                    let path = path.trim().to_string();
+                    if !path.is_empty() {
+                        return Some(path);
+                    }
+                }
+            }
+        }
+    }
+    
+    None
+}
+
+/// Check IKEv2 tool availability (platform-specific).
+fn find_command_basic_ikev2() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        std::path::Path::new("/usr/sbin/networksetup").exists()
+    }
+    #[cfg(target_os = "linux")]
+    {
+        find_command_basic("ipsec").is_some() || find_command_basic("nmcli").is_some()
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::path::Path::new(r"C:\Windows\System32\rasdial.exe").exists()
+    }
+}
+
+/// Get IKEv2 tool path (platform-specific).
+fn get_ikev2_path_basic() -> Option<String> {
+    #[cfg(target_os = "macos")]
+    {
+        Some("/usr/sbin/networksetup".to_string())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        find_command_basic("ipsec").or_else(|| find_command_basic("nmcli"))
+    }
+    #[cfg(target_os = "windows")]
+    {
+        Some(r"C:\Windows\System32\rasdial.exe".to_string())
+    }
+}
+
+/// Refresh VPN tools detection (triggers daemon to re-detect).
+#[tauri::command]
+fn refresh_vpn_tools() -> Result<VpnToolsStatus, String> {
+    eprintln!("[tauri] refresh_vpn_tools called");
+    
+    if !daemon_client::is_daemon_available() {
+        return Err("Daemon not available. Start the daemon to refresh tools.".to_string());
+    }
+    
+    let tools = daemon_client::refresh_vpn_tools()?;
+    
+    Ok(VpnToolsStatus {
+        wireguard_available: tools.wireguard.available,
+        wireguard_path: tools.wireguard.path,
+        openvpn_available: tools.openvpn.available,
+        openvpn_path: tools.openvpn.path,
+        ikev2_available: tools.ikev2.available,
+        ikev2_path: tools.ikev2.path,
+    })
+}
+
+/// Update VPN binary paths in daemon settings.
+#[tauri::command]
+fn update_vpn_binary_paths(
+    wg_quick_path: Option<String>,
+    wireguard_cli_path: Option<String>,
+    openvpn_path: Option<String>,
+    ikev2_path: Option<String>,
+) -> Result<VpnToolsStatus, String> {
+    eprintln!("[tauri] update_vpn_binary_paths called");
+    eprintln!("[tauri] wg_quick_path: {:?}", wg_quick_path);
+    eprintln!("[tauri] openvpn_path: {:?}", openvpn_path);
+    
+    if !daemon_client::is_daemon_available() {
+        return Err("Daemon not available. Start the daemon to update binary paths.".to_string());
+    }
+    
+    let paths = daemon_client::VpnBinaryPaths {
+        wg_quick_path,
+        wireguard_cli_path,
+        openvpn_path,
+        ikev2_path,
+    };
+    
+    let tools = daemon_client::update_binary_paths(paths)?;
+    
+    Ok(VpnToolsStatus {
+        wireguard_available: tools.wireguard.available,
+        wireguard_path: tools.wireguard.path,
+        openvpn_available: tools.openvpn.available,
+        openvpn_path: tools.openvpn.path,
+        ikev2_available: tools.ikev2.available,
+        ikev2_path: tools.ikev2.path,
+    })
+}
+
+/// Get detailed VPN tools info from daemon (includes version, custom paths, errors).
+#[tauri::command]
+fn get_vpn_tools_detailed() -> Result<daemon_client::VpnToolsStatus, String> {
+    eprintln!("[tauri] get_vpn_tools_detailed called");
+    
+    if !daemon_client::is_daemon_available() {
+        return Err("Daemon not available".to_string());
+    }
+    
+    daemon_client::get_vpn_tools()
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -468,12 +502,19 @@ fn disconnect_ikev2() -> Result<(), String> {
 /// The daemon handles all VPN operations for security and kill-switch support.
 #[tauri::command]
 fn apply_vpn_config(protocol: String, config: String) -> Result<(), String> {
+    eprintln!("[apply_vpn_config] Called with protocol: {}", protocol);
+    eprintln!("[apply_vpn_config] Config:\n{}", config);
+    
     // Parse the config string to extract VPN parameters
     let vpn_config = parse_vpn_config(&protocol, &config)?;
+    
+    eprintln!("[apply_vpn_config] Parsed config: endpoint={}:{}", 
+        vpn_config.server_endpoint, vpn_config.server_port);
     
     // Connect via daemon
     daemon_client::connect_vpn(vpn_config)?;
     
+    eprintln!("[apply_vpn_config] Connection request sent successfully");
     Ok(())
 }
 
@@ -1470,6 +1511,9 @@ fn main() {
             health_check,
             get_machine_id,
             detect_vpn_tools,
+            refresh_vpn_tools,
+            update_vpn_binary_paths,
+            get_vpn_tools_detailed,
             check_vpn_status,
             get_desktop_settings,
             update_desktop_settings,

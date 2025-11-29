@@ -350,11 +350,11 @@ function GeneralTab({
     if (!vpnTools) return true;
     switch (id) {
       case "wireguard":
-        return vpnTools.wireguard_available;
+        return vpnTools.wireguard.available;
       case "openvpn":
-        return vpnTools.openvpn_available;
+        return vpnTools.openvpn.available;
       case "ikev2":
-        return vpnTools.ikev2_available;
+        return vpnTools.ikev2.available;
     }
   };
 
@@ -470,9 +470,9 @@ function ConnectionTab({
   // Count available tools
   const availableCount = vpnTools
     ? [
-        vpnTools.wireguard_available,
-        vpnTools.openvpn_available,
-        vpnTools.ikev2_available,
+        vpnTools.wireguard.available,
+        vpnTools.openvpn.available,
+        vpnTools.ikev2.available,
       ].filter(Boolean).length
     : 0;
   const totalCount = 3;
@@ -541,20 +541,20 @@ function ConnectionTab({
         <div className="space-y-3">
           <ToolStatusCard
             name="WireGuard"
-            available={vpnTools?.wireguard_available ?? false}
-            path={vpnTools?.wireguard_path ?? null}
+            available={vpnTools?.wireguard.available ?? false}
+            path={vpnTools?.wireguard.path ?? null}
             instructions={INSTALL_INSTRUCTIONS.wireguard}
           />
           <ToolStatusCard
             name="OpenVPN"
-            available={vpnTools?.openvpn_available ?? false}
-            path={vpnTools?.openvpn_path ?? null}
+            available={vpnTools?.openvpn.available ?? false}
+            path={vpnTools?.openvpn.path ?? null}
             instructions={INSTALL_INSTRUCTIONS.openvpn}
           />
           <ToolStatusCard
             name="IKEv2 / IPsec"
-            available={vpnTools?.ikev2_available ?? false}
-            path={vpnTools?.ikev2_path ?? null}
+            available={vpnTools?.ikev2.available ?? false}
+            path={vpnTools?.ikev2.path ?? null}
             instructions={INSTALL_INSTRUCTIONS.ikev2}
           />
         </div>
@@ -579,10 +579,10 @@ function ConnectionTab({
                 type="text"
                 value={wgQuickPath}
                 onChange={(e) => setWgQuickPath(e.target.value)}
-                placeholder={vpnTools?.wireguard_path || "wg-quick"}
+                placeholder={vpnTools?.wireguard.path || "wg-quick"}
                 className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
               />
-              {vpnTools?.wireguard_available ? (
+              {vpnTools?.wireguard.available ? (
                 <div className="flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-1.5">
                   <Check className="h-3.5 w-3.5 text-emerald-400" />
                 </div>
@@ -603,10 +603,10 @@ function ConnectionTab({
                 type="text"
                 value={openvpnPath}
                 onChange={(e) => setOpenvpnPath(e.target.value)}
-                placeholder={vpnTools?.openvpn_path || "openvpn"}
+                placeholder={vpnTools?.openvpn.path || "openvpn"}
                 className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
               />
-              {vpnTools?.openvpn_available ? (
+              {vpnTools?.openvpn.available ? (
                 <div className="flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-1.5">
                   <Check className="h-3.5 w-3.5 text-emerald-400" />
                 </div>

@@ -14,13 +14,38 @@ export type MapServer = {
   };
 };
 
+// Individual VPN tool info
+export type VpnToolInfo = {
+  available: boolean;
+  path: string | null;
+  version: string | null;
+  custom_path: string | null;
+  error: string | null;
+};
+
+// VPN tools status from daemon
 export type VpnToolsStatus = {
+  wireguard: VpnToolInfo;
+  openvpn: VpnToolInfo;
+  ikev2: VpnToolInfo;
+};
+
+// Legacy format (for backward compatibility with detect_vpn_tools Tauri command)
+export type VpnToolsStatusLegacy = {
   wireguard_available: boolean;
   wireguard_path: string | null;
   openvpn_available: boolean;
   openvpn_path: string | null;
   ikev2_available: boolean;
   ikev2_path: string | null;
+};
+
+// Custom binary paths configuration
+export type VpnBinaryPaths = {
+  wg_quick_path?: string | null;
+  wireguard_cli_path?: string | null;
+  openvpn_path?: string | null;
+  ikev2_path?: string | null;
 };
 
 export type DesktopSettings = {
@@ -44,6 +69,7 @@ export type DaemonStatus = {
   has_network_permission: boolean;
   has_firewall_permission: boolean;
   kill_switch_active: boolean;
+  vpn_tools?: VpnToolsStatus;
 };
 
 export type OnboardingState = {

@@ -3,7 +3,7 @@
 use anyhow::Result;
 use std::time::Instant;
 use vpnvpn_shared::{
-    config::{DaemonSettings, DaemonStatus, PlatformInfo},
+    config::{DaemonSettings, DaemonStatus, PlatformInfo, VpnToolsStatus},
     protocol::{ConnectionState, ConnectionStatus},
 };
 
@@ -23,6 +23,9 @@ pub struct DaemonState {
 
     /// Authenticated client sessions.
     pub sessions: Vec<ClientSession>,
+
+    /// Cached VPN tools status.
+    pub vpn_tools: VpnToolsStatus,
 }
 
 /// An authenticated client session.
@@ -34,12 +37,16 @@ pub struct ClientSession {
 
 impl DaemonState {
     pub fn new(settings: DaemonSettings) -> Self {
+        // Detect VPN tools on startup
+        let vpn_tools = crate::tools::detect_vpn_tools(&settings.binary_paths);
+
         Self {
             started_at: Instant::now(),
             settings,
             connection: ConnectionStatus::default(),
             kill_switch_active: false,
             sessions: Vec::new(),
+            vpn_tools,
         }
     }
 
@@ -54,7 +61,19 @@ impl DaemonState {
             connection: self.connection.clone(),
             kill_switch_active: self.kill_switch_active,
             platform_info: self.platform_info(),
+            vpn_tools: self.vpn_tools.clone(),
         }
+    }
+
+    /// Refresh VPN tools detection.
+    pub fn refresh_vpn_tools(&mut self) {
+        self.vpn_tools = crate::tools::refresh_vpn_tools(&self.settings.binary_paths);
+    }
+
+    /// Update binary paths and refresh detection.
+    pub fn update_binary_paths(&mut self, paths: vpnvpn_shared::config::VpnBinaryPaths) {
+        self.settings.binary_paths = paths;
+        self.refresh_vpn_tools();
     }
 
     /// Get platform-specific info.

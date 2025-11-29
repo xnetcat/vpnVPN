@@ -37,6 +37,10 @@ pub async fn handle_request(
 
         DaemonRequest::UpdateSettings { settings } => {
             let mut state = state.write().await;
+            
+            // Check if binary paths changed, so we need to refresh tools
+            let paths_changed = state.settings.binary_paths != settings.binary_paths;
+            
             state.settings = settings.clone();
 
             // Save settings to disk
@@ -54,11 +58,62 @@ pub async fn handle_request(
                 }
             }
 
+            // Refresh tools if paths changed
+            if paths_changed {
+                state.refresh_vpn_tools();
+            }
+
             DaemonResponse::Ok
         }
 
+        DaemonRequest::GetVpnTools => {
+            let state = state.read().await;
+            DaemonResponse::VpnTools(state.vpn_tools.clone())
+        }
+
+        DaemonRequest::RefreshVpnTools => {
+            info!("Refresh VPN tools request");
+            let mut state = state.write().await;
+            state.refresh_vpn_tools();
+            DaemonResponse::VpnTools(state.vpn_tools.clone())
+        }
+
+        DaemonRequest::UpdateBinaryPaths { paths } => {
+            info!("Update binary paths request");
+            debug!("  WG path: {:?}", paths.wg_quick_path);
+            debug!("  OpenVPN path: {:?}", paths.openvpn_path);
+            debug!("  IKEv2 path: {:?}", paths.ikev2_path);
+
+            let mut state = state.write().await;
+            state.update_binary_paths(paths);
+
+            // Save settings to disk
+            if let Some(path) = vpnvpn_shared::config::config_file("daemon.json") {
+                if let Some(parent) = path.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                match serde_json::to_string_pretty(&state.settings) {
+                    Ok(json) => {
+                        if let Err(e) = std::fs::write(&path, json) {
+                            error!("Failed to save settings: {}", e);
+                        }
+                    }
+                    Err(e) => error!("Failed to serialize settings: {}", e),
+                }
+            }
+
+            DaemonResponse::VpnTools(state.vpn_tools.clone())
+        }
+
         DaemonRequest::Connect { config } => {
-            info!("Connect request for {:?}", config.protocol);
+            info!("Connect request received");
+            info!("  Protocol: {:?}", config.protocol);
+            info!("  Endpoint: {}:{}", config.server_endpoint, config.server_port);
+            info!("  Server ID: {}", config.server_id);
+            info!("  Assigned IP: {:?}", config.assigned_ip);
+            info!("  Has WG private key: {}", config.wg_private_key.is_some());
+            info!("  Has WG server public key: {}", config.wg_server_public_key.is_some());
+            info!("  DNS: {:?}", config.dns_servers);
 
             let result = match config.protocol {
                 vpnvpn_shared::Protocol::WireGuard => {

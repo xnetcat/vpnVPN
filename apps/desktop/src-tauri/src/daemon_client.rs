@@ -312,6 +312,15 @@ pub struct ConnectionStatus {
 
 /// Connect to VPN via daemon.
 pub fn connect_vpn(config: VpnConfig) -> Result<ConnectionStatus, String> {
+    eprintln!("[daemon_client] connect_vpn called");
+    eprintln!("[daemon_client] Config: protocol={}, endpoint={}:{}", 
+        config.protocol, config.server_endpoint, config.server_port);
+    eprintln!("[daemon_client] Config: assigned_ip={:?}, wg_private_key={}", 
+        config.assigned_ip, 
+        config.wg_private_key.as_ref().map(|_| "[REDACTED]").unwrap_or("None"));
+    eprintln!("[daemon_client] Config: wg_server_public_key={:?}", 
+        config.wg_server_public_key);
+    
     ensure_daemon_running()?;
     
     let params = serde_json::json!({
@@ -319,10 +328,13 @@ pub fn connect_vpn(config: VpnConfig) -> Result<ConnectionStatus, String> {
         "config": config
     });
 
+    eprintln!("[daemon_client] Sending connect request to daemon...");
     let result = send_request("connect", params)?;
+    eprintln!("[daemon_client] Connect response: {:?}", result);
 
     // Parse connection status from response
     if let Some(status) = result.get("ConnectionStatus") {
+        eprintln!("[daemon_client] Got ConnectionStatus from response");
         return serde_json::from_value(status.clone())
             .map_err(|e| format!("Failed to parse connection status: {}", e));
     }
@@ -332,9 +344,11 @@ pub fn connect_vpn(config: VpnConfig) -> Result<ConnectionStatus, String> {
             .get("message")
             .and_then(|v| v.as_str())
             .unwrap_or("Connection failed");
+        eprintln!("[daemon_client] Connect error: {}", msg);
         return Err(msg.to_string());
     }
 
+    eprintln!("[daemon_client] Connect succeeded (no explicit status)");
     // Return default connected status
     Ok(ConnectionStatus {
         state: "connected".to_string(),
@@ -384,5 +398,115 @@ fn ensure_daemon_running() -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+// ============ VPN Tools ============
+
+/// VPN tool information from daemon.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct VpnToolInfo {
+    pub available: bool,
+    pub path: Option<String>,
+    pub version: Option<String>,
+    pub custom_path: Option<String>,
+    pub error: Option<String>,
+}
+
+/// VPN tools status from daemon.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct VpnToolsStatus {
+    pub wireguard: VpnToolInfo,
+    pub openvpn: VpnToolInfo,
+    pub ikev2: VpnToolInfo,
+}
+
+/// Custom binary paths configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct VpnBinaryPaths {
+    pub wg_quick_path: Option<String>,
+    pub wireguard_cli_path: Option<String>,
+    pub openvpn_path: Option<String>,
+    pub ikev2_path: Option<String>,
+}
+
+/// Get VPN tools status from daemon.
+pub fn get_vpn_tools() -> Result<VpnToolsStatus, String> {
+    eprintln!("[daemon_client] Getting VPN tools status...");
+    
+    let result = send_request("get_vpn_tools", serde_json::Value::Null)?;
+    
+    eprintln!("[daemon_client] Raw VPN tools result: {:?}", result);
+    
+    // Extract VpnTools from response
+    if let Some(tools_obj) = result.get("VpnTools") {
+        eprintln!("[daemon_client] Found VpnTools object: {:?}", tools_obj);
+        serde_json::from_value(tools_obj.clone())
+            .map_err(|e| {
+                eprintln!("[daemon_client] Failed to parse VpnTools: {}", e);
+                format!("Failed to parse VPN tools: {}", e)
+            })
+    } else {
+        // Try parsing the whole result
+        eprintln!("[daemon_client] No VpnTools object, trying to parse whole result");
+        serde_json::from_value(result.clone()).map_err(|e| {
+            eprintln!("[daemon_client] Failed to parse result as VpnToolsStatus: {}", e);
+            format!("Failed to parse VPN tools: {}", e)
+        })
+    }
+}
+
+/// Refresh VPN tools detection in daemon.
+pub fn refresh_vpn_tools() -> Result<VpnToolsStatus, String> {
+    eprintln!("[daemon_client] Refreshing VPN tools...");
+    
+    let result = send_request("refresh_vpn_tools", serde_json::Value::Null)?;
+    
+    // Extract VpnTools from response
+    if let Some(tools_obj) = result.get("VpnTools") {
+        serde_json::from_value(tools_obj.clone())
+            .map_err(|e| format!("Failed to parse VPN tools: {}", e))
+    } else {
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse VPN tools: {}", e))
+    }
+}
+
+/// Update VPN binary paths in daemon settings.
+pub fn update_binary_paths(paths: VpnBinaryPaths) -> Result<VpnToolsStatus, String> {
+    eprintln!("[daemon_client] Updating VPN binary paths...");
+    eprintln!("[daemon_client] Paths: {:?}", paths);
+    
+    let params = serde_json::json!({
+        "type": "update_binary_paths",
+        "paths": paths
+    });
+    
+    let result = send_request("update_binary_paths", params)?;
+    
+    eprintln!("[daemon_client] Update binary paths result: {:?}", result);
+    
+    // Extract VpnTools from response
+    if let Some(tools_obj) = result.get("VpnTools") {
+        serde_json::from_value(tools_obj.clone())
+            .map_err(|e| format!("Failed to parse VPN tools: {}", e))
+    } else {
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse VPN tools: {}", e))
+    }
+}
+
+/// Get VPN tools from daemon status (includes vpn_tools field).
+pub fn get_vpn_tools_from_status() -> Result<VpnToolsStatus, String> {
+    eprintln!("[daemon_client] Getting VPN tools from daemon status...");
+    
+    let result = send_request("get_status", serde_json::Value::Null)?;
+    
+    // Extract vpn_tools from Status response
+    if let Some(status_obj) = result.get("Status") {
+        if let Some(tools_obj) = status_obj.get("vpn_tools") {
+            return serde_json::from_value(tools_obj.clone())
+                .map_err(|e| format!("Failed to parse VPN tools from status: {}", e));
+        }
+    }
+    
+    Err("VPN tools not found in daemon status".to_string())
 }
 

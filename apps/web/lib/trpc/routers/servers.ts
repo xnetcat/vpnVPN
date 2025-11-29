@@ -43,6 +43,9 @@ export const serversRouter = router({
       sessions: item.metrics?.sessions || 0,
       cpu: typeof item.metrics?.cpu === "number" ? item.metrics.cpu : undefined,
       lastSeen: item.lastSeen,
+      // Include server connection details
+      publicIp: item.publicIp || null,
+      metadata: item.metadata || {},
     }));
 
     return servers;

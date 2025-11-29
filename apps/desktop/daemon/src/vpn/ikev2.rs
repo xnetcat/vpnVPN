@@ -2,7 +2,45 @@
 
 use anyhow::Result;
 use tracing::{debug, info, warn};
+use vpnvpn_shared::config::VpnBinaryPaths;
 use vpnvpn_shared::protocol::{ConnectionState, ConnectionStatus, Protocol, VpnConfig};
+
+/// Get IKEv2 tool path based on platform.
+fn get_ikev2_tool_path() -> Result<String> {
+    let default_paths = VpnBinaryPaths::default();
+
+    if let Some(path) = crate::tools::get_ikev2_path(&default_paths) {
+        return Ok(path.to_string_lossy().to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // networksetup is built-in on macOS
+        if std::path::Path::new("/usr/sbin/networksetup").exists() {
+            return Ok("/usr/sbin/networksetup".to_string());
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Try ipsec (strongSwan)
+        for path in &["/usr/sbin/ipsec", "/usr/local/sbin/ipsec"] {
+            if std::path::Path::new(path).exists() {
+                return Ok(path.to_string());
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // rasdial is built-in on Windows
+        return Ok("rasdial".to_string());
+    }
+
+    Err(anyhow::anyhow!(
+        "IKEv2 tool not found. Install strongSwan (Linux) or use the built-in IKEv2 support."
+    ))
+}
 
 /// Connect using IKEv2/IPsec.
 pub async fn connect(config: &VpnConfig) -> Result<ConnectionStatus> {

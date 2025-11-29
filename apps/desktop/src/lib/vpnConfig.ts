@@ -20,6 +20,20 @@ export function buildWireGuardConfig(params: {
   const serverPublicKey =
     params.serverPublicKeyOverride || WG_SERVER_PUBLIC_KEY;
 
+  console.log("[vpnConfig] Building WireGuard config:");
+  console.log("[vpnConfig]   endpointOverride:", params.endpointOverride);
+  console.log("[vpnConfig]   WG_ENDPOINT from env:", WG_ENDPOINT);
+  console.log("[vpnConfig]   Final endpoint:", endpoint);
+  console.log(
+    "[vpnConfig]   serverPublicKeyOverride:",
+    params.serverPublicKeyOverride
+  );
+  console.log(
+    "[vpnConfig]   WG_SERVER_PUBLIC_KEY from env:",
+    WG_SERVER_PUBLIC_KEY
+  );
+  console.log("[vpnConfig]   Final serverPublicKey:", serverPublicKey);
+
   return [
     "[Interface]",
     `PrivateKey = ${params.privateKey}`,
