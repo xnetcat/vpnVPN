@@ -11,7 +11,19 @@ import { getTierConfig } from "@/lib/tiers";
 import { sendEmail } from "@/lib/email";
 import { revalidatePath } from "next/cache";
 import nacl from "tweetnacl";
-import * as util from "tweetnacl-util";
+
+/**
+ * Generate a WireGuard-compatible keypair.
+ * Uses NaCl's box keypair (Curve25519) which is what WireGuard uses.
+ * Returns keys with proper base64 padding (44 characters).
+ */
+function generateWireGuardKeyPair(): { publicKey: string; privateKey: string } {
+  const keyPair = nacl.box.keyPair();
+  // Use Node's Buffer for proper base64 encoding with padding
+  const publicKey = Buffer.from(keyPair.publicKey).toString("base64");
+  const privateKey = Buffer.from(keyPair.secretKey).toString("base64");
+  return { publicKey, privateKey };
+}
 
 export const deviceRouter = router({
   list: paidProcedure.query(async ({ ctx }) => {
@@ -66,9 +78,7 @@ export const deviceRouter = router({
         }
 
         // Generate new WireGuard keypair
-        const keyPair = nacl.box.keyPair();
-        const publicKey = util.encodeBase64(keyPair.publicKey);
-        const privateKey = util.encodeBase64(keyPair.secretKey);
+        const { publicKey, privateKey } = generateWireGuardKeyPair();
 
         // Update existing device with new keys
         const device = await ctx.prisma.device.update({
@@ -145,9 +155,7 @@ export const deviceRouter = router({
       }
 
       // Generate WireGuard keypair on the server to avoid generating keys in the browser.
-      const keyPair = nacl.box.keyPair();
-      const publicKey = util.encodeBase64(keyPair.publicKey);
-      const privateKey = util.encodeBase64(keyPair.secretKey);
+      const { publicKey, privateKey } = generateWireGuardKeyPair();
 
       // Create device in database with "pending" status
       const device = await ctx.prisma.device.create({
