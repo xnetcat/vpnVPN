@@ -483,3 +483,6 @@ aws secretsmanager rotate-secret --secret-id vpnvpn/staging/test
 | Secrets Export | Monthly | 1 year | S3 (encrypted) |
 | Application Logs | Continuous | 14 days | CloudWatch |
 
+
+
+

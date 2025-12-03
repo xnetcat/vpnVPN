@@ -28,7 +28,7 @@ export default function AddDeviceModal({
   const [name, setName] = useState("");
   const [serverId, setServerId] = useState<string>("");
   const [keys, setKeys] = useState<{ public: string; private: string } | null>(
-    null,
+    null
   );
   const [config, setConfig] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +51,13 @@ export default function AddDeviceModal({
         name,
         serverId: serverId || undefined,
       });
+
+      // Web clients always get server-generated keys, so privateKey should always be present
+      if (!result.privateKey) {
+        throw new Error(
+          "Server did not return private key. This should not happen for web clients."
+        );
+      }
 
       const cfg = buildWireGuardConfig({
         privateKey: result.privateKey,

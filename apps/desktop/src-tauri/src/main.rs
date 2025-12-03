@@ -41,6 +41,58 @@ fn get_machine_id() -> String {
     }
 }
 
+/// Generate a WireGuard keypair using wg genkey.
+/// Returns both private and public keys. The private key should be stored
+/// securely on the client and never sent to the server.
+#[tauri::command]
+fn generate_wireguard_keys() -> Result<(String, String), String> {
+    use std::process::Command;
+    
+    // Generate private key using wg genkey
+    let private_key_output = Command::new("wg")
+        .arg("genkey")
+        .output()
+        .map_err(|e| format!("Failed to run wg genkey: {}. Make sure WireGuard is installed.", e))?;
+    
+    if !private_key_output.status.success() {
+        let stderr = String::from_utf8_lossy(&private_key_output.stderr);
+        return Err(format!("wg genkey failed: {}", stderr));
+    }
+    
+    let private_key = String::from_utf8_lossy(&private_key_output.stdout)
+        .trim()
+        .to_string();
+    
+    // Derive public key from private key
+    let mut public_key_process = Command::new("wg")
+        .arg("pubkey")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to run wg pubkey: {}", e))?;
+    
+    use std::io::Write;
+    if let Some(mut stdin) = public_key_process.stdin.take() {
+        stdin.write_all(private_key.as_bytes())
+            .map_err(|e| format!("Failed to write to wg pubkey stdin: {}", e))?;
+    }
+    
+    let public_key_output = public_key_process
+        .wait_with_output()
+        .map_err(|e| format!("Failed to get wg pubkey output: {}", e))?;
+    
+    if !public_key_output.status.success() {
+        let stderr = String::from_utf8_lossy(&public_key_output.stderr);
+        return Err(format!("wg pubkey failed: {}", stderr));
+    }
+    
+    let public_key = String::from_utf8_lossy(&public_key_output.stdout)
+        .trim()
+        .to_string();
+    
+    Ok((private_key, public_key))
+}
+
 /// Status of VPN tool availability on the system (legacy format for frontend compatibility).
 #[derive(Serialize, Clone)]
 struct VpnToolsStatus {
@@ -575,14 +627,25 @@ fn parse_wireguard_config(config: &str) -> Result<daemon_client::VpnConfig, Stri
     let (server_endpoint, server_port) = endpoint
         .as_ref()
         .and_then(|e| {
+            let e = e.trim();
+            if e.is_empty() {
+                return None;
+            }
             let parts: Vec<&str> = e.rsplitn(2, ':').collect();
             if parts.len() == 2 {
-                Some((parts[1].to_string(), parts[0].parse().unwrap_or(51820)))
+                let port = parts[0].parse().unwrap_or(51820);
+                let host = parts[1].trim();
+                if !host.is_empty() {
+                    Some((host.to_string(), port))
+                } else {
+                    None
+                }
             } else {
-                None
+                // No port specified, use default
+                Some((e.to_string(), 51820))
             }
         })
-        .unwrap_or_else(|| (String::new(), 51820));
+        .unwrap_or_else(|| ("localhost".to_string(), 51820)); // Default to localhost for dev
 
     Ok(daemon_client::VpnConfig {
         protocol: "wireguard".to_string(),
@@ -1140,6 +1203,40 @@ fn install_daemon_macos() -> Result<(), String> {
     let daemon_src = find_daemon_binary()?;
     eprintln!("[install_daemon_macos] Found daemon binary at: {}", daemon_src.display());
 
+    // Check if we're in dev mode
+    let is_dev = cfg!(debug_assertions);
+    eprintln!("[install_daemon_macos] Dev mode: {}", is_dev);
+
+    // In dev mode, don't install as LaunchDaemon - user should run dev script
+    if is_dev {
+        eprintln!("[install_daemon_macos] Development mode detected - skipping LaunchDaemon installation");
+        eprintln!("[install_daemon_macos] In dev mode, run the daemon manually with:");
+        
+        // Try to find the dev script path
+        let dev_script_path = if let Some(workspace_root) = find_workspace_root(&daemon_src) {
+            workspace_root.join("apps/desktop/scripts/dev-daemon.sh")
+        } else if let Some(daemon_dir) = daemon_src.parent().and_then(|p| p.parent()) {
+            daemon_dir.join("scripts/dev-daemon.sh")
+        } else {
+            std::path::PathBuf::from("./scripts/dev-daemon.sh")
+        };
+        
+        eprintln!("[install_daemon_macos]   sudo {}", dev_script_path.display());
+        eprintln!("[install_daemon_macos] Or from the daemon directory:");
+        eprintln!("[install_daemon_macos]   sudo cd apps/desktop/daemon && cargo run -- --dev");
+        eprintln!("[install_daemon_macos] The daemon will create a socket at /tmp/vpnvpn-daemon.sock");
+        
+        // Check if dev socket already exists
+        if std::path::Path::new("/tmp/vpnvpn-daemon.sock").exists() {
+            eprintln!("[install_daemon_macos] Dev socket already exists - daemon may already be running");
+        } else {
+            eprintln!("[install_daemon_macos] Dev socket not found - start the daemon manually");
+        }
+        
+        return Ok(());
+    }
+
+    // Production mode: Install as LaunchDaemon
     // Use osascript for privilege elevation
     let script = format!(
         r#"do shell script "
@@ -1178,10 +1275,14 @@ fn install_daemon_macos() -> Result<(), String> {
 </plist>
 PLIST
             chmod 644 /Library/LaunchDaemons/com.vpnvpn.daemon.plist &&
-            echo '[install] Unloading any existing daemon...' >&2 &&
-            launchctl unload /Library/LaunchDaemons/com.vpnvpn.daemon.plist 2>/dev/null || true &&
+            echo '[install] Stopping any existing daemon...' >&2 &&
+            launchctl bootout system/com.vpnvpn.daemon 2>/dev/null || launchctl unload /Library/LaunchDaemons/com.vpnvpn.daemon.plist 2>/dev/null || true &&
+            launchctl stop system/com.vpnvpn.daemon 2>/dev/null || launchctl stop com.vpnvpn.daemon 2>/dev/null || true &&
+            sleep 2 &&
             echo '[install] Loading daemon...' >&2 &&
-            launchctl load /Library/LaunchDaemons/com.vpnvpn.daemon.plist &&
+            launchctl bootstrap system /Library/LaunchDaemons/com.vpnvpn.daemon.plist 2>/dev/null || launchctl load /Library/LaunchDaemons/com.vpnvpn.daemon.plist &&
+            sleep 1 &&
+            launchctl kickstart system/com.vpnvpn.daemon 2>/dev/null || launchctl start com.vpnvpn.daemon 2>/dev/null || true &&
             echo '[install] Checking daemon status...' >&2 &&
             sleep 1 &&
             launchctl list | grep com.vpnvpn.daemon &&
@@ -1236,14 +1337,22 @@ PLIST
         }
     }
     
-    // Check if socket exists
+    // Check if socket exists (production mode only)
     let socket_path = "/var/run/vpnvpn-daemon.sock";
-    for i in 0..5 {
+    eprintln!("[install_daemon_macos] Checking for socket at: {}", socket_path);
+    
+    for i in 0..10 {
         if std::path::Path::new(socket_path).exists() {
             eprintln!("[install_daemon_macos] Socket file found at {}", socket_path);
+            // Try to connect to verify it's working
+            if let Ok(_) = std::os::unix::net::UnixStream::connect(socket_path) {
+                eprintln!("[install_daemon_macos] Successfully connected to socket - daemon is running correctly");
             break;
+            } else {
+                eprintln!("[install_daemon_macos] Socket exists but connection failed, waiting...");
         }
-        eprintln!("[install_daemon_macos] Waiting for socket file... attempt {}/5", i + 1);
+        }
+        eprintln!("[install_daemon_macos] Waiting for socket file... attempt {}/10", i + 1);
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
     
@@ -1615,6 +1724,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             health_check,
             get_machine_id,
+            generate_wireguard_keys,
             detect_vpn_tools,
             refresh_vpn_tools,
             update_vpn_binary_paths,

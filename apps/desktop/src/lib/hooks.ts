@@ -263,7 +263,12 @@ export function useDeviceRegistration() {
   const [error, setError] = useState<string | null>(null);
 
   const registerDevice = useCallback(
-    async (params: { name: string; serverId?: string; machineId?: string }) => {
+    async (params: {
+      name: string;
+      serverId?: string;
+      machineId?: string;
+      publicKey?: string; // Optional: if provided, client generated keys locally
+    }) => {
       setIsLoading(true);
       setError(null);
       try {

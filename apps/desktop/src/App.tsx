@@ -459,12 +459,36 @@ export default function App() {
     setConfig(null);
 
     let deviceId: string | null = null;
+    let localPrivateKey: string | null = null;
 
     try {
+      // Generate WireGuard keys locally for better security (desktop app only)
+      let publicKey: string | undefined;
+      if (protocol === "wireguard") {
+        try {
+          const { invoke } = await import("@tauri-apps/api/core");
+          const [privateKey, pubKey] = await invoke<[string, string]>(
+            "generate_wireguard_keys"
+          );
+          localPrivateKey = privateKey;
+          publicKey = pubKey;
+          console.log(
+            "[App] Generated WireGuard keys locally (private key not sent to server)"
+          );
+        } catch (e) {
+          console.warn(
+            "[App] Failed to generate keys locally, falling back to server-side:",
+            e
+          );
+          // Fall back to server-side generation if wg genkey is not available
+        }
+      }
+
       const result = await registerDevice({
         name: `Desktop • ${selectedServer.region}`,
         serverId: selectedServer.id,
         machineId: machineId ?? undefined,
+        publicKey, // Send only public key if generated locally
       });
 
       deviceId = result.deviceId;
@@ -482,13 +506,26 @@ export default function App() {
         );
         console.log("[App]   wgServerPublicKey:", wgServerPublicKey);
 
+        // Use locally generated private key if available, otherwise use server-provided one
+        const privateKey = localPrivateKey || result.privateKey;
+        if (!privateKey) {
+          throw new Error(
+            "No private key available for WireGuard configuration"
+          );
+        }
+
+        // Determine endpoint: use server's publicIp if available, otherwise fall back to localhost for dev
+        // In local dev, VPN node is typically on localhost:51820
+        const endpoint =
+          selectedServer.publicIp ||
+          (process.env.NODE_ENV === "development" ? "localhost" : undefined);
+
         cfg = buildWireGuardConfig({
-          privateKey: result.privateKey,
+          privateKey,
           assignedIp: result.assignedIp,
           serverPublicKeyOverride: wgServerPublicKey || undefined,
-          // Use server's publicIp if available (for dynamic server selection)
-          endpointOverride: selectedServer.publicIp || undefined,
-          portOverride: selectedServer.metadata?.port,
+          endpointOverride: endpoint,
+          portOverride: selectedServer.metadata?.port || 51820,
         });
 
         console.log("[App] Generated WireGuard config:\n", cfg);
@@ -521,11 +558,27 @@ export default function App() {
           return;
         }
 
-        // Wait a moment for the VPN to initialize
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        // Wait for VPN to initialize and peer to sync to VPN node
+        // VPN node syncs peers every 10 seconds, so we need to wait and retry
+        let vpnStatus = null;
+        const maxRetries = 6; // 6 attempts over ~12 seconds
+        const retryDelay = 2000; // 2 seconds between attempts
 
-        // Verify the VPN is actually connected
-        const vpnStatus = await checkVpnStatus();
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+
+          vpnStatus = await checkVpnStatus();
+          if (vpnStatus?.is_connected) {
+            break;
+          }
+
+          if (attempt < maxRetries - 1) {
+            log(
+              `VPN connection not ready yet (attempt ${attempt + 1}/${maxRetries}), waiting for peer sync...`
+            );
+          }
+        }
+
         if (vpnStatus?.is_connected) {
           setStatus("connected");
           log("VPN connection verified:", vpnStatus);
@@ -535,14 +588,13 @@ export default function App() {
           }
         } else {
           warning(
-            "VPN config applied but connection could not be verified. Check your VPN client."
+            "VPN config applied but connection could not be verified after multiple attempts. " +
+              "The peer may not have synced to the VPN node yet. Please try again in a few seconds."
           );
           setStatus("disconnected");
-          log("VPN connection not verified:", vpnStatus);
-          // Cancel the connection - cleans up the pending device
-          if (deviceId) {
-            await cancelConnection(deviceId);
-          }
+          log("VPN connection not verified after retries:", vpnStatus);
+          // Don't cancel immediately - give user a chance to retry
+          // The device will be cleaned up by the pending device cleanup job if not confirmed
         }
       } catch (e) {
         logError("Failed to apply VPN config via Tauri", e);

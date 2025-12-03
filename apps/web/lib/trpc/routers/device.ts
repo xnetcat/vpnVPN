@@ -13,16 +13,49 @@ import { revalidatePath } from "next/cache";
 import nacl from "tweetnacl";
 
 /**
- * Generate a WireGuard-compatible keypair.
- * Uses NaCl's box keypair (Curve25519) which is what WireGuard uses.
- * Returns keys with proper base64 padding (44 characters).
+ * Generate a WireGuard-compatible keypair using wg genkey.
+ * This ensures keys are in the exact format WireGuard expects.
+ *
+ * Security note: Private keys are generated server-side and transmitted
+ * to the client over HTTPS. The server does NOT store private keys.
+ * For maximum security, consider generating keys client-side in the
+ * desktop app using system wg genkey when available.
  */
-function generateWireGuardKeyPair(): { publicKey: string; privateKey: string } {
-  const keyPair = nacl.box.keyPair();
-  // Use Node's Buffer for proper base64 encoding with padding
-  const publicKey = Buffer.from(keyPair.publicKey).toString("base64");
-  const privateKey = Buffer.from(keyPair.secretKey).toString("base64");
-  return { publicKey, privateKey };
+async function generateWireGuardKeyPair(): Promise<{
+  publicKey: string;
+  privateKey: string;
+}> {
+  const { execSync } = await import("child_process");
+
+  try {
+    // Use wg genkey for proper WireGuard key format
+    const privateKey = execSync("wg genkey", { encoding: "utf-8" }).trim();
+    // Derive public key from private key
+    const publicKey = execSync("wg pubkey", {
+      encoding: "utf-8",
+      input: privateKey,
+    }).trim();
+
+    return { publicKey, privateKey };
+  } catch (error) {
+    // Fallback to NaCl if wg command is not available (e.g., in Docker)
+    console.warn(
+      "[device] wg genkey not available, falling back to NaCl key generation",
+      error
+    );
+    const keyPair = nacl.box.keyPair();
+    const publicKey = Buffer.from(keyPair.publicKey).toString("base64");
+    const privateKey = Buffer.from(keyPair.secretKey).toString("base64");
+    // Ensure proper padding (wg genkey always produces 44-char keys)
+    const normalizedPrivateKey =
+      privateKey.length === 43 ? `${privateKey}=` : privateKey;
+    const normalizedPublicKey =
+      publicKey.length === 43 ? `${publicKey}=` : publicKey;
+    return {
+      publicKey: normalizedPublicKey,
+      privateKey: normalizedPrivateKey,
+    };
+  }
 }
 
 export const deviceRouter = router({
@@ -44,10 +77,13 @@ export const deviceRouter = router({
         name: z.string().min(1),
         serverId: z.string().optional(),
         machineId: z.string().optional(),
+        // Optional: if provided, use client-generated public key (more secure)
+        // If not provided, generate keys server-side (for web clients)
+        publicKey: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { name, serverId, machineId } = input;
+      const { name, serverId, machineId, publicKey: clientPublicKey } = input;
 
       // Check if there's an existing device with this machineId
       let existingDevice = machineId
@@ -77,8 +113,20 @@ export const deviceRouter = router({
           // Ignore errors revoking old peer
         }
 
-        // Generate new WireGuard keypair
-        const { publicKey, privateKey } = generateWireGuardKeyPair();
+        // Use client-provided public key if available, otherwise generate server-side
+        let publicKey: string;
+        let privateKey: string | undefined;
+
+        if (clientPublicKey) {
+          // Client generated the keypair - more secure, private key never leaves client
+          publicKey = clientPublicKey;
+          privateKey = undefined; // Not returned to client
+        } else {
+          // Generate keys server-side (for web clients)
+          const keyPair = await generateWireGuardKeyPair();
+          publicKey = keyPair.publicKey;
+          privateKey = keyPair.privateKey;
+        }
 
         // Update existing device with new keys
         const device = await ctx.prisma.device.update({
@@ -116,7 +164,14 @@ export const deviceRouter = router({
           });
         }
 
-        return { deviceId: device.id, assignedIp, publicKey, privateKey };
+        // Only return privateKey if it was generated server-side (for web clients)
+        // Desktop clients generate keys locally and don't need it
+        return {
+          deviceId: device.id,
+          assignedIp,
+          publicKey,
+          ...(privateKey ? { privateKey } : {}),
+        };
       }
 
       // No existing device found - check device limit and create new one
@@ -154,8 +209,20 @@ export const deviceRouter = router({
         await ctx.prisma.device.delete({ where: { id: oldDevice.id } });
       }
 
-      // Generate WireGuard keypair on the server to avoid generating keys in the browser.
-      const { publicKey, privateKey } = generateWireGuardKeyPair();
+      // Use client-provided public key if available, otherwise generate server-side
+      let publicKey: string;
+      let privateKey: string | undefined;
+
+      if (clientPublicKey) {
+        // Client generated the keypair - more secure, private key never leaves client
+        publicKey = clientPublicKey;
+        privateKey = undefined; // Not returned to client
+      } else {
+        // Generate keys server-side (for web clients)
+        const keyPair = await generateWireGuardKeyPair();
+        publicKey = keyPair.publicKey;
+        privateKey = keyPair.privateKey;
+      }
 
       // Create device in database with "pending" status
       const device = await ctx.prisma.device.create({
@@ -200,7 +267,14 @@ export const deviceRouter = router({
 
       // NOTE: Email is NOT sent here. It will be sent when confirmConnection is called.
 
-      return { deviceId: device.id, assignedIp, publicKey, privateKey };
+      // Only return privateKey if it was generated server-side (for web clients)
+      // Desktop clients generate keys locally and don't need it
+      return {
+        deviceId: device.id,
+        assignedIp,
+        publicKey,
+        ...(privateKey ? { privateKey } : {}),
+      };
     }),
 
   // Step 2: Confirm connection - called after VPN connection is verified

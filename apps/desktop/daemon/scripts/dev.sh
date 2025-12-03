@@ -43,10 +43,13 @@ done
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
-    echo "⚠️  Warning: Running without root privileges."
-    echo "   VPN operations will fail, but IPC/testing will work."
-    echo "   For full functionality, run: sudo $0 $*"
+    echo "❌ Error: This daemon requires root privileges for VPN operations."
+    echo "   Please run with sudo:"
+    echo "   sudo $0 $*"
     echo ""
+    echo "   Or from the desktop app directory:"
+    echo "   sudo ./scripts/dev-daemon.sh $*"
+    exit 1
 fi
 
 # Clean up any existing dev socket

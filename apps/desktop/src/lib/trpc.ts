@@ -71,12 +71,17 @@ class ApiClient {
   }
 
   // Device registration
-  async registerDevice(params: { name: string; serverId?: string }) {
+  async registerDevice(params: {
+    name: string;
+    serverId?: string;
+    machineId?: string;
+    publicKey?: string; // Optional: if provided, client generated keys locally
+  }) {
     return this.fetch<{
       deviceId: string;
       assignedIp: string;
       publicKey: string;
-      privateKey: string;
+      privateKey?: string; // Optional: only present if server generated keys
     }>("/api/trpc/device.register", {
       method: "POST",
       body: JSON.stringify(params),
@@ -90,9 +95,10 @@ class ApiClient {
 
   // Check auth status
   async checkAuth() {
-    return this.fetch<{ authenticated: boolean; user?: { id: string; email: string } }>(
-      "/api/auth/session"
-    );
+    return this.fetch<{
+      authenticated: boolean;
+      user?: { id: string; email: string };
+    }>("/api/auth/session");
   }
 }
 
@@ -103,18 +109,15 @@ export const apiClient = new ApiClient(API_BASE_URL);
 
 export function useServers() {
   return {
-    data: null as
-      | Array<{
-          id: string;
-          region: string;
-          country?: string;
-          status: string;
-          sessions: number;
-        }>
-      | null,
+    data: null as Array<{
+      id: string;
+      region: string;
+      country?: string;
+      status: string;
+      sessions: number;
+    }> | null,
     isLoading: false,
     error: null as Error | null,
     refetch: async () => {},
   };
 }
-

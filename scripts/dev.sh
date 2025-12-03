@@ -24,17 +24,21 @@ log_error() {
   echo -e "${RED}[dev]${NC} $1"
 }
 
+# Change to project root
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$PROJECT_ROOT"
+
+# Sudo keepalive PID (will be set later)
+SUDO_PID=""
+
 # Cleanup function
 cleanup() {
   log "Shutting down services..."
+  [ -n "$SUDO_PID" ] && kill "$SUDO_PID" 2>/dev/null || true
   cd "$PROJECT_ROOT/local" && docker compose down
   log_success "Services stopped."
   exit 0
 }
-
-# Change to project root
-PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$PROJECT_ROOT"
 
 # Set trap for cleanup on exit
 trap cleanup EXIT INT TERM
@@ -65,23 +69,75 @@ log "Starting services (migrations will run automatically)..."
 cd local && docker compose up -d control-plane metrics web-app vpn-node
 cd "$PROJECT_ROOT"
 
-# Step 5: Wait for API to be healthy
-log "Waiting for API to be ready..."
-MAX_RETRIES=60
-RETRY_COUNT=0
-until curl -sf http://localhost:3000/api/health >/dev/null 2>&1; do
-  RETRY_COUNT=$((RETRY_COUNT + 1))
-  if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
-    log_error "API failed to start after ${MAX_RETRIES} attempts"
-    log "Checking container logs..."
-    cd local && docker compose logs web-app --tail=50
-    exit 1
-  fi
-  sleep 2
-done
-log_success "API is ready!"
+# Step 5: Wait for all services to be healthy
+log "Waiting for all services to be ready..."
 
-# Step 6: Start all dev processes
+wait_for_service() {
+  local name=$1
+  local url=$2
+  local max_retries=${3:-60}
+  local retry_count=0
+  
+  log "Waiting for $name..."
+  until curl -sf "$url" >/dev/null 2>&1; do
+    retry_count=$((retry_count + 1))
+    if [ $retry_count -ge $max_retries ]; then
+      log_error "$name failed to start after ${max_retries} attempts"
+      log "Checking container logs..."
+      cd "$PROJECT_ROOT/local" && docker compose logs "$name" --tail=50
+      return 1
+    fi
+    sleep 2
+  done
+  log_success "$name is ready!"
+  return 0
+}
+
+wait_for_container() {
+  local name=$1
+  local max_retries=${2:-60}
+  local retry_count=0
+  
+  log "Waiting for $name container to be running..."
+  until cd "$PROJECT_ROOT/local" && docker compose ps "$name" 2>/dev/null | grep -qE "Up|running"; do
+    retry_count=$((retry_count + 1))
+    if [ $retry_count -ge $max_retries ]; then
+      log_error "$name container failed to start after ${max_retries} attempts"
+      log "Checking container logs..."
+      cd "$PROJECT_ROOT/local" && docker compose logs "$name" --tail=50
+      return 1
+    fi
+    sleep 2
+  done
+  log_success "$name container is running!"
+  return 0
+}
+
+# Wait for control-plane container (not exposed on host port)
+wait_for_container "control-plane" || exit 1
+
+# Wait for metrics container (not exposed on host, just check it's running)
+wait_for_container "metrics" || exit 1
+
+# Wait for web-app API (exposed on host port 3000)
+wait_for_service "web-app" "http://localhost:3000/api/health" || exit 1
+
+log_success "All services are ready!"
+
+# Step 6: Prompt for sudo password for daemon (only process that needs root)
+log "Preparing to start development environment..."
+if [ "$EUID" -ne 0 ]; then
+  log_warn "Daemon requires sudo privileges. You'll be prompted for your password."
+  log "Testing sudo access..."
+  # Prompt for password upfront and cache it
+  sudo -v
+  # Keep sudo alive for the duration of the script
+  while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
+  SUDO_PID=$!
+  log_success "Sudo access granted"
+fi
+
+# Step 7: Start all dev processes
 log "Starting development environment..."
 log_warn "File watching is enabled - services will rebuild automatically on code changes"
 log ""
@@ -92,11 +148,24 @@ log "  📁 apps/vpn-server                → rebuilds vpn-node container"
 log "  📁 packages/*                     → rebuilds dependent containers"
 log ""
 
+# Check if cargo-watch is installed for daemon hot reload
+DAEMON_CMD="dev:daemon:watch"
+if ! command -v cargo-watch >/dev/null 2>&1; then
+  log_warn "cargo-watch not found. Installing it now..."
+  if ! cargo install cargo-watch 2>&1; then
+    log_warn "Failed to install cargo-watch. Daemon will run without hot reload."
+    DAEMON_CMD="dev:daemon"
+  else
+    log_success "cargo-watch installed successfully"
+  fi
+fi
+
 exec npx concurrently \
   --kill-others \
-  --names "watch,desktop,stripe,studio" \
-  --prefix-colors "blue,magenta,cyan,yellow" \
+  --names "watch,desktop,daemon,stripe,studio" \
+  --prefix-colors "blue,magenta,red,cyan,yellow" \
   "cd $PROJECT_ROOT/local && docker compose watch" \
   "cd $PROJECT_ROOT/apps/desktop && bun run dev" \
+  "cd $PROJECT_ROOT/apps/desktop && sudo bun run $DAEMON_CMD" \
   "cd $PROJECT_ROOT && bun run dev:stripe" \
   "cd $PROJECT_ROOT && bun run dev:studio"

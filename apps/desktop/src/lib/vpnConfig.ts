@@ -14,9 +14,11 @@ export function buildWireGuardConfig(params: {
   portOverride?: number;
 }) {
   // Use override endpoint if provided, otherwise fall back to env config
-  const endpoint = params.endpointOverride
-    ? `${params.endpointOverride}:${params.portOverride ?? 51820}`
-    : WG_ENDPOINT;
+  // If endpointOverride is empty string, treat as undefined to use fallback
+  const endpoint =
+    params.endpointOverride && params.endpointOverride.trim()
+      ? `${params.endpointOverride.trim()}:${params.portOverride ?? 51820}`
+      : WG_ENDPOINT;
   const serverPublicKey =
     params.serverPublicKeyOverride || WG_SERVER_PUBLIC_KEY;
 
@@ -34,10 +36,15 @@ export function buildWireGuardConfig(params: {
   );
   console.log("[vpnConfig]   Final serverPublicKey:", serverPublicKey);
 
+  // assignedIp may already include /32 suffix from server, so check before adding
+  const address = params.assignedIp.includes("/")
+    ? params.assignedIp
+    : `${params.assignedIp}/32`;
+
   return [
     "[Interface]",
     `PrivateKey = ${params.privateKey}`,
-    `Address = ${params.assignedIp}/32`,
+    `Address = ${address}`,
     "DNS = 1.1.1.1",
     "",
     "[Peer]",

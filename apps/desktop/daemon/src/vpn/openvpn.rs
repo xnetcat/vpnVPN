@@ -20,6 +20,15 @@ pub async fn connect(config: &VpnConfig) -> Result<ConnectionStatus> {
         std::fs::create_dir_all(parent)?;
     }
     std::fs::write(&config_path, &ovpn_config)?;
+    
+    // Set restrictive file permissions (read/write for owner only)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&config_path)?.permissions();
+        perms.set_mode(0o600); // rw------- (owner read/write only)
+        std::fs::set_permissions(&config_path, perms)?;
+    }
 
     debug!("OpenVPN config written to {:?}", config_path);
 

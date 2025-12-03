@@ -70,6 +70,15 @@ pub async fn connect(config: &VpnConfig) -> Result<ConnectionStatus> {
         std::fs::create_dir_all(parent)?;
     }
     std::fs::write(&config_path, &wg_config)?;
+    
+    // Set restrictive file permissions (read/write for owner only)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&config_path)?.permissions();
+        perms.set_mode(0o600); // rw------- (owner read/write only)
+        std::fs::set_permissions(&config_path, perms)?;
+    }
 
     debug!("WireGuard config written to {:?}", config_path);
 
@@ -83,16 +92,34 @@ pub async fn connect(config: &VpnConfig) -> Result<ConnectionStatus> {
     #[cfg(target_os = "windows")]
     apply_windows(&config_path).await?;
 
-    // Wait for interface to come up
+    // Wait for interface to come up and initial handshake
+    // Note: Peer may not be synced to VPN node yet (syncs every 10 seconds)
+    // So we check status but don't fail immediately if not connected
     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
-    // Verify connection
-    let status = check_status().await?;
+    // Verify connection - retry a few times as peer sync may be delayed
+    let mut status = check_status().await?;
+    let mut retries = 0;
+    const MAX_RETRIES: u32 = 3;
+    
+    while status.state != ConnectionState::Connected && retries < MAX_RETRIES {
+        retries += 1;
+        info!("WireGuard not connected yet (attempt {}/{}), waiting for peer sync...", retries, MAX_RETRIES);
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        status = check_status().await?;
+    }
 
     if status.state == ConnectionState::Connected {
         info!("WireGuard connection established");
     } else {
-        error!("WireGuard connection failed to establish");
+        warn!(
+            "WireGuard connection not established after {} attempts. ",
+            MAX_RETRIES + 1
+        );
+        warn!(
+            "This may be normal if the peer hasn't synced to the VPN node yet (syncs every 10 seconds). ",
+        );
+        warn!("Connection may establish automatically once peer is synced.");
     }
 
     Ok(status)
@@ -118,9 +145,18 @@ pub async fn disconnect() -> Result<()> {
 pub async fn check_status() -> Result<ConnectionStatus> {
     let wg = find_wg()?;
 
+    // wg-quick creates interface based on config filename (without .conf)
+    // Config is at: .../wireguard/vpnvpn-wg.conf, so interface is "vpnvpn-wg"
+    // But we check for "vpnvpn-wg0" as fallback, or try to find any vpnvpn interface
+    let config_path = get_config_path()?;
+    let interface_name = config_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(INTERFACE_NAME);
+    
     // Check if interface exists and has a handshake
     let output = tokio::process::Command::new(&wg)
-        .args(["show", INTERFACE_NAME])
+        .args(["show", interface_name])
         .output()
         .await;
 
@@ -154,7 +190,7 @@ pub async fn check_status() -> Result<ConnectionStatus> {
                     ConnectionState::Connecting
                 },
                 protocol: Some(Protocol::WireGuard),
-                interface_name: Some(INTERFACE_NAME.to_string()),
+                interface_name: Some(interface_name.to_string()),
                 bytes_sent,
                 bytes_received,
                 ..Default::default()
@@ -168,21 +204,48 @@ pub async fn check_status() -> Result<ConnectionStatus> {
     }
 }
 
+/// Normalize a WireGuard key to ensure it has proper base64 padding.
+/// WireGuard keys must be exactly 32 bytes when decoded, which means
+/// they should be 44 characters in base64 (with padding).
+fn normalize_wg_key(key: &str) -> String {
+    let trimmed = key.trim();
+    // Base64 encode 32 bytes = 44 chars with padding
+    // If key is 43 chars, it's missing padding
+    if trimmed.len() == 43 {
+        format!("{}=", trimmed)
+    } else if trimmed.len() == 42 {
+        format!("{}==", trimmed)
+    } else {
+        trimmed.to_string()
+    }
+}
+
 fn build_config(config: &VpnConfig) -> Result<String> {
+    // Normalize keys to ensure proper base64 padding for WireGuard
     let private_key = config
         .wg_private_key
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("WireGuard private key not provided"))?;
+    let private_key = normalize_wg_key(private_key);
 
     let server_public_key = config
         .wg_server_public_key
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("WireGuard server public key not provided"))?;
+    let server_public_key = normalize_wg_key(server_public_key);
 
     let assigned_ip = config
         .assigned_ip
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Assigned IP not provided"))?;
+    
+    // Ensure assigned_ip has /32 suffix if not already present
+    // Server returns IP with /32, but handle both cases
+    let assigned_ip = if assigned_ip.contains('/') {
+        assigned_ip.clone()
+    } else {
+        format!("{}/32", assigned_ip)
+    };
 
     let dns = if config.dns_servers.is_empty() {
         "1.1.1.1, 1.0.0.1".to_string()
@@ -195,7 +258,7 @@ fn build_config(config: &VpnConfig) -> Result<String> {
     let mut wg_config = format!(
         r#"[Interface]
 PrivateKey = {}
-Address = {}/32
+Address = {}
 DNS = {}
 
 [Peer]
@@ -209,7 +272,7 @@ PersistentKeepalive = 25
 
     // Add preshared key if provided
     if let Some(psk) = &config.wg_preshared_key {
-        wg_config.push_str(&format!("PresharedKey = {}\n", psk));
+        wg_config.push_str(&format!("PresharedKey = {}\n", psk.trim()));
     }
 
     Ok(wg_config)
