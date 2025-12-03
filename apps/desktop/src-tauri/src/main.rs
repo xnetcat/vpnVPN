@@ -1694,6 +1694,19 @@ fn update_tray_state(
     tray::update_tray_state(&app, &state)
 }
 
+/// Log message from frontend to backend console
+#[tauri::command]
+fn log_from_frontend(level: String, message: String) {
+    match level.as_str() {
+        "error" => eprintln!("[frontend] [error] {}", message),
+        "warn" => eprintln!("[frontend] [warn] {}", message),
+        "info" => println!("[frontend] [info] {}", message),
+        "log" => println!("[frontend] [log] {}", message),
+        "debug" => println!("[frontend] [debug] {}", message),
+        _ => println!("[frontend] [{}] {}", level, message),
+    }
+}
+
 #[cfg(not(test))]
 fn main() {
     tauri::Builder::default()
@@ -1751,7 +1764,9 @@ fn main() {
             get_onboarding_state,
             save_onboarding_state,
             // Tray commands
-            update_tray_state
+            update_tray_state,
+            // Logging
+            log_from_frontend
         ])
         .run(tauri::generate_context!())
         .expect("error while running vpnVPN desktop application");

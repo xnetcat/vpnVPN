@@ -1,0 +1,127 @@
+//! Internet connectivity checking.
+
+use tracing::{debug, warn};
+use tokio::time::{timeout, Duration};
+
+/// Check if internet connectivity is available.
+/// Uses hybrid method: tries ICMP ping first, falls back to DNS lookup if ping fails.
+/// Returns `true` if internet is available, `false` otherwise.
+pub async fn check_internet_connectivity() -> bool {
+    // Try ping first (faster, more reliable)
+    if check_ping().await {
+        debug!("Internet connectivity confirmed via ping");
+        return true;
+    }
+
+    debug!("Ping check failed, trying DNS lookup...");
+
+    // Fallback to DNS lookup
+    if check_dns().await {
+        debug!("Internet connectivity confirmed via DNS lookup");
+        return true;
+    }
+
+    warn!("Internet connectivity check failed (both ping and DNS failed)");
+    false
+}
+
+/// Check internet connectivity via ICMP ping.
+/// Tries both 8.8.8.8 (Google DNS) and 1.1.1.1 (Cloudflare DNS).
+async fn check_ping() -> bool {
+    let ping_targets = ["8.8.8.8", "1.1.1.1"];
+    
+    for target in &ping_targets {
+        if ping_host(target).await {
+            return true;
+        }
+    }
+    
+    false
+}
+
+/// Ping a specific host.
+#[cfg(unix)]
+async fn ping_host(host: &str) -> bool {
+    let output = timeout(
+        Duration::from_secs(2),
+        tokio::process::Command::new("ping")
+            .args(["-c", "1", "-W", "2", host])
+            .output(),
+    )
+    .await;
+
+    match output {
+        Ok(Ok(result)) => result.status.success(),
+        Ok(Err(_)) => false,
+        Err(_) => false, // Timeout
+    }
+}
+
+#[cfg(windows)]
+async fn ping_host(host: &str) -> bool {
+    let output = timeout(
+        Duration::from_secs(2),
+        tokio::process::Command::new("ping")
+            .args(["-n", "1", "-w", "2000", host])
+            .output(),
+    )
+    .await;
+
+    match output {
+        Ok(Ok(result)) => result.status.success(),
+        Ok(Err(_)) => false,
+        Err(_) => false, // Timeout
+    }
+}
+
+/// Check internet connectivity via DNS lookup.
+/// Tries to resolve google.com.
+async fn check_dns() -> bool {
+    let dns_targets = ["google.com", "cloudflare.com"];
+    
+    for target in &dns_targets {
+        if resolve_dns(target).await {
+            return true;
+        }
+    }
+    
+    false
+}
+
+/// Resolve a DNS hostname.
+#[cfg(unix)]
+async fn resolve_dns(hostname: &str) -> bool {
+    use std::net::ToSocketAddrs;
+    
+    let result = timeout(
+        Duration::from_secs(2),
+        tokio::task::spawn_blocking(move || {
+            format!("{}:80", hostname).to_socket_addrs().is_ok()
+        }),
+    )
+    .await;
+
+    match result {
+        Ok(Ok(resolved)) => resolved,
+        _ => false,
+    }
+}
+
+#[cfg(windows)]
+async fn resolve_dns(hostname: &str) -> bool {
+    use std::net::ToSocketAddrs;
+    
+    let result = timeout(
+        Duration::from_secs(2),
+        tokio::task::spawn_blocking(move || {
+            format!("{}:80", hostname).to_socket_addrs().is_ok()
+        }),
+    )
+    .await;
+
+    match result {
+        Ok(Ok(resolved)) => resolved,
+        _ => false,
+    }
+}
+

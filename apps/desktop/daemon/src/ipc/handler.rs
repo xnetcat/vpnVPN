@@ -444,3 +444,61 @@ async fn disable_kill_switch() -> Result<()> {
     }
 }
 
+/// Auto-disconnect VPN when internet connection is lost.
+/// This is called by the connectivity monitoring task.
+pub async fn auto_disconnect_vpn(state: Arc<RwLock<DaemonState>>) -> Result<()> {
+    let mut state_guard = state.write().await;
+
+    // Check if VPN is actually connected
+    if state_guard.connection.state != vpnvpn_shared::protocol::ConnectionState::Connected {
+        debug!("VPN not connected, skipping auto-disconnect");
+        return Ok(());
+    }
+
+    info!("Auto-disconnecting VPN due to lost internet connection");
+
+    // Disable kill-switch first if active
+    if state_guard.kill_switch_active {
+        if let Err(e) = disable_kill_switch().await {
+            warn!("Failed to disable kill-switch during auto-disconnect: {}", e);
+        }
+        state_guard.kill_switch_active = false;
+    }
+
+    // Disconnect based on current protocol
+    let protocol = state_guard.connection.protocol;
+    drop(state_guard); // Release lock before async disconnect
+
+    let result = if let Some(protocol) = protocol {
+        match protocol {
+            vpnvpn_shared::Protocol::WireGuard => {
+                crate::vpn::wireguard::disconnect().await
+            }
+            vpnvpn_shared::Protocol::OpenVPN => {
+                crate::vpn::openvpn::disconnect().await
+            }
+            vpnvpn_shared::Protocol::IKEv2 => {
+                crate::vpn::ikev2::disconnect().await
+            }
+        }
+    } else {
+        Ok(())
+    };
+
+    // Update state after disconnect
+    let mut state_guard = state.write().await;
+    match result {
+        Ok(()) => {
+            state_guard.connection = vpnvpn_shared::ConnectionStatus::default();
+            info!("VPN auto-disconnected successfully");
+            Ok(())
+        }
+        Err(e) => {
+            error!("Auto-disconnect failed: {}", e);
+            // Still update state to disconnected to prevent retry loops
+            state_guard.connection = vpnvpn_shared::ConnectionStatus::default();
+            Err(e)
+        }
+    }
+}
+

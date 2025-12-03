@@ -97,6 +97,143 @@ fn run_doctor() -> bool {
     true
 }
 
+/// Set up IP forwarding and NAT masquerading for VPN client traffic.
+/// This allows VPN clients to access the internet through the VPN node.
+fn setup_nat_and_forwarding() -> Result<(), i32> {
+    use std::process::Command;
+    
+    info!("setting_up_ip_forwarding_and_nat");
+    
+    // Enable IP forwarding
+    let forward_result = Command::new("sysctl")
+        .args(["-w", "net.ipv4.ip_forward=1"])
+        .output();
+    
+    match forward_result {
+        Ok(output) if output.status.success() => {
+            info!("ip_forwarding_enabled");
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            warn!(stderr = stderr.as_ref(), "failed_to_enable_ip_forwarding");
+            // Non-fatal, continue
+        }
+        Err(e) => {
+            warn!(error = ?e, "failed_to_run_sysctl_for_ip_forwarding");
+            // Non-fatal, continue
+        }
+    }
+    
+    // Find the default route interface
+    // In host network mode, this will be the host's main interface (e.g., en0, eth0, wlan0)
+    // In Docker bridge mode, this will be eth0
+    let default_iface = find_default_interface().unwrap_or_else(|| {
+        warn!("could_not_determine_default_interface_using_eth0");
+        "eth0".to_string()
+    });
+    
+    info!(interface = default_iface.as_str(), "setting_up_nat_masquerading");
+    
+    // Set up NAT masquerading for traffic from VPN interface (wg0) going out the default interface
+    // This allows VPN clients to access the internet
+    let masq_result = Command::new("iptables")
+        .args([
+            "-t", "nat",
+            "-C", "POSTROUTING",
+            "-o", &default_iface,
+            "-j", "MASQUERADE"
+        ])
+        .output();
+    
+    // If rule doesn't exist, add it
+    let needs_add = match masq_result {
+        Ok(output) => !output.status.success(), // Rule doesn't exist if check fails
+        Err(_) => true, // Command failed, assume we need to add
+    };
+    
+    if needs_add {
+        let add_result = Command::new("iptables")
+            .args([
+                "-t", "nat",
+                "-A", "POSTROUTING",
+                "-o", &default_iface,
+                "-j", "MASQUERADE"
+            ])
+            .output();
+        
+        match add_result {
+            Ok(output) if output.status.success() => {
+                info!(interface = default_iface.as_str(), "nat_masquerading_configured");
+            }
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                error!(stderr = stderr.as_ref(), interface = default_iface.as_str(), "failed_to_setup_nat_masquerading");
+                return Err(1);
+            }
+            Err(e) => {
+                error!(error = ?e, interface = default_iface.as_str(), "failed_to_run_iptables_for_nat");
+                return Err(1);
+            }
+        }
+    } else {
+        info!(interface = default_iface.as_str(), "nat_masquerading_already_configured");
+    }
+    
+    Ok(())
+}
+
+/// Find the default network interface by checking the default route.
+fn find_default_interface() -> Option<String> {
+    use std::process::Command;
+    
+    // Try 'ip route' first (Linux)
+    if let Ok(output) = Command::new("ip")
+        .args(["route", "show", "default"])
+        .output()
+    {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // Parse "default via ... dev eth0 ..."
+            for line in stdout.lines() {
+                if let Some(dev_pos) = line.find("dev ") {
+                    let after_dev = &line[dev_pos + 4..];
+                    if let Some(space_pos) = after_dev.find(char::is_whitespace) {
+                        let iface = after_dev[..space_pos].trim();
+                        if !iface.is_empty() {
+                            return Some(iface.to_string());
+                        }
+                    } else if !after_dev.trim().is_empty() {
+                        return Some(after_dev.trim().to_string());
+                    }
+                }
+            }
+        }
+    }
+    
+    // Fallback: try to find any non-loopback interface
+    if let Ok(output) = Command::new("ip")
+        .args(["route", "show"])
+        .output()
+    {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                if let Some(dev_pos) = line.find("dev ") {
+                    let after_dev = &line[dev_pos + 4..];
+                    if let Some(space_pos) = after_dev.find(char::is_whitespace) {
+                        let iface = after_dev[..space_pos].trim();
+                        if !iface.is_empty() && iface != "lo" && !iface.starts_with("wg") {
+                            return Some(iface.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    None
+}
+
 async fn run_server(args: RunArgs) -> Result<(), i32> {
     info!(
         api_url = %args.api_url,
@@ -160,6 +297,10 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
     
     info!("starting_all_vpn_backends");
     node.start_all();
+    
+    // Set up IP forwarding and NAT masquerading for VPN client traffic
+    // This allows VPN clients to access the internet through the VPN node
+    setup_nat_and_forwarding()?;
     
     let node_arc = std::sync::Arc::new(node);
     let _ = vpn::VPN_NODE.set(node_arc.clone());

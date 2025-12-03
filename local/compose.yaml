@@ -1,5 +1,7 @@
 services:
   # VPN Node (Rust Server)
+  # Uses host network mode to get host's public IP and network interface for proper NAT
+  # Connects to control-plane and metrics via localhost (exposed on host ports)
   vpn-node:
     build:
       context: ../apps/vpn-server
@@ -9,15 +11,19 @@ services:
       - NET_ADMIN
     devices:
       - "/dev/net/tun:/dev/net/tun"
+    # Use host network mode - gives VPN node host's network interface and IP
+    # This allows proper NAT and internet access for VPN clients
+    network_mode: host
     env_file:
       - ../.env
     environment:
-      - API_URL=http://control-plane:4000
+      # Connect to services via localhost (they're exposed on host ports)
+      - API_URL=http://localhost:4000
       - VPN_TOKEN=dummy-token
       - SERVER_ID=vpn-node-1
       - VPN_REGION=local
       - VPN_COUNTRY=local
-      - METRICS_URL=http://metrics:4100/metrics/vpn
+      - METRICS_URL=http://localhost:4100/metrics/vpn
       - LISTEN_UDP_PORT=51820
       - ADMIN_PORT=9090
       - RUST_LOG=info
@@ -26,11 +32,7 @@ services:
       # Static peer for docker test client
       - STATIC_PEER_PUBLIC_KEY=${VPN_TEST_CLIENT_PUBLIC_KEY}
       - STATIC_PEER_ALLOWED_IPS=10.8.0.2/32
-    ports:
-      - "51820:51820/udp"
-      - "9090:9090" # Admin/Metrics port
-    networks:
-      - vpn-net
+    # Ports not needed with host network mode (uses host's network directly)
     develop:
       watch:
         - path: ../apps/vpn-server
@@ -68,6 +70,9 @@ services:
       - CONTROL_PLANE_BOOTSTRAP_TOKEN=${VPN_TOKEN:-dummy-token}
     depends_on:
       - postgres
+    # Expose on host port so VPN node (using host network) can access it
+    ports:
+      - "4000:4000"
     networks:
       - vpn-net
     develop:
@@ -91,6 +96,9 @@ services:
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/vpnvpn
     depends_on:
       - postgres
+    # Expose on host port so VPN node (using host network) can access it
+    ports:
+      - "4100:4100"
     networks:
       - vpn-net
     develop:

@@ -20,6 +20,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod connectivity;
 mod credentials;
 mod firewall;
 mod ipc;
@@ -129,6 +130,12 @@ async fn main() -> Result<()> {
         })
     };
 
+    // Start internet connectivity monitoring task
+    let monitor_state = Arc::clone(&state);
+    tokio::spawn(async move {
+        monitor_connectivity(monitor_state).await;
+    });
+
     // Set up signal handlers for graceful shutdown
     let shutdown_state = Arc::clone(&state);
     tokio::spawn(async move {
@@ -193,5 +200,81 @@ async fn wait_for_shutdown() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Monitor internet connectivity and auto-disconnect VPN if internet is lost.
+async fn monitor_connectivity(state: Arc<RwLock<DaemonState>>) {
+    use tokio::time::{interval, Duration};
+    use vpnvpn_shared::protocol::ConnectionState;
+
+    info!("Internet connectivity monitor started (checking every 5 seconds)");
+
+    let mut interval = interval(Duration::from_secs(5));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    loop {
+        interval.tick().await;
+
+        // Check if VPN is actually connected by checking both daemon state and actual interface
+        let (is_connected_daemon, protocol, interface_name) = {
+            let state = state.read().await;
+            (
+                state.connection.state == ConnectionState::Connected,
+                state.connection.protocol,
+                state.connection.interface_name.clone(),
+            )
+        };
+
+        // Also check actual VPN interface status (in case daemon state is stale)
+        let is_connected_actual = if let Some(protocol) = protocol {
+            match protocol {
+                vpnvpn_shared::Protocol::WireGuard => {
+                    // Check if WireGuard interface exists and is up
+                    if let Ok(status) = crate::vpn::wireguard::check_status().await {
+                        status.state == ConnectionState::Connected
+                    } else {
+                        false
+                    }
+                }
+                vpnvpn_shared::Protocol::OpenVPN => {
+                    // Check if OpenVPN process is running
+                    if let Ok(status) = crate::vpn::openvpn::check_status().await {
+                        status.state == ConnectionState::Connected
+                    } else {
+                        false
+                    }
+                }
+                vpnvpn_shared::Protocol::IKEv2 => {
+                    // For IKEv2, rely on daemon state only
+                    is_connected_daemon
+                }
+            }
+        } else {
+            false
+        };
+
+        // VPN is considered connected if either daemon says so OR interface is actually up
+        let is_connected = is_connected_daemon || is_connected_actual;
+
+        if !is_connected {
+            // VPN not connected, skip check
+            continue;
+        }
+
+        // VPN is connected, check internet connectivity
+        let has_internet = connectivity::check_internet_connectivity().await;
+
+        if !has_internet {
+            // VPN connected but internet lost - auto-disconnect
+            warn!(
+                "VPN connected (interface: {:?}) but internet connection lost - auto-disconnecting",
+                interface_name
+            );
+            
+            if let Err(e) = crate::ipc::handler::auto_disconnect_vpn(state.clone()).await {
+                error!("Failed to auto-disconnect VPN: {}", e);
+            }
+        }
+    }
 }
 

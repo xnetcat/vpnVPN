@@ -438,6 +438,33 @@ export default function App() {
     isAuthenticated,
   ]);
 
+  // Monitor VPN status and detect auto-disconnect due to lost internet
+  useEffect(() => {
+    if (status !== "connected") {
+      return;
+    }
+
+    let previousStatus: boolean | null = null;
+    const interval = setInterval(async () => {
+      try {
+        const vpnStatus = await checkVpnStatus();
+        const isConnected = vpnStatus?.is_connected ?? false;
+
+        // Detect transition from connected to disconnected
+        if (previousStatus === true && !isConnected) {
+          warning("VPN disconnected automatically - internet connection lost");
+          setStatus("disconnected");
+        }
+
+        previousStatus = isConnected;
+      } catch (e) {
+        logError("Failed to check VPN status during monitoring", e);
+      }
+    }, 5000); // Check every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [status, warning]);
+
   const handleConnect = async () => {
     if (!selectedServer) return;
     if (!isCurrentProtocolAvailable) {

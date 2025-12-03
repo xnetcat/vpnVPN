@@ -10,12 +10,36 @@ import type {
 } from "./types";
 
 // Logging helpers
+const logToBackend = async (level: string, ...args: unknown[]) => {
+  try {
+    // Convert args to string, handling objects and arrays
+    const message = args
+      .map((arg) => {
+        if (typeof arg === "object" && arg !== null) {
+          try {
+            return JSON.stringify(arg, null, 2);
+          } catch {
+            return String(arg);
+          }
+        }
+        return String(arg);
+      })
+      .join(" ");
+    await invoke("log_from_frontend", { level, message });
+  } catch (e) {
+    // Silently fail if backend logging is unavailable
+    // This prevents infinite loops if the backend itself has issues
+  }
+};
+
 export const log = (...args: unknown[]) => {
   console.log("[desktop]", ...args);
+  void logToBackend("log", "[desktop]", ...args);
 };
 
 export const logError = (...args: unknown[]) => {
   console.error("[desktop]", ...args);
+  void logToBackend("error", "[desktop]", ...args);
 };
 
 // VPN config operations
