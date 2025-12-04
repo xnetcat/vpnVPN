@@ -58,7 +58,7 @@ describe("Email utilities", () => {
     expect(mockEmailSend).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "user@test.com",
-        subject: "Your vpnVPN Subscription is Active",
+        subject: "Your vpnVPN subscription is active",
       }),
     );
   });
@@ -78,7 +78,7 @@ describe("Email utilities", () => {
     expect(mockEmailSend).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "user@test.com",
-        subject: "Your vpnVPN Subscription Has Been Cancelled",
+        subject: "Your vpnVPN subscription has been cancelled",
       }),
     );
   });
@@ -99,7 +99,7 @@ describe("Email utilities", () => {
     expect(mockEmailSend).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "user@test.com",
-        subject: "New Device Added to Your vpnVPN Account",
+        subject: "New device added to your vpnVPN account",
       }),
     );
   });
@@ -120,7 +120,7 @@ describe("Email utilities", () => {
     expect(mockEmailSend).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "user@test.com",
-        subject: "Device Removed from Your vpnVPN Account",
+        subject: "Device removed from your vpnVPN account",
       }),
     );
   });

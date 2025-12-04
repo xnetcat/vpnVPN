@@ -92,11 +92,16 @@ async fn check_dns() -> bool {
 #[cfg(unix)]
 async fn resolve_dns(hostname: &str) -> bool {
     use std::net::ToSocketAddrs;
-    
+
+    // Spawn-blocking requires a 'static lifetime, so clone the hostname
+    let hostname_owned = hostname.to_string();
+
     let result = timeout(
         Duration::from_secs(2),
         tokio::task::spawn_blocking(move || {
-            format!("{}:80", hostname).to_socket_addrs().is_ok()
+            format!("{}:80", hostname_owned)
+                .to_socket_addrs()
+                .is_ok()
         }),
     )
     .await;
@@ -110,11 +115,16 @@ async fn resolve_dns(hostname: &str) -> bool {
 #[cfg(windows)]
 async fn resolve_dns(hostname: &str) -> bool {
     use std::net::ToSocketAddrs;
-    
+
+    // Spawn-blocking requires a 'static lifetime, so clone the hostname
+    let hostname_owned = hostname.to_string();
+
     let result = timeout(
         Duration::from_secs(2),
         tokio::task::spawn_blocking(move || {
-            format!("{}:80", hostname).to_socket_addrs().is_ok()
+            format!("{}:80", hostname_owned)
+                .to_socket_addrs()
+                .is_ok()
         }),
     )
     .await;

@@ -2,6 +2,8 @@ import "./globals.css";
 import type { Metadata } from "next";
 import SiteHeader from "@/components/SiteHeader";
 import { TRPCProvider } from "@/lib/trpc/Provider";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title: "vpnVPN Admin",
@@ -20,6 +22,8 @@ export default function RootLayout({
           {/* Header */}
           <SiteHeader />
           {children}
+          <Analytics />
+          <SpeedInsights />
         </TRPCProvider>
       </body>
     </html>
