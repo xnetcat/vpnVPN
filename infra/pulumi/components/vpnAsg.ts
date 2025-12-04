@@ -295,9 +295,9 @@ runcmd:
       --device /dev/net/tun:/dev/net/tun \
       -e LISTEN_UDP_PORT=51820 -e LISTEN_TCP_PORT=51820 -e ADMIN_PORT=8080 \
       -e OPENVPN_PORT=1194 -e VPN_PROTOCOLS="wireguard,openvpn,ikev2" \
-      -e INSTANCE_ID=$INSTANCE_ID -e ASG_NAME=$ASG_NAME -e AWS_REGION=${regionName} \
-      -e VPN_TOKEN=${args.vpnToken} \
-      -e API_URL=${args.apiUrl} \
+      -e INSTANCE_ID="$INSTANCE_ID" -e ASG_NAME="$ASG_NAME" -e AWS_REGION="${regionName}" \
+      -e VPN_TOKEN="${args.vpnToken}" \
+      -e API_URL="${args.apiUrl}" \
       ${args.imageUri}
 `;
 
@@ -349,7 +349,10 @@ runcmd:
           tgIke4500.arn,
           tgTcp.arn,
         ],
-        tags: [{ key: "Project", value: "vpnvpn", propagateAtLaunch: true }],
+        tags: [
+          { key: "Project", value: "vpnvpn", propagateAtLaunch: true },
+          { key: "Stack", value: pulumi.getStack(), propagateAtLaunch: true },
+        ],
       },
       { parent: this }
     );

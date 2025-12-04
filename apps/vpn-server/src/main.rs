@@ -60,12 +60,12 @@ struct RunArgs {
 
 #[tokio::main]
 async fn main() {
-    let _buffer = logging::init_logging();
+    let log_buffer = logging::init_logging();
     let cli = Cli::parse();
 
     match cli.command {
         Command::Run(args) => {
-            if let Err(code) = run_server(args).await {
+            if let Err(code) = run_server(args, log_buffer).await {
                 std::process::exit(code);
             }
         }
@@ -250,13 +250,17 @@ fn find_default_interface() -> Option<String> {
     None
 }
 
-async fn run_server(args: RunArgs) -> Result<(), i32> {
+async fn run_server(args: RunArgs, log_buffer: std::sync::Arc<logging::LogBuffer>) -> Result<(), i32> {
     info!(
         api_url = %args.api_url,
         listen_port = args.listen_port,
         admin_port = args.admin_port,
         "starting_vpn_server"
     );
+
+    // Start Admin Server EARLY so we can debug registration failures
+    let admin_server = tokio::spawn(run_admin(args.admin_port, log_buffer));
+    info!(port = args.admin_port, "admin_server_started_early");
 
     // Log environment for debugging
     info!(
@@ -486,10 +490,6 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
         });
     }
 
-    let admin_server = tokio::spawn(run_admin(args.admin_port));
-
-    info!(port = args.admin_port, "admin_server_started");
-
     tokio::select! {
         _ = signal::ctrl_c() => {
             info!(signal="ctrl_c");
@@ -500,7 +500,7 @@ async fn run_server(args: RunArgs) -> Result<(), i32> {
     Ok(())
 }
 
-async fn run_admin(port: u16) {
+async fn run_admin(port: u16, log_buffer: std::sync::Arc<logging::LogBuffer>) {
     use axum::http::StatusCode;
     use axum::response::IntoResponse;
 
@@ -628,11 +628,21 @@ async fn run_admin(port: u16) {
         axum::Json(pk)
     }
 
+    // Capture log_buffer for the closure
+    let log_buffer_clone = log_buffer.clone();
+    async fn logs(
+        axum::extract::State(buffer): axum::extract::State<std::sync::Arc<logging::LogBuffer>>,
+    ) -> String {
+        buffer.snapshot().join("\n")
+    }
+
     let app = Router::new()
         .route("/health", get(health))
         .route("/metrics", get(metrics))
         .route("/status", get(status))
-        .route("/pubkey", get(pubkey));
+        .route("/pubkey", get(pubkey))
+        .route("/logs", get(logs))
+        .with_state(log_buffer_clone);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     axum::serve(TcpListener::bind(addr).await.unwrap(), app)

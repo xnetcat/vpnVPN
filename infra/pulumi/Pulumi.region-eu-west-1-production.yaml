@@ -1,0 +1,11 @@
+config:
+  region:vpnToken:
+    secure: AAABAGwE+sYdC/s95BvAIGY0boWAYh0wJ3ZcGooCNm4dhH6uFQ5lqZr8bKvPQRwSfXP+h8SQYwkFFPDGqmmoTKSGoI6+w/eG5sO/vKtGV+Bh9HGgSeHxHQHQ7FHH8kT1
+  aws:region: eu-west-1
+  global:ecrRepoName: vpnvpn/production
+  region:imageTag: sha-dc0b48f
+  region:desiredInstances: "2"
+  region:minInstances: "1"
+  region:maxInstances: "8"
+  region:instanceType: t3.medium
+  region:adminCidr: 0.0.0.0/0
