@@ -3,7 +3,7 @@ config:
   global:ecrRepoName: vpnvpn/production
   vpnvpn-infra:controlPlaneApiUrl: https://api.vpnvpn.dev
   vpnvpn-infra:databaseUrl:
-    secure: AAABAFvnCPqMjzTFgAKRe/dOSGb9rb+LwGuxszMzwK1EuzzPfSjPGxRBr4iApugGiEp6zm5NqUICM58ek5jukyRyO7ziMJi7mWLKXknbksM=
+    secure: AAABAMsRlLpBWcMw4EEqJ4qqcpxz9DnU3UwTk4JQ7gKDmrjAGOQ/tMpVcRAJvWYjt3mNyLcBR/6aUyyJoKkb0AAqv88rzFGTyPH1jAoLO021p13O6/FQ51o9T0kwbOvHI+/OtnbdLVMLujYtwgy47RXfrb8iQ7iVLH28zg5/hgqXHQtzEFkvzk/wRG3HynYxjByjEDqrI6G4rzIvtL3VnzTTnbVjL3S3z4muJgq1FEWz
   vpnvpn-infra:controlPlaneApiKey:
-    secure: AAABAE1VAnP0VWiq2MT483Knk1xoGWxSlvIh70jdu8Ybtj23eizsPLtZtaS98fp8WJlKdJ07jMp5Nr+by3d/zAJDtwULZfTsDR312G/fUlB4cAEaeb6x6g4kxYBVPu8Effm8+eU7uMkXFFz01RwsArS1Y5hnDk4fVO84sdmYKoP5MAj6sfRTtm1eVB6hV7od6YBIPRI=
+    secure: AAABAGTf+W77UDHL0v6jMZVHJo0vcL/Ze0gBwAAAiCBVfV+ZOsVIFxNZ86s4Z4CturrjeBYjO8JFsKcNaYiTeP8u2pH4MKE3Hxkv9/aHuCw7j/qTB8MTuynVxnzdvHrh/ZRsAny8+24QeD9Jz5Kyw+xqI+kak+Tecb3udg2WdCqM3LCc2TzdUC37jQ/y7T1qZQeU+ig=
   global:desktopBucket: vpnvpn-desktop-production

@@ -202,18 +202,18 @@ if (stack.startsWith("global")) {
   });
 
   // Build and push Docker image using local command (awsx.ecr.Image was flaky)
-  const controlPlaneImageTag = "latest"; // In real usage, use a hash or timestamp
+  const buildId = new Date().getTime().toString();
+  const controlPlaneImageTag = `build-${buildId}`;
   const controlPlaneImageUri = pulumi.interpolate`${controlPlaneRepo.repositoryUrl}:${controlPlaneImageTag}`;
 
   const controlPlaneBuild = new command.local.Command("control-plane-build", {
     create: pulumi.interpolate`
       aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${controlPlaneRepo.repositoryUrl}
-      docker build --platform linux/amd64 --provenance=false -t ${controlPlaneImageUri} -f ../../services/control-plane/Dockerfile ../../
+      docker build --no-cache --platform linux/amd64 --provenance=false -t ${controlPlaneImageUri} -f ../../services/control-plane/Dockerfile ../../
       docker push ${controlPlaneImageUri}
     `,
     // Triggers: run on every update for now to ensure latest code.
-    // In production, you'd want to hash the source directory.
-    triggers: [new Date().toISOString()],
+    triggers: [buildId],
   });
 
   const cp = new ControlPlane(
@@ -243,18 +243,18 @@ if (stack.startsWith("global")) {
   });
 
   // Build and push Docker image using local command
-  const metricsImageTag = "latest";
+  const metricsImageTag = `build-${buildId}`;
   const metricsImageUri = pulumi.interpolate`${metricsRepo.repositoryUrl}:${metricsImageTag}`;
 
   const metricsBuild = new command.local.Command(
     "metrics-build",
     {
       create: pulumi.interpolate`
-      aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${metricsRepo.repositoryUrl}
-      docker build --platform linux/amd64 --provenance=false -t ${metricsImageUri} -f ../../services/metrics/Dockerfile ../../
-      docker push ${metricsImageUri}
-    `,
-      triggers: [new Date().toISOString()],
+        aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${metricsRepo.repositoryUrl}
+        docker build --no-cache --platform linux/amd64 --provenance=false -t ${metricsImageUri} -f ../../services/metrics/Dockerfile ../../
+        docker push ${metricsImageUri}
+      `,
+      triggers: [buildId],
     },
     { dependsOn: [controlPlaneBuild] }
   ); // Serialize builds

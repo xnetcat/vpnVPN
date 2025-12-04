@@ -82,8 +82,6 @@ REQUIRED_VARS=(
   "AWS_REGION"
   "AWS_ACCOUNT_ID"
   "PULUMI_ACCESS_TOKEN"
-  "ECR_REPO_NAME"
-  "DATABASE_URL"
 )
 
 for var in "${REQUIRED_VARS[@]}"; do
@@ -99,28 +97,16 @@ if [[ "$ENVIRONMENT" == "production" ]]; then
   CONTROL_PLANE_API_URL="https://api.vpnvpn.dev"
   METRICS_API_URL="https://metrics.vpnvpn.dev"
   DESKTOP_URL="${WEB_URL}/desktop?desktop=1"
+  REPO_NAME="${ECR_REPO_NAME:-vpnvpn/production}"
 else
   WEB_URL="https://staging.vpnvpn.dev"
   CONTROL_PLANE_API_URL="https://api.staging.vpnvpn.dev"
   METRICS_API_URL="https://metrics.staging.vpnvpn.dev"
   DESKTOP_URL="${WEB_URL}/desktop?desktop=1"
+  REPO_NAME="${ECR_REPO_NAME:-vpnvpn/staging}"
 fi
 
-# Determine ECR Repository Name based on environment
-# If ECR_REPO_NAME contains "staging", we replace it for production.
-# Otherwise we append the environment if it's not already in the name.
-if [[ "$ENVIRONMENT" == "production" ]]; then
-  if [[ "$ECR_REPO_NAME" == *"staging"* ]]; then
-    REPO_NAME="${ECR_REPO_NAME/staging/production}"
-  elif [[ "$ECR_REPO_NAME" != *"production"* ]]; then
-    REPO_NAME="${ECR_REPO_NAME}/production"
-  else
-    REPO_NAME="${ECR_REPO_NAME}"
-  fi
-else
-  # Staging or other
-  REPO_NAME="${ECR_REPO_NAME}"
-fi
+log_info "Using ECR Repository: ${REPO_NAME}"
 
 log_info "Using ECR Repository: ${REPO_NAME}"
 
@@ -174,7 +160,9 @@ deploy_global_stack() {
   pulumi config set controlPlaneApiUrl "${CONTROL_PLANE_API_URL}" --stack "${STACK_NAME}"
   
   # Set secrets
-  pulumi config set --secret databaseUrl "${DATABASE_URL}" --stack "${STACK_NAME}"
+  if [[ -n "${DATABASE_URL:-}" ]]; then
+    pulumi config set --secret databaseUrl "${DATABASE_URL}" --stack "${STACK_NAME}"
+  fi
   pulumi config set --secret controlPlaneApiKey "${CONTROL_PLANE_API_KEY}" --stack "${STACK_NAME}"
   if [[ -n "${VPN_TOKEN:-}" ]]; then
     pulumi config set --secret bootstrapToken "${VPN_TOKEN}" --stack "${STACK_NAME}"

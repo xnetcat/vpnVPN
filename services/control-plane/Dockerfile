@@ -1,4 +1,4 @@
-FROM oven/bun:1.1.38 AS builder
+FROM node:20-slim AS builder
 WORKDIR /app
 
 # Copy monorepo files needed for install/build
@@ -7,6 +7,7 @@ COPY apps ./apps
 COPY services ./services
 COPY packages ./packages
 
+RUN npm install -g bun
 RUN bun install --frozen-lockfile
 
 # Ensure Prisma client is generated for the shared DB package

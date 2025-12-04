@@ -3,8 +3,8 @@ config:
   global:ecrRepoName: vpnvpn/staging
   vpnvpn-infra:controlPlaneApiUrl: https://api.staging.vpnvpn.dev
   vpnvpn-infra:databaseUrl:
-    secure: AAABAFIxf66Zty5jf+uDkz0kRkxBQtbKWdno3Vuy9RynogaX42fBWb1YMUqJown1PtJQtdFwonmnhs9ES+1N6BooBfBxVuKKyExic5KPA3M=
+    secure: AAABAOMd5SMBN5vg21pZ88tDV+NATpTStIUMBkCxgOVyqSu9K2hhxmh/hHBAxnsSCmb5lxPipEM6CqqTbGbO121ieY1qYZGEBWRoBsRadas=
   vpnvpn-infra:controlPlaneApiKey:
-    secure: AAABAMjbrIuLzp1uxWvdPMfUZjdK00QScGgBJ6XHGwA6jA+rrOJmZ6qd1sxavmOBlYYu/nEpD23OpAV4HV2QnHU7g79qS/XQORMdgUzD6CPzhSyZjntTdSX8tceVpN57WLs53X1eto2TP+YPjOyBIuSgDrb8KMT5l/csKPIvPZM9MGLz5OhKl/SZkIzi3co=
+    secure: AAABAAqFJrR4SPJUeRx0dIBByMY5csbEKDoGEzz17EcR02533kzNZdicpoXYrDVfuntzito34BfjtodaKTU35MjKiF8m3hYalKVNDljDX6uKoYjoz2yCcFhNrpWAUtcOrnlxrd19kIKAGrK6mLyfTRc7dxjwkE5QaQJBVMtz1+wPAZYGMiiB6LkzlgRTu/I=
   global:desktopBucket: vpnvpn-desktop-staging
   global:codeBucket: vpnvpn-lambda-deployments-staging
