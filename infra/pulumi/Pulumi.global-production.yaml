@@ -7,3 +7,5 @@ config:
   vpnvpn-infra:controlPlaneApiKey:
     secure: AAABAGTf+W77UDHL0v6jMZVHJo0vcL/Ze0gBwAAAiCBVfV+ZOsVIFxNZ86s4Z4CturrjeBYjO8JFsKcNaYiTeP8u2pH4MKE3Hxkv9/aHuCw7j/qTB8MTuynVxnzdvHrh/ZRsAny8+24QeD9Jz5Kyw+xqI+kak+Tecb3udg2WdCqM3LCc2TzdUC37jQ/y7T1qZQeU+ig=
   global:desktopBucket: vpnvpn-desktop-production
+  vpnvpn-infra:bootstrapToken:
+    secure: AAABACjqS3s3ys5C+67SmGQBqaqGvOLWpvjspzCgqBeHC6Xm7VxTDwjRdm3Ig1tgOp6eCtWU9QAFSuLBceG1BwbZ3uRVELL0PfaPTS+iOFmKjVP3mDjxZlthS19kVPcA
