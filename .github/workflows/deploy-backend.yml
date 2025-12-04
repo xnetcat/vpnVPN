@@ -21,7 +21,6 @@ on:
           - production
 
 env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}
   AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
   PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
   # VPN Node Configuration
@@ -54,6 +53,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.vpn_server == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || secrets.AWS_REGION || 'us-east-1' }}
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
     steps:
@@ -113,6 +115,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.services == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || secrets.AWS_REGION || 'us-east-1' }}
     outputs:
       control_plane_key: ${{ steps.upload.outputs.control_plane_key }}
       metrics_key: ${{ steps.upload.outputs.metrics_key }}
@@ -159,6 +164,9 @@ jobs:
     needs: [changes, build-rust, build-services]
     if: always() && (needs.changes.outputs.infra == 'true' || needs.changes.outputs.vpn_server == 'true' || needs.changes.outputs.services == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || secrets.AWS_REGION || 'us-east-1' }}
     steps:
       - uses: actions/checkout@v4
 
