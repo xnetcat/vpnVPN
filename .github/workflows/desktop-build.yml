@@ -102,6 +102,26 @@ jobs:
           VITE_VPNVPN_API_URL: ${{ steps.urls.outputs.web_url }}
         run: bun run build:web
 
+      - name: Ensure macOS .icns icon
+        if: startsWith(matrix.platform, 'macos')
+        working-directory: apps/desktop/src-tauri/icons
+        run: |
+          mkdir -p app.iconset
+          cp 32x32.png app.iconset/icon_32x32.png
+          cp 128x128.png app.iconset/icon_128x128.png
+          cp 128x128@2x.png app.iconset/icon_256x256.png
+          iconutil -c icns app.iconset -o icon.icns
+
+      - name: Prepare daemon sidecar (Unix)
+        if: runner.os != 'Windows'
+        working-directory: apps/desktop/src-tauri
+        run: bash scripts/prepare-daemon.sh
+
+      - name: Prepare daemon sidecar (Windows)
+        if: runner.os == 'Windows'
+        working-directory: apps/desktop/src-tauri
+        run: pwsh -ExecutionPolicy Bypass -File scripts/prepare-daemon.ps1
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
