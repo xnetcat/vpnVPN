@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "bun run src/index.ts",
     "build": "bun build src/index.ts --target=node --outdir=dist && bun build src/lambda.ts --target=node --outdir=dist/lambda",
-    "build:lambda": "bun build src/lambda.ts --target=node --outdir=dist/lambda --minify",
+    "build:lambda": "bun build src/lambda.ts --target=node --outfile=dist/lambda/lambda.mjs --minify",
     "start": "node dist/index.js",
     "lint": "biome lint .",
     "test": "vitest run",

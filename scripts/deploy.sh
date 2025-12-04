@@ -130,7 +130,7 @@ if [[ -f "$REGIONS_FILE" ]]; then
   VPN_REGIONS=$(jq -c ".${ENVIRONMENT}" "$REGIONS_FILE")
   log_info "Loaded regions from ${REGIONS_FILE}"
 else
-  VPN_REGIONS="${VPN_REGIONS:-'[{\"region\": \"us-east-1\", \"nodes\": 2, \"min\": 1, \"max\": 5}]'}"
+  VPN_REGIONS="${VPN_REGIONS:-'[{\"region\": \"us-east-1\", \"nodes\": 1, \"min\": 1, \"max\": 5}]'}"
   log_warn "Using default regions (regions.json not found)"
 fi
 
@@ -188,8 +188,17 @@ deploy_global_stack() {
     export CONTROL_PLANE_API_KEY="${CURRENT_API_KEY}"
   fi
 
-  if [[ -n "${VPN_TOKEN:-}" ]]; then
-    pulumi config set --secret bootstrapToken "${VPN_TOKEN}" --stack "${STACK_NAME}"
+  # Check if bootstrapToken is already set
+  CURRENT_BOOTSTRAP_TOKEN=$(pulumi config get bootstrapToken --stack "${STACK_NAME}" 2>/dev/null || echo "")
+
+  if [[ -n "$CURRENT_BOOTSTRAP_TOKEN" ]]; then
+    log_info "Using existing bootstrapToken from Pulumi"
+  else
+    log_info "Generating new bootstrapToken..."
+    # Generate a random 32-byte hex string (64 chars)
+    NEW_BOOTSTRAP_TOKEN=$(openssl rand -hex 32)
+    pulumi config set --secret bootstrapToken "${NEW_BOOTSTRAP_TOKEN}" --stack "${STACK_NAME}"
+    log_success "Generated and configured new bootstrapToken"
   fi
   
   # Add S3 bucket for desktop downloads

@@ -23,11 +23,9 @@ on:
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-  ECR_REPO_NAME: ${{ secrets.ECR_REPO_NAME }}
-  AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
   PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
   # VPN Node Configuration
-  VPN_DESIRED_INSTANCES: ${{ vars.VPN_DESIRED_INSTANCES || '2' }}
+  VPN_DESIRED_INSTANCES: ${{ vars.VPN_DESIRED_INSTANCES || '1' }}
   VPN_MIN_INSTANCES: ${{ vars.VPN_MIN_INSTANCES || '1' }}
   VPN_MAX_INSTANCES: ${{ vars.VPN_MAX_INSTANCES || '10' }}
 
@@ -67,15 +65,23 @@ jobs:
           echo "AWS_REGION=${AWS_REGION:-us-east-1}" >> $GITHUB_ENV
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.environment }}" ]; then
              echo "DEPLOY_ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
+             if [ "${{ github.event.inputs.environment }}" = "production" ]; then
+               echo "ECR_REPO_NAME=vpnvpn/production" >> $GITHUB_ENV
+             else
+               echo "ECR_REPO_NAME=vpnvpn/staging" >> $GITHUB_ENV
+             fi
           elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
              echo "DEPLOY_ENV=production" >> $GITHUB_ENV
+             echo "ECR_REPO_NAME=vpnvpn/production" >> $GITHUB_ENV
           else
              echo "DEPLOY_ENV=staging" >> $GITHUB_ENV
+             echo "ECR_REPO_NAME=vpnvpn/staging" >> $GITHUB_ENV
           fi
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
       - uses: aws-actions/amazon-ecr-login@v2
@@ -118,7 +124,8 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Install dependencies
@@ -169,7 +176,8 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
       - uses: actions/setup-node@v4
@@ -193,9 +201,6 @@ jobs:
       - name: Deploy Global Stack
         working-directory: infra/pulumi
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          CONTROL_PLANE_API_KEY: ${{ secrets.CONTROL_PLANE_API_KEY }}
-          BOOTSTRAP_TOKEN: ${{ secrets.VPN_TOKEN }}
           CONTROL_PLANE_CODE_KEY: ${{ needs.build-services.outputs.control_plane_key }}
           METRICS_CODE_KEY: ${{ needs.build-services.outputs.metrics_key }}
         run: |
@@ -205,9 +210,18 @@ jobs:
           pulumi config set aws:region $AWS_REGION --stack "${STACK_NAME}"
           pulumi config set global:ecrRepoName $ECR_REPO_NAME --stack "${STACK_NAME}"
 
-          if [ -n "$DATABASE_URL" ]; then pulumi config set --secret databaseUrl "$DATABASE_URL" --stack "${STACK_NAME}"; fi
-          if [ -n "$CONTROL_PLANE_API_KEY" ]; then pulumi config set --secret controlPlaneApiKey "$CONTROL_PLANE_API_KEY" --stack "${STACK_NAME}"; fi
-          if [ -n "$BOOTSTRAP_TOKEN" ]; then pulumi config set --secret bootstrapToken "$BOOTSTRAP_TOKEN" --stack "${STACK_NAME}"; fi
+          # Check if controlPlaneApiKey is already set
+          CURRENT_API_KEY=$(pulumi config get controlPlaneApiKey --stack "${STACK_NAME}" 2>/dev/null || echo "")
+
+          if [[ -z "$CURRENT_API_KEY" ]]; then
+            echo "Generating new Control Plane API Key..."
+            # Generate a random 32-byte hex string (64 chars)
+            NEW_API_KEY=$(openssl rand -hex 32)
+            pulumi config set --secret controlPlaneApiKey "${NEW_API_KEY}" --stack "${STACK_NAME}"
+            echo "Generated and configured new Control Plane API Key"
+          else
+            echo "Using existing Control Plane API Key"
+          fi
 
           # Only update code keys if they were rebuilt
           if [ -n "$CONTROL_PLANE_CODE_KEY" ]; then pulumi config set global:controlPlaneCodeKey "$CONTROL_PLANE_CODE_KEY" --stack "${STACK_NAME}"; fi
