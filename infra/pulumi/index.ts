@@ -300,6 +300,13 @@ if (stack.startsWith("global")) {
   const accountId = aws.getCallerIdentityOutput().accountId;
   const computedEcrUri = pulumi.interpolate`${accountId}.dkr.ecr.${regionName}.amazonaws.com/${ecrRepoName}:${imageTag}`;
 
+  // Get global stack reference for API URL
+  const globalStackName = stack
+    .replace("region-", "global-")
+    .replace(/-[a-z0-9]+-[0-9]+/, ""); // e.g. region-us-east-1-staging -> global-staging
+  const globalStack = new pulumi.StackReference(globalStackName);
+  const apiUrl = globalStack.getOutput("controlPlaneApiUrl");
+
   const pool = new VpnAsg("vpnvpn", {
     region: regionName,
     minInstances,
@@ -310,6 +317,7 @@ if (stack.startsWith("global")) {
     adminCidr,
     targetSessionsPerInstance,
     vpnToken,
+    apiUrl: apiUrl as pulumi.Input<string>,
   });
 
   nlbDnsName = pool.nlbDnsName;

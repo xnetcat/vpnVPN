@@ -391,22 +391,17 @@ build_desktop_apps() {
     APP_VERSION="${APP_VERSION:-0.1.0}"
   fi
   
-  # Update tauri config
-  log_info "Updating Tauri config for ${ENVIRONMENT}..."
-  TAURI_CONF="src-tauri/tauri.conf.json"
-  if [[ -f "$TAURI_CONF" ]]; then
-    # Use jq to update config if available, otherwise use sed
-    if command -v jq &> /dev/null; then
-      jq --arg name "$APP_NAME" --arg id "$BUNDLE_ID" --arg ver "$APP_VERSION" \
-        '.productName = $name | .identifier = $id | .version = $ver' \
-        "$TAURI_CONF" > "${TAURI_CONF}.tmp" && mv "${TAURI_CONF}.tmp" "$TAURI_CONF"
-    fi
-  fi
+  # Construct ephemeral config override
+  CONFIG_OVERRIDE=$(jq -n \
+    --arg name "$APP_NAME" \
+    --arg id "$BUNDLE_ID" \
+    --arg ver "$APP_VERSION" \
+    '{productName: $name, identifier: $id, version: $ver}')
   
   # Build Tauri app
-  log_info "Building Tauri desktop app..."
-  cd src-tauri
-  cargo tauri build --release
+  log_info "Building Tauri desktop app with config override..."
+  # Use bun run tauri to use the local CLI and pass config
+  bun run tauri build --config "$CONFIG_OVERRIDE"
   
   # Collect build artifacts
   ARTIFACTS_DIR="${ROOT_DIR}/dist/desktop/${ENVIRONMENT}"
@@ -415,42 +410,44 @@ build_desktop_apps() {
   log_info "Collecting build artifacts..."
   
   # Copy artifacts based on OS
+  # Copy artifacts based on OS
+  # Note: Tauri v2 puts target in src-tauri/target by default when running from project root
   case "$(uname -s)" in
     Darwin)
-      if ls target/release/bundle/dmg/*.dmg 1> /dev/null 2>&1; then
-        cp -v target/release/bundle/dmg/*.dmg "${ARTIFACTS_DIR}/"
+      if ls src-tauri/target/release/bundle/dmg/*.dmg 1> /dev/null 2>&1; then
+        cp -v src-tauri/target/release/bundle/dmg/*.dmg "${ARTIFACTS_DIR}/"
         log_success "macOS DMG built"
       fi
-      if ls target/release/bundle/macos/*.app 1> /dev/null 2>&1; then
+      if ls src-tauri/target/release/bundle/macos/*.app 1> /dev/null 2>&1; then
         # Zip the .app for easier distribution
-        for app in target/release/bundle/macos/*.app; do
+        for app in src-tauri/target/release/bundle/macos/*.app; do
           APP_BASENAME=$(basename "$app" .app)
-          (cd target/release/bundle/macos && zip -r "${ARTIFACTS_DIR}/${APP_BASENAME}.app.zip" "$(basename "$app")")
+          (cd src-tauri/target/release/bundle/macos && zip -r "${ARTIFACTS_DIR}/${APP_BASENAME}.app.zip" "$(basename "$app")")
         done
         log_success "macOS App bundle built"
       fi
       ;;
     Linux)
-      if ls target/release/bundle/deb/*.deb 1> /dev/null 2>&1; then
-        cp -v target/release/bundle/deb/*.deb "${ARTIFACTS_DIR}/"
+      if ls src-tauri/target/release/bundle/deb/*.deb 1> /dev/null 2>&1; then
+        cp -v src-tauri/target/release/bundle/deb/*.deb "${ARTIFACTS_DIR}/"
         log_success "Linux DEB built"
       fi
-      if ls target/release/bundle/appimage/*.AppImage 1> /dev/null 2>&1; then
-        cp -v target/release/bundle/appimage/*.AppImage "${ARTIFACTS_DIR}/"
+      if ls src-tauri/target/release/bundle/appimage/*.AppImage 1> /dev/null 2>&1; then
+        cp -v src-tauri/target/release/bundle/appimage/*.AppImage "${ARTIFACTS_DIR}/"
         log_success "Linux AppImage built"
       fi
-      if ls target/release/bundle/rpm/*.rpm 1> /dev/null 2>&1; then
-        cp -v target/release/bundle/rpm/*.rpm "${ARTIFACTS_DIR}/"
+      if ls src-tauri/target/release/bundle/rpm/*.rpm 1> /dev/null 2>&1; then
+        cp -v src-tauri/target/release/bundle/rpm/*.rpm "${ARTIFACTS_DIR}/"
         log_success "Linux RPM built"
       fi
       ;;
     MINGW*|MSYS*|CYGWIN*)
-      if ls target/release/bundle/msi/*.msi 1> /dev/null 2>&1; then
-        cp -v target/release/bundle/msi/*.msi "${ARTIFACTS_DIR}/"
+      if ls src-tauri/target/release/bundle/msi/*.msi 1> /dev/null 2>&1; then
+        cp -v src-tauri/target/release/bundle/msi/*.msi "${ARTIFACTS_DIR}/"
         log_success "Windows MSI built"
       fi
-      if ls target/release/bundle/nsis/*.exe 1> /dev/null 2>&1; then
-        cp -v target/release/bundle/nsis/*.exe "${ARTIFACTS_DIR}/"
+      if ls src-tauri/target/release/bundle/nsis/*.exe 1> /dev/null 2>&1; then
+        cp -v src-tauri/target/release/bundle/nsis/*.exe "${ARTIFACTS_DIR}/"
         log_success "Windows NSIS installer built"
       fi
       ;;
@@ -489,18 +486,18 @@ upload_desktop_to_s3() {
   
   # Upload artifacts
   aws s3 sync "${ARTIFACTS_DIR}/" "s3://${S3_BUCKET}/${S3_PREFIX}/" \
-    --acl public-read \
     --cache-control "max-age=3600"
   
   # Create latest symlinks
+  shopt -s nullglob
   for file in "${ARTIFACTS_DIR}"/*; do
+    shopt -u nullglob
     FILENAME=$(basename "$file")
     EXTENSION="${FILENAME##*.}"
     LATEST_NAME="vpnvpn-desktop-latest.${EXTENSION}"
     
     aws s3 cp "s3://${S3_BUCKET}/${S3_PREFIX}/${FILENAME}" \
-      "s3://${S3_BUCKET}/${S3_PREFIX}/${LATEST_NAME}" \
-      --acl public-read
+      "s3://${S3_BUCKET}/${S3_PREFIX}/${LATEST_NAME}"
   done
   
   log_success "Desktop apps uploaded to s3://${S3_BUCKET}/${S3_PREFIX}/"

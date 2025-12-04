@@ -12,6 +12,7 @@ export interface VpnAsgArgs {
   adminCidr?: string;
   targetSessionsPerInstance?: number;
   vpnToken: pulumi.Input<string>;
+  apiUrl: pulumi.Input<string>;
 }
 
 export class VpnAsg extends pulumi.ComponentResource {
@@ -296,6 +297,7 @@ runcmd:
       -e OPENVPN_PORT=1194 -e VPN_PROTOCOLS="wireguard,openvpn,ikev2" \
       -e INSTANCE_ID=$INSTANCE_ID -e ASG_NAME=$ASG_NAME -e AWS_REGION=${regionName} \
       -e VPN_TOKEN=${args.vpnToken} \
+      -e API_URL=${args.apiUrl} \
       ${args.imageUri}
 `;
 
@@ -306,7 +308,13 @@ runcmd:
         instanceType: args.instanceType ?? "t3.medium",
         updateDefaultVersion: true,
         iamInstanceProfile: { arn: instanceProfile.arn },
-        vpcSecurityGroupIds: [sg.id],
+        networkInterfaces: [
+          {
+            deviceIndex: 0,
+            associatePublicIpAddress: "true",
+            securityGroups: [sg.id],
+          },
+        ],
         userData: userData.apply((d) => Buffer.from(d).toString("base64")),
         blockDeviceMappings: [
           {
@@ -332,7 +340,7 @@ runcmd:
         desiredCapacity: args.desiredInstances ?? args.minInstances,
         minSize: args.minInstances,
         maxSize: args.maxInstances,
-        vpcZoneIdentifiers: vpc.privateSubnetIds,
+        vpcZoneIdentifiers: vpc.publicSubnetIds,
         launchTemplate: { id: lt.id, version: "$Latest" },
         targetGroupArns: [
           tgUdp.arn,

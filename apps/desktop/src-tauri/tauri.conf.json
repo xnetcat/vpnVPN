@@ -1,6 +1,6 @@
 {
   "productName": "vpnVPN Desktop",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "identifier": "com.vpnvpn.desktop",
   "build": {
     "frontendDist": "../dist",
