@@ -83,5 +83,5 @@ impl Default for PlatformNetworkManager {
 }
 
 pub fn get_network_manager() -> Box<dyn NetworkManager> {
-    Box::new(PlatformNetworkManager::default())
+    Box::new(PlatformNetworkManager)
 }

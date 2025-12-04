@@ -77,8 +77,6 @@ async fn main() {
 }
 
 fn run_doctor() -> bool {
-    use tracing::Level;
-
     info!(target: "doctor", "running_doctor_checks");
 
     // OS-level VPN tooling and TUN/TAP prerequisites.

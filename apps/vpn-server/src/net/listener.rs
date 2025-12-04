@@ -1,6 +1,5 @@
 use tokio::io::AsyncReadExt;
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
-use tracing::info;
 
 pub async fn run_udp(port: u16) {
     let addr = format!("0.0.0.0:{}", port);
