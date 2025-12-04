@@ -8,31 +8,50 @@ export class Observability extends pulumi.ComponentResource {
   constructor(name: string, opts?: pulumi.ComponentResourceOptions) {
     super("vpnvpn:components:Observability", name, {}, opts);
 
-    // Some aws provider versions expose AMP/Grafana under different namespaces.
-    // We cast through any here to avoid tight coupling to a specific minor version.
-    const awsAny: any = aws;
-
-    const amp = new awsAny.prometheus.Workspace(
+    // Use aws.amp and aws.grafana directly
+    const amp = new aws.amp.Workspace(
       `${name}-amp`,
       { alias: `${pulumi.getStack()}-vpnvpn` },
       { parent: this }
     );
 
-    const amg = new awsAny.grafana.Workspace(
+    // Grafana requires AWS SSO to be enabled. Disabling for now to unblock deployment.
+    /*
+    // Create IAM role for Grafana
+    const grafanaRole = new aws.iam.Role(
+      `${name}-grafana-role`,
+      {
+        assumeRolePolicy: JSON.stringify({
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Effect: "Allow",
+              Principal: { Service: "grafana.amazonaws.com" },
+              Action: "sts:AssumeRole",
+            },
+          ],
+        }),
+        tags: { Project: "vpnvpn" },
+      },
+      { parent: this }
+    );
+
+    const amg = new aws.grafana.Workspace(
       `${name}-amg`,
       {
         accountAccessType: "CURRENT_ACCOUNT",
         authenticationProviders: ["AWS_SSO"],
         permissionType: "SERVICE_MANAGED",
-        roleArn: undefined,
+        roleArn: grafanaRole.arn,
         dataSources: ["PROMETHEUS"],
         name: `${pulumi.getStack()}-vpnvpn`,
       },
       { parent: this }
     );
+    */
 
     this.ampWorkspaceId = amp.id;
-    this.amgWorkspaceUrl = amg.endpoint;
+    this.amgWorkspaceUrl = pulumi.output(""); // amg.endpoint;
     this.registerOutputs({
       ampWorkspaceId: this.ampWorkspaceId,
       amgWorkspaceUrl: this.amgWorkspaceUrl,

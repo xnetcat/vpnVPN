@@ -11,6 +11,7 @@ export interface VpnAsgArgs {
   instanceType?: string;
   adminCidr?: string;
   targetSessionsPerInstance?: number;
+  vpnToken: pulumi.Input<string>;
 }
 
 export class VpnAsg extends pulumi.ComponentResource {
@@ -294,6 +295,7 @@ runcmd:
       -e LISTEN_UDP_PORT=51820 -e LISTEN_TCP_PORT=51820 -e ADMIN_PORT=8080 \
       -e OPENVPN_PORT=1194 -e VPN_PROTOCOLS="wireguard,openvpn,ikev2" \
       -e INSTANCE_ID=$INSTANCE_ID -e ASG_NAME=$ASG_NAME -e AWS_REGION=${regionName} \
+      -e VPN_TOKEN=${args.vpnToken} \
       ${args.imageUri}
 `;
 

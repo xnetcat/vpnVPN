@@ -23,7 +23,7 @@ let nlbDnsName: pulumi.Output<string> | undefined;
 let desktopBucketUrl: pulumi.Output<string> | undefined;
 let lambdaCodeBucket: pulumi.Output<string> | undefined;
 
-if (stack === "global") {
+if (stack.startsWith("global")) {
   // ==========================================================================
   // Global Stack (us-east-1)
   // ==========================================================================
@@ -45,7 +45,6 @@ if (stack === "global") {
     globalConfig.get("desktopBucket") ?? "vpnvpn-desktop-releases";
   const desktopBucket = new aws.s3.Bucket("desktop-releases", {
     bucket: desktopBucketName,
-    acl: "public-read",
     website: {
       indexDocument: "index.html",
     },
@@ -60,24 +59,40 @@ if (stack === "global") {
     tags: { Project: "vpnvpn" },
   });
 
+  // Explicitly allow public access
+  const publicAccessBlock = new aws.s3.BucketPublicAccessBlock(
+    "desktop-releases-public-access",
+    {
+      bucket: desktopBucket.id,
+      blockPublicAcls: false,
+      blockPublicPolicy: false,
+      ignorePublicAcls: false,
+      restrictPublicBuckets: false,
+    }
+  );
+
   // Bucket policy for public read access
-  new aws.s3.BucketPolicy("desktop-releases-policy", {
-    bucket: desktopBucket.id,
-    policy: desktopBucket.arn.apply((arn) =>
-      JSON.stringify({
-        Version: "2012-10-17",
-        Statement: [
-          {
-            Sid: "PublicReadGetObject",
-            Effect: "Allow",
-            Principal: "*",
-            Action: "s3:GetObject",
-            Resource: `${arn}/*`,
-          },
-        ],
-      })
-    ),
-  });
+  new aws.s3.BucketPolicy(
+    "desktop-releases-policy",
+    {
+      bucket: desktopBucket.id,
+      policy: desktopBucket.arn.apply((arn) =>
+        JSON.stringify({
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Sid: "PublicReadGetObject",
+              Effect: "Allow",
+              Principal: "*",
+              Action: "s3:GetObject",
+              Resource: `${arn}/*`,
+            },
+          ],
+        })
+      ),
+    },
+    { dependsOn: [publicAccessBlock] }
+  );
 
   desktopBucketUrl = pulumi.interpolate`https://${desktopBucket.bucketRegionalDomainName}`;
 
@@ -186,6 +201,7 @@ if (stack === "global") {
   const targetSessionsPerInstance =
     regionConfig.getNumber("targetSessionsPerInstance") ?? 100;
   const instanceType = regionConfig.get("instanceType") ?? "t3.medium";
+  const vpnToken = regionConfig.requireSecret("vpnToken");
 
   const accountId = aws.getCallerIdentityOutput().accountId;
   const computedEcrUri = pulumi.interpolate`${accountId}.dkr.ecr.${regionName}.amazonaws.com/${ecrRepoName}:${imageTag}`;
@@ -199,6 +215,7 @@ if (stack === "global") {
     instanceType,
     adminCidr,
     targetSessionsPerInstance,
+    vpnToken,
   });
 
   nlbDnsName = pool.nlbDnsName;

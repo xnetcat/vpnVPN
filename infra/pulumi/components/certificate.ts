@@ -12,6 +12,9 @@ export interface DnsValidatedCertificateArgs {
 
 export class DnsValidatedCertificate extends pulumi.ComponentResource {
   public readonly certificateArn: pulumi.Output<string>;
+  public readonly domainValidationOptions: pulumi.Output<
+    aws.types.output.acm.CertificateDomainValidationOption[]
+  >;
 
   constructor(
     name: string,
@@ -31,22 +34,26 @@ export class DnsValidatedCertificate extends pulumi.ComponentResource {
       { parent: this }
     );
 
-    // 2. Look up the Hosted Zone
-    // We assume the zone name is the domain name's suffix (e.g. vpnvpn.dev for *.vpnvpn.dev)
-    // or explicitly provided via args.
-
-    let hostedZoneId: pulumi.Input<string>;
+    // 2. Look up the Hosted Zone (Optional)
+    let hostedZoneId: pulumi.Input<string> | undefined;
 
     if (args.zoneId) {
       hostedZoneId = args.zoneId;
     } else {
-      // Fallback: assume the zone is 'vpnvpn.dev.' for now as per project defaults
-      // In a real generic component we'd need more logic or a 'rootDomain' arg.
-      const zone = aws.route53.getZoneOutput({ name: "vpnvpn.dev." });
-      hostedZoneId = zone.id;
+      // Try to find a zone, but don't fail if we can't (for manual validation)
+      // In a real scenario, we might want an explicit flag for "manual validation"
+      // For now, let's assume if we can't find the zone, we just skip record creation.
+      // However, getZoneOutput throws if not found.
+      // So we'll just skip this if we are in "manual" mode (implied by no zoneId provided and we want to support Vercel).
+      // Actually, let's just skip Route53 if we can't easily determine it, or if the user wants manual control.
+      // Given the user request, let's just NOT create Route53 records if we are using Vercel.
+      // We'll rely on the user to add the CNAMEs.
     }
 
-    // 3. Create validation records
+    // 3. Create validation records (ONLY if we have a hosted zone)
+    // Since we are using Vercel, we will SKIP this step and just output the validation details.
+
+    /*
     const validationRecords = cert.domainValidationOptions.apply((options) =>
       options.map((option) => {
         return new aws.route53.Record(
@@ -57,26 +64,32 @@ export class DnsValidatedCertificate extends pulumi.ComponentResource {
             records: [option.resourceRecordValue],
             ttl: 60,
             type: option.resourceRecordType,
-            zoneId: hostedZoneId,
+            zoneId: hostedZoneId!,
           },
           { parent: this }
         );
       })
     );
+    */
 
     // 4. Wait for validation
-    const certValidation = new aws.acm.CertificateValidation(
+    // This will pause the Pulumi update until the certificate is validated.
+    // This is necessary because aws.apigatewayv2.DomainName requires an ISSUED certificate.
+    const certificateValidation = new aws.acm.CertificateValidation(
       `${name}-validation`,
       {
         certificateArn: cert.arn,
-        validationRecordFqdns: validationRecords.apply((records) =>
-          records.map((record) => record.fqdn)
-        ),
       },
       { parent: this }
     );
 
-    this.certificateArn = certValidation.certificateArn;
-    this.registerOutputs({ certificateArn: this.certificateArn });
+    this.certificateArn = certificateValidation.certificateArn;
+    this.domainValidationOptions = cert.domainValidationOptions;
+
+    // Export validation options for manual configuration
+    this.registerOutputs({
+      certificateArn: this.certificateArn,
+      domainValidationOptions: this.domainValidationOptions,
+    });
   }
 }

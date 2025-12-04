@@ -199,7 +199,7 @@ export async function buildServer(): Promise<FastifyInstance> {
 
       req.log.info(
         { count: payload.peers.length, serverId: serverId ?? null },
-        "server_peers_listed",
+        "server_peers_listed"
       );
       return reply.code(200).send(payload);
     } catch (err: unknown) {
@@ -300,7 +300,7 @@ export async function buildServer(): Promise<FastifyInstance> {
 
       req.log.info(
         { userId: body.userId, serverId: body.serverId },
-        "addPeer persisted",
+        "addPeer persisted"
       );
 
       return reply.code(204).send();
@@ -347,6 +347,33 @@ export async function buildServer(): Promise<FastifyInstance> {
     } catch (err: unknown) {
       const error = err as Error & { statusCode?: number };
       req.log.error({ err }, "revokePeerByPublicKey failed");
+      const status = error.statusCode ?? 400;
+      return reply.code(status).send({ error: error.message ?? "Bad Request" });
+    }
+  });
+
+  // ----- Admin: Token Management -----
+  fastify.post("/admin/tokens", async (req, reply) => {
+    try {
+      requireApiKey(req.headers as Record<string, unknown>);
+      const body = z.object({ label: z.string() }).parse(req.body);
+
+      // Generate a secure random token
+      const token = require("crypto").randomBytes(32).toString("hex");
+
+      const vpnToken = await prisma.vpnToken.create({
+        data: {
+          token,
+          label: body.label,
+          active: true,
+        },
+      });
+
+      req.log.info({ label: body.label }, "admin_token_created");
+      return reply.code(201).send(vpnToken);
+    } catch (err: unknown) {
+      const error = err as Error & { statusCode?: number };
+      req.log.error({ err }, "createToken failed");
       const status = error.statusCode ?? 400;
       return reply.code(status).send({ error: error.message ?? "Bad Request" });
     }

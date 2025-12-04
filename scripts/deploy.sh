@@ -49,6 +49,8 @@ for arg in "$@"; do
   case $arg in
     --with-desktop) SKIP_DESKTOP=false ;;
     --skip-vpn-nodes) SKIP_VPN_NODES=true ;;
+    --add-region=*) ADD_REGION="${arg#*=}" ;;
+    --nodes=*) ADD_REGION_NODES="${arg#*=}" ;;
   esac
 done
 
@@ -83,6 +85,7 @@ REQUIRED_VARS=(
   "CONTROL_PLANE_API_URL"
   "CONTROL_PLANE_API_KEY"
   "ECR_REPO_NAME"
+  "DATABASE_URL"
 )
 
 for var in "${REQUIRED_VARS[@]}"; do
@@ -111,6 +114,20 @@ else
   log_warn "Using default regions (regions.json not found)"
 fi
 
+# If --add-region is specified, append it to the regions list (or override if exists)
+if [[ -n "${ADD_REGION:-}" ]]; then
+  NODES="${ADD_REGION_NODES:-2}"
+  # Create JSON object for new region
+  NEW_REGION_JSON=$(jq -n \
+    --arg region "$ADD_REGION" \
+    --argjson nodes "$NODES" \
+    '{region: $region, nodes: $nodes, min: 1, max: 5, instanceType: "t3.medium"}')
+  
+  # Add to VPN_REGIONS array
+  VPN_REGIONS=$(echo "$VPN_REGIONS" | jq --argjson new "$NEW_REGION_JSON" '. + [$new] | unique_by(.region)')
+  log_info "Added region ${ADD_REGION} with ${NODES} nodes to deployment list"
+fi
+
 log_success "Environment loaded successfully"
 
 # =============================================================================
@@ -133,6 +150,13 @@ deploy_global_stack() {
   pulumi config set aws:region us-east-1 --stack "${STACK_NAME}"
   pulumi config set global:ecrRepoName "${ECR_REPO_NAME}" --stack "${STACK_NAME}"
   pulumi config set controlPlaneApiUrl "${CONTROL_PLANE_API_URL}" --stack "${STACK_NAME}"
+  
+  # Set secrets
+  pulumi config set --secret databaseUrl "${DATABASE_URL}" --stack "${STACK_NAME}"
+  pulumi config set --secret controlPlaneApiKey "${CONTROL_PLANE_API_KEY}" --stack "${STACK_NAME}"
+  if [[ -n "${VPN_TOKEN:-}" ]]; then
+    pulumi config set --secret bootstrapToken "${VPN_TOKEN}" --stack "${STACK_NAME}"
+  fi
   
   # Add S3 bucket for desktop downloads
   pulumi config set global:desktopBucket "${DESKTOP_S3_BUCKET:-vpnvpn-desktop-${ENVIRONMENT}}" --stack "${STACK_NAME}"
@@ -188,6 +212,10 @@ build_vpn_server() {
 # Step 3: Deploy VPN Nodes to Regions
 # =============================================================================
 
+# =============================================================================
+# Step 3: Deploy VPN Nodes to Regions
+# =============================================================================
+
 deploy_vpn_nodes() {
   if [[ "$SKIP_VPN_NODES" == "true" ]]; then
     log_warn "Skipping VPN node deployment (--skip-vpn-nodes)"
@@ -213,6 +241,37 @@ deploy_vpn_nodes() {
     log_info "Deploying ${NODES} nodes to ${REGION}..."
     
     pulumi stack select "${STACK_NAME}" 2>/dev/null || pulumi stack init "${STACK_NAME}"
+    
+    # Generate unique VPN token for this region/stack if not already set
+    # We check if the secret is already set in Pulumi config to avoid re-generating on every deploy
+    # Note: Pulumi config get --secret returns the value, so we can check if it exists.
+    # However, for simplicity and rotation, we can also check if we want to force rotation.
+    # Here we try to get it, if it fails or is empty, we generate a new one.
+    
+    CURRENT_TOKEN=$(pulumi config get region:vpnToken --stack "${STACK_NAME}" 2>/dev/null || echo "")
+    
+    if [[ -z "$CURRENT_TOKEN" ]]; then
+      log_info "Generating new VPN token for ${REGION}..."
+      
+      # Call Control Plane to generate token
+      # We need the Control Plane URL and API Key
+      TOKEN_RESP=$(curl -s -X POST "${CONTROL_PLANE_API_URL}/admin/tokens" \
+        -H "x-api-key: ${CONTROL_PLANE_API_KEY}" \
+        -H "Content-Type: application/json" \
+        -d "{\"label\": \"${STACK_NAME}\"}")
+      
+      NEW_TOKEN=$(echo "$TOKEN_RESP" | jq -r '.token')
+      
+      if [[ -z "$NEW_TOKEN" || "$NEW_TOKEN" == "null" ]]; then
+        log_error "Failed to generate VPN token: ${TOKEN_RESP}"
+        exit 1
+      fi
+      
+      pulumi config set --secret region:vpnToken "${NEW_TOKEN}" --stack "${STACK_NAME}"
+      log_success "Generated and configured new VPN token"
+    else
+      log_info "Using existing VPN token for ${REGION}"
+    fi
     
     pulumi config set aws:region "${REGION}"
     pulumi config set global:ecrRepoName "${ECR_REPO_NAME}"
