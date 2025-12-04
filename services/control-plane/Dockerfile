@@ -34,6 +34,6 @@ COPY --from=builder /app/packages/db/prisma ./prisma
 # Fail fast at build time if Prisma client/engine cannot be loaded
 RUN DATABASE_URL="postgresql://placeholder:5432/vpnvpn" node -e "require('@prisma/client'); console.log('Prisma client OK in control-plane image')"
 
-CMD ["dist/lambda.handler"]
+CMD ["dist/lambda/lambda.handler"]
 
 
