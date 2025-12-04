@@ -1,5 +1,7 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
+import * as awsx from "@pulumi/awsx";
+import * as command from "@pulumi/command";
 import { VpnAsg } from "./components/vpnAsg";
 import { ControlPlane } from "./controlPlane";
 import { MetricsService } from "./metricsService";
@@ -117,67 +119,139 @@ if (stack.startsWith("global")) {
   // ... (inside global stack)
 
   // Custom Domain Configuration
-  const domainName = globalConfig.get("domainName"); // e.g. api.vpnvpn.dev
+  let domainName = globalConfig.get("domainName");
   let certificateArn: pulumi.Input<string> | undefined =
     globalConfig.get("certificateArn");
 
-  const metricsDomainName = globalConfig.get("metricsDomainName"); // e.g. metrics.vpnvpn.dev
+  let metricsDomainName = globalConfig.get("metricsDomainName");
   let metricsCertificateArn: pulumi.Input<string> | undefined =
     globalConfig.get("metricsCertificateArn");
 
-  // If domains are set but certs are not, try to provision them automatically
-  // We'll assume a wildcard cert `*.vpnvpn.dev` (or staging equivalent) is best,
-  // but for now let's just provision individual certs for the specific domains requested
-  // to avoid complexity with wildcard matching.
+  // Automatically determine domains if not explicitly set
+  if (!domainName) {
+    if (stack.includes("staging")) {
+      domainName = "api.staging.vpnvpn.dev";
+    } else if (stack.includes("prod") || stack === "global") {
+      domainName = "api.vpnvpn.dev";
+    }
+  }
 
+  if (!metricsDomainName) {
+    if (stack.includes("staging")) {
+      metricsDomainName = "metrics.staging.vpnvpn.dev";
+    } else if (stack.includes("prod") || stack === "global") {
+      metricsDomainName = "metrics.vpnvpn.dev";
+    }
+  }
+
+  // If domains are set but certs are not, try to provision them automatically
   if (domainName && !certificateArn) {
     const cert = new DnsValidatedCertificate("control-plane-cert", {
       domainName: domainName,
-      // zoneId: ... (optional, defaults to looking up vpnvpn.dev.)
     });
     certificateArn = cert.certificateArn;
   }
 
   if (metricsDomainName && !metricsCertificateArn) {
-    // If it's the same domain as control plane (unlikely for api vs metrics subdomains), reuse?
-    // If we used a wildcard, we'd reuse.
-    // For now, just create another cert. ACM certs are free.
     const cert = new DnsValidatedCertificate("metrics-cert", {
       domainName: metricsDomainName,
     });
     metricsCertificateArn = cert.certificateArn;
   }
 
-  // Control Plane Lambda + API Gateway
-  const controlPlaneCodeKey = globalConfig.get("controlPlaneCodeKey");
-  const controlPlaneImageUri = globalConfig.get("controlPlaneImageUri");
+  // Create Global DomainName resources (Static AWS Addresses)
+  if (domainName && certificateArn) {
+    new aws.apigatewayv2.DomainName("control-plane-domain", {
+      domainName: domainName,
+      domainNameConfiguration: {
+        certificateArn: certificateArn,
+        endpointType: "REGIONAL",
+        securityPolicy: "TLS_1_2",
+      },
+      tags: { Project: "vpnvpn" },
+    });
+  }
 
-  const cp = new ControlPlane("control-plane", {
-    codeBucket: controlPlaneCodeKey ? codeBucket.bucket : undefined,
-    codeKey: controlPlaneCodeKey,
-    imageUri: controlPlaneImageUri,
-    databaseUrl,
-    apiKey: controlPlaneApiKey,
-    bootstrapToken,
-    domainName,
-    certificateArn,
+  if (metricsDomainName && metricsCertificateArn) {
+    new aws.apigatewayv2.DomainName("metrics-domain", {
+      domainName: metricsDomainName,
+      domainNameConfiguration: {
+        certificateArn: metricsCertificateArn,
+        endpointType: "REGIONAL",
+        securityPolicy: "TLS_1_2",
+      },
+      tags: { Project: "vpnvpn" },
+    });
+  }
+
+  // Control Plane Lambda + API Gateway
+  // Create ECR Repo
+  const controlPlaneRepo = new awsx.ecr.Repository("control-plane-repo", {
+    forceDelete: true,
   });
+
+  // Build and push Docker image using local command (awsx.ecr.Image was flaky)
+  const controlPlaneImageTag = "latest"; // In real usage, use a hash or timestamp
+  const controlPlaneImageUri = pulumi.interpolate`${controlPlaneRepo.url}:${controlPlaneImageTag}`;
+
+  const controlPlaneBuild = new command.local.Command("control-plane-build", {
+    create: pulumi.interpolate`
+      aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${controlPlaneRepo.url}
+      docker build -t ${controlPlaneImageUri} -f ../../services/control-plane/Dockerfile ../../
+      docker push ${controlPlaneImageUri}
+    `,
+    // Triggers: run on every update for now to ensure latest code.
+    // In production, you'd want to hash the source directory.
+    triggers: [new Date().toISOString()],
+  });
+
+  const cp = new ControlPlane(
+    "control-plane",
+    {
+      imageUri: controlPlaneImageUri,
+      databaseUrl,
+      apiKey: controlPlaneApiKey,
+      bootstrapToken,
+      domainName,
+    },
+    { dependsOn: [controlPlaneBuild] }
+  );
 
   controlPlaneApiUrl = cp.apiUrl;
   controlPlaneFunctionArn = cp.functionArn;
 
   // Metrics Service Lambda + API Gateway
-  const metricsCodeKey = globalConfig.get("metricsCodeKey");
-  const metricsImageUri = globalConfig.get("metricsImageUri");
-
-  const metrics = new MetricsService("metrics", {
-    codeBucket: metricsCodeKey ? codeBucket.bucket : undefined,
-    codeKey: metricsCodeKey,
-    imageUri: metricsImageUri,
-    databaseUrl,
-    domainName: metricsDomainName,
-    certificateArn: metricsCertificateArn,
+  // Create ECR Repo
+  const metricsRepo = new awsx.ecr.Repository("metrics-repo", {
+    forceDelete: true,
   });
+
+  // Build and push Docker image using local command
+  const metricsImageTag = "latest";
+  const metricsImageUri = pulumi.interpolate`${metricsRepo.url}:${metricsImageTag}`;
+
+  const metricsBuild = new command.local.Command(
+    "metrics-build",
+    {
+      create: pulumi.interpolate`
+      aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${metricsRepo.url}
+      docker build -t ${metricsImageUri} -f ../../services/metrics/Dockerfile ../../
+      docker push ${metricsImageUri}
+    `,
+      triggers: [new Date().toISOString()],
+    },
+    { dependsOn: [controlPlaneBuild] }
+  ); // Serialize builds
+
+  const metrics = new MetricsService(
+    "metrics",
+    {
+      imageUri: metricsImageUri,
+      databaseUrl,
+      domainName: metricsDomainName,
+    },
+    { dependsOn: [metricsBuild] }
+  );
 
   metricsApiUrl = metrics.apiUrl;
   metricsFunctionArn = metrics.functionArn;

@@ -21,12 +21,9 @@ export interface MetricsServiceArgs {
   databaseUrl: pulumi.Input<string>;
   /**
    * Custom domain name for the API (e.g., metrics.vpnvpn.dev).
+   * The DomainName resource must already exist.
    */
   domainName?: pulumi.Input<string>;
-  /**
-   * ACM Certificate ARN for the custom domain.
-   */
-  certificateArn?: pulumi.Input<string>;
 }
 
 /**
@@ -195,26 +192,12 @@ export class MetricsService extends pulumi.ComponentResource {
     );
 
     // Custom Domain Mapping
-    if (args.domainName && args.certificateArn) {
-      const domainName = new aws.apigatewayv2.DomainName(
-        `${name}-domain`,
-        {
-          domainName: args.domainName,
-          domainNameConfiguration: {
-            certificateArn: args.certificateArn,
-            endpointType: "REGIONAL",
-            securityPolicy: "TLS_1_2",
-          },
-          tags: { Project: "vpnvpn" },
-        },
-        { parent: this }
-      );
-
+    if (args.domainName) {
       new aws.apigatewayv2.ApiMapping(
         `${name}-mapping`,
         {
           apiId: api.id,
-          domainName: domainName.domainName,
+          domainName: args.domainName,
           stage: stage.name,
         },
         { parent: this }
@@ -233,7 +216,11 @@ export class MetricsService extends pulumi.ComponentResource {
       { parent: this }
     );
 
-    this.apiUrl = pulumi.interpolate`${api.apiEndpoint}`;
+    if (args.domainName) {
+      this.apiUrl = pulumi.interpolate`https://${args.domainName}`;
+    } else {
+      this.apiUrl = pulumi.interpolate`${api.apiEndpoint}`;
+    }
     this.functionArn = lambdaFunction.arn;
 
     this.registerOutputs({
@@ -242,6 +229,3 @@ export class MetricsService extends pulumi.ComponentResource {
     });
   }
 }
-
-
-

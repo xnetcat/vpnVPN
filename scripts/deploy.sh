@@ -82,8 +82,6 @@ REQUIRED_VARS=(
   "AWS_REGION"
   "AWS_ACCOUNT_ID"
   "PULUMI_ACCESS_TOKEN"
-  "CONTROL_PLANE_API_URL"
-  "CONTROL_PLANE_API_KEY"
   "ECR_REPO_NAME"
   "DATABASE_URL"
 )
@@ -98,9 +96,13 @@ done
 # Set environment-specific URLs
 if [[ "$ENVIRONMENT" == "production" ]]; then
   WEB_URL="${NEXTAUTH_URL:-https://vpnvpn.dev}"
+  CONTROL_PLANE_API_URL="https://api.vpnvpn.dev"
+  METRICS_API_URL="https://metrics.vpnvpn.dev"
   DESKTOP_URL="${WEB_URL}/desktop?desktop=1"
 else
   WEB_URL="${NEXTAUTH_URL:-https://staging.vpnvpn.dev}"
+  CONTROL_PLANE_API_URL="https://api.staging.vpnvpn.dev"
+  METRICS_API_URL="https://metrics.staging.vpnvpn.dev"
   DESKTOP_URL="${WEB_URL}/desktop?desktop=1"
 fi
 
