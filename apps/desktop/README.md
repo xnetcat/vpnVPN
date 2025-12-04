@@ -43,7 +43,7 @@ The flow is:
 
    The Tauri window should open and display the `/desktop` route from the web
    app. When the web app is configured to use your local control plane
-   (`CONTROL_PLANE_API_URL` / `NEXT_PUBLIC_API_BASE_URL`), the desktop app will
+   (`CONTROL_PLANE_API_URL` / `NEXT_PUBLIC_API_URL`), the desktop app will
    automatically operate against local VPN services.
 
 ## Building for production

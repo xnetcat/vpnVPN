@@ -36,7 +36,7 @@ type FleetMetrics = {
 
 async function fetchFleetMetrics(): Promise<FleetMetrics | null> {
   const base =
-    process.env.CONTROL_PLANE_API_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
+    process.env.CONTROL_PLANE_API_URL ?? process.env.NEXT_PUBLIC_API_URL;
   const apiKey = process.env.CONTROL_PLANE_API_KEY;
 
   if (!base || !apiKey) return null;
@@ -53,7 +53,7 @@ async function fetchFleetMetrics(): Promise<FleetMetrics | null> {
 
     const totalServers = data.length;
     const onlineServers = data.filter(
-      (s) => (s.status ?? "unknown").toLowerCase() === "online",
+      (s) => (s.status ?? "unknown").toLowerCase() === "online"
     ).length;
 
     let totalSessions = 0;

@@ -50,14 +50,3 @@ jobs:
       - name: Build
         run: |
           bun run build
-
-      - name: Upload desktop artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: desktop-linux-x64
-          path: |
-            apps/desktop/src-tauri/target/release/bundle/**/*.deb
-            apps/desktop/src-tauri/target/release/bundle/**/*.AppImage
-            apps/desktop/src-tauri/target/release/bundle/**/*.rpm
-          if-no-files-found: warn
-          retention-days: 7

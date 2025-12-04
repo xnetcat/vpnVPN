@@ -4,6 +4,7 @@ import { VpnAsg } from "./components/vpnAsg";
 import { ControlPlane } from "./controlPlane";
 import { MetricsService } from "./metricsService";
 import { Observability } from "./observability";
+import { DnsValidatedCertificate } from "./components/certificate";
 
 const config = new pulumi.Config();
 const globalConfig = new pulumi.Config("global");
@@ -96,6 +97,42 @@ if (stack === "global") {
   const controlPlaneApiKey = config.requireSecret("controlPlaneApiKey");
   const bootstrapToken = config.getSecret("bootstrapToken");
 
+  // ... (imports)
+
+  // ... (inside global stack)
+
+  // Custom Domain Configuration
+  const domainName = globalConfig.get("domainName"); // e.g. api.vpnvpn.dev
+  let certificateArn: pulumi.Input<string> | undefined =
+    globalConfig.get("certificateArn");
+
+  const metricsDomainName = globalConfig.get("metricsDomainName"); // e.g. metrics.vpnvpn.dev
+  let metricsCertificateArn: pulumi.Input<string> | undefined =
+    globalConfig.get("metricsCertificateArn");
+
+  // If domains are set but certs are not, try to provision them automatically
+  // We'll assume a wildcard cert `*.vpnvpn.dev` (or staging equivalent) is best,
+  // but for now let's just provision individual certs for the specific domains requested
+  // to avoid complexity with wildcard matching.
+
+  if (domainName && !certificateArn) {
+    const cert = new DnsValidatedCertificate("control-plane-cert", {
+      domainName: domainName,
+      // zoneId: ... (optional, defaults to looking up vpnvpn.dev.)
+    });
+    certificateArn = cert.certificateArn;
+  }
+
+  if (metricsDomainName && !metricsCertificateArn) {
+    // If it's the same domain as control plane (unlikely for api vs metrics subdomains), reuse?
+    // If we used a wildcard, we'd reuse.
+    // For now, just create another cert. ACM certs are free.
+    const cert = new DnsValidatedCertificate("metrics-cert", {
+      domainName: metricsDomainName,
+    });
+    metricsCertificateArn = cert.certificateArn;
+  }
+
   // Control Plane Lambda + API Gateway
   const controlPlaneCodeKey = globalConfig.get("controlPlaneCodeKey");
   const controlPlaneImageUri = globalConfig.get("controlPlaneImageUri");
@@ -107,6 +144,8 @@ if (stack === "global") {
     databaseUrl,
     apiKey: controlPlaneApiKey,
     bootstrapToken,
+    domainName,
+    certificateArn,
   });
 
   controlPlaneApiUrl = cp.apiUrl;
@@ -121,6 +160,8 @@ if (stack === "global") {
     codeKey: metricsCodeKey,
     imageUri: metricsImageUri,
     databaseUrl,
+    domainName: metricsDomainName,
+    certificateArn: metricsCertificateArn,
   });
 
   metricsApiUrl = metrics.apiUrl;

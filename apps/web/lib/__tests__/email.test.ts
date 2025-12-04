@@ -12,7 +12,7 @@ vi.mock("resend", () => ({
 
 // Set test env vars
 process.env.RESEND_API_KEY = "re_test_123";
-process.env.EMAIL_FROM = "test@vpnvpn.com";
+process.env.EMAIL_FROM = "test@vpnvpn.dev";
 
 describe("Email utilities", () => {
   beforeEach(() => {
@@ -36,7 +36,7 @@ describe("Email utilities", () => {
       expect.objectContaining({
         to: "user@test.com",
         subject: "Welcome to vpnVPN",
-      }),
+      })
     );
   });
 
@@ -59,7 +59,7 @@ describe("Email utilities", () => {
       expect.objectContaining({
         to: "user@test.com",
         subject: "Your vpnVPN subscription is active",
-      }),
+      })
     );
   });
 
@@ -79,7 +79,7 @@ describe("Email utilities", () => {
       expect.objectContaining({
         to: "user@test.com",
         subject: "Your vpnVPN subscription has been cancelled",
-      }),
+      })
     );
   });
 
@@ -100,7 +100,7 @@ describe("Email utilities", () => {
       expect.objectContaining({
         to: "user@test.com",
         subject: "New device added to your vpnVPN account",
-      }),
+      })
     );
   });
 
@@ -121,7 +121,7 @@ describe("Email utilities", () => {
       expect.objectContaining({
         to: "user@test.com",
         subject: "Device removed from your vpnVPN account",
-      }),
+      })
     );
   });
 
@@ -138,7 +138,7 @@ describe("Email utilities", () => {
         to: "user@test.com",
         template: "welcome",
         data: { name: "Test" },
-      }),
+      })
     ).resolves.toBeUndefined();
 
     // Restore

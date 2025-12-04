@@ -15,14 +15,14 @@ Complete API documentation for vpnVPN services.
 
 ## Control Plane API
 
-**Base URL:** `https://api.vpnvpn.dev` (production) or `http://localhost:4000` (development)
+**Base URL:** `https://api.vpnvpn.dev` (production) or `https://api.staging.vpnvpn.dev` (staging)
 
 ### Authentication
 
-| Method | Header | Description |
-|--------|--------|-------------|
+| Method       | Header                          | Description                 |
+| ------------ | ------------------------------- | --------------------------- |
 | Bearer Token | `Authorization: Bearer <token>` | For VPN node authentication |
-| API Key | `x-api-key: <key>` | For web app authentication |
+| API Key      | `x-api-key: <key>`              | For web app authentication  |
 
 ---
 
@@ -54,10 +54,10 @@ GET /health
 
 **Status Codes:**
 
-| Code | Description |
-|------|-------------|
-| 200 | Service healthy |
-| 503 | Service unhealthy (database connection failed) |
+| Code | Description                                    |
+| ---- | ---------------------------------------------- |
+| 200  | Service healthy                                |
+| 503  | Service unhealthy (database connection failed) |
 
 ---
 
@@ -86,12 +86,12 @@ POST /server/register
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | string | Yes | Unique server identifier |
-| `publicKey` | string | Yes | WireGuard public key |
-| `listenPort` | number | Yes | WireGuard listen port |
-| `metadata` | object | No | Additional server metadata |
+| Field        | Type   | Required | Description                |
+| ------------ | ------ | -------- | -------------------------- |
+| `id`         | string | Yes      | Unique server identifier   |
+| `publicKey`  | string | Yes      | WireGuard public key       |
+| `listenPort` | number | Yes      | WireGuard listen port      |
+| `metadata`   | object | No       | Additional server metadata |
 
 **Response:**
 
@@ -103,11 +103,11 @@ POST /server/register
 
 **Status Codes:**
 
-| Code | Description |
-|------|-------------|
-| 200 | Successfully registered |
-| 401 | Invalid or missing bearer token |
-| 400 | Invalid request body |
+| Code | Description                     |
+| ---- | ------------------------------- |
+| 200  | Successfully registered         |
+| 401  | Invalid or missing bearer token |
+| 400  | Invalid request body            |
 
 ---
 
@@ -123,9 +123,9 @@ GET /server/peers?id=<server-id>
 
 **Query Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | string | No | Server ID to filter peers (returns all if omitted) |
+| Parameter | Type   | Required | Description                                        |
+| --------- | ------ | -------- | -------------------------------------------------- |
+| `id`      | string | No       | Server ID to filter peers (returns all if omitted) |
 
 **Response:**
 
@@ -144,10 +144,10 @@ GET /server/peers?id=<server-id>
 
 **Status Codes:**
 
-| Code | Description |
-|------|-------------|
-| 200 | Success |
-| 401 | Invalid or missing bearer token |
+| Code | Description                     |
+| ---- | ------------------------------- |
+| 200  | Success                         |
+| 401  | Invalid or missing bearer token |
 
 ---
 
@@ -187,10 +187,10 @@ GET /servers
 
 **Status Codes:**
 
-| Code | Description |
-|------|-------------|
-| 200 | Success |
-| 401 | Invalid or missing API key |
+| Code | Description                |
+| ---- | -------------------------- |
+| 200  | Success                    |
+| 401  | Invalid or missing API key |
 
 ---
 
@@ -217,14 +217,14 @@ POST /peers
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `publicKey` | string | Yes | Client WireGuard public key |
-| `userId` | string | Yes | User ID from web app database |
-| `allowedIps` | string[] | Yes | Allowed IP ranges for client |
-| `serverId` | string | No | Preferred server ID |
-| `country` | string | No | Country code |
-| `region` | string | No | AWS region |
+| Field        | Type     | Required | Description                   |
+| ------------ | -------- | -------- | ----------------------------- |
+| `publicKey`  | string   | Yes      | Client WireGuard public key   |
+| `userId`     | string   | Yes      | User ID from web app database |
+| `allowedIps` | string[] | Yes      | Allowed IP ranges for client  |
+| `serverId`   | string   | No       | Preferred server ID           |
+| `country`    | string   | No       | Country code                  |
+| `region`     | string   | No       | AWS region                    |
 
 **Note:** Creating a new peer automatically revokes any existing active peers for the same user.
 
@@ -232,11 +232,11 @@ POST /peers
 
 **Status Codes:**
 
-| Code | Description |
-|------|-------------|
-| 204 | Peer created/updated |
-| 400 | Invalid request body |
-| 401 | Invalid or missing API key |
+| Code | Description                |
+| ---- | -------------------------- |
+| 204  | Peer created/updated       |
+| 400  | Invalid request body       |
+| 401  | Invalid or missing API key |
 
 ---
 
@@ -262,11 +262,11 @@ POST /peers/revoke-for-user
 
 **Status Codes:**
 
-| Code | Description |
-|------|-------------|
-| 204 | Peers revoked |
-| 400 | Invalid request body |
-| 401 | Invalid or missing API key |
+| Code | Description                |
+| ---- | -------------------------- |
+| 204  | Peers revoked              |
+| 400  | Invalid request body       |
+| 401  | Invalid or missing API key |
 
 ---
 
@@ -282,25 +282,25 @@ DELETE /peers/:publicKey
 
 **URL Parameters:**
 
-| Parameter | Description |
-|-----------|-------------|
+| Parameter   | Description                      |
+| ----------- | -------------------------------- |
 | `publicKey` | URL-encoded WireGuard public key |
 
 **Response:** `204 No Content`
 
 **Status Codes:**
 
-| Code | Description |
-|------|-------------|
-| 204 | Peer revoked |
-| 400 | Peer not found |
-| 401 | Invalid or missing API key |
+| Code | Description                |
+| ---- | -------------------------- |
+| 204  | Peer revoked               |
+| 400  | Peer not found             |
+| 401  | Invalid or missing API key |
 
 ---
 
 ## Metrics Service API
 
-**Base URL:** `https://metrics.vpnvpn.dev` (production) or `http://localhost:4001` (development)
+**Base URL:** `https://metrics.vpnvpn.dev` (production) or `https://metrics.staging.vpnvpn.dev` (staging)
 
 ### Health Check
 
@@ -351,14 +351,14 @@ POST /metrics/vpn
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `serverId` | string | Yes | Server identifier |
-| `timestamp` | string | No | ISO 8601 timestamp (defaults to now) |
-| `cpu` | number | No | CPU usage percentage |
-| `memory` | number | No | Memory usage percentage |
-| `activePeers` | number | No | Number of active peer connections |
-| `region` | string | No | AWS region |
+| Field         | Type   | Required | Description                          |
+| ------------- | ------ | -------- | ------------------------------------ |
+| `serverId`    | string | Yes      | Server identifier                    |
+| `timestamp`   | string | No       | ISO 8601 timestamp (defaults to now) |
+| `cpu`         | number | No       | CPU usage percentage                 |
+| `memory`      | number | No       | Memory usage percentage              |
+| `activePeers` | number | No       | Number of active peer connections    |
+| `region`      | string | No       | AWS region                           |
 
 **Response:**
 
@@ -370,16 +370,16 @@ POST /metrics/vpn
 
 **Status Codes:**
 
-| Code | Description |
-|------|-------------|
-| 202 | Metrics accepted |
-| 400 | Invalid request body |
+| Code | Description          |
+| ---- | -------------------- |
+| 202  | Metrics accepted     |
+| 400  | Invalid request body |
 
 ---
 
 ## Web App REST API
 
-**Base URL:** `https://vpnvpn.com` (production) or `http://localhost:3000` (development)
+**Base URL:** `https://vpnvpn.dev` (production) or `https://staging.vpnvpn.dev` (staging)
 
 ### Health Check
 
@@ -411,10 +411,10 @@ GET /api/health
 
 **Status Values:**
 
-| Status | Description |
-|--------|-------------|
-| `healthy` | All systems operational |
-| `degraded` | Non-critical service unavailable |
+| Status      | Description                             |
+| ----------- | --------------------------------------- |
+| `healthy`   | All systems operational                 |
+| `degraded`  | Non-critical service unavailable        |
 | `unhealthy` | Critical service (database) unavailable |
 
 ---
@@ -431,8 +431,8 @@ POST /api/desktop/connect
 
 **Headers:**
 
-| Header | Description |
-|--------|-------------|
+| Header              | Description                  |
+| ------------------- | ---------------------------- |
 | `x-vpn-private-key` | Client WireGuard private key |
 
 **Request Body:**
@@ -455,13 +455,13 @@ POST /api/desktop/connect
 
 **Error Responses:**
 
-| Code | Error | Description |
-|------|-------|-------------|
-| 401 | `unauthenticated` | No valid session |
-| 402 | `payment_required` | No active subscription |
-| 400 | `missing_keys` | Missing public or private key |
-| 403 | `device_limit` | Device limit reached |
-| 500 | `control_plane_error` | Failed to register with control plane |
+| Code | Error                 | Description                           |
+| ---- | --------------------- | ------------------------------------- |
+| 401  | `unauthenticated`     | No valid session                      |
+| 402  | `payment_required`    | No active subscription                |
+| 400  | `missing_keys`        | Missing public or private key         |
+| 403  | `device_limit`        | Device limit reached                  |
+| 500  | `control_plane_error` | Failed to register with control plane |
 
 ---
 
@@ -477,11 +477,11 @@ POST /api/webhooks/stripe
 
 **Handled Events:**
 
-| Event | Action |
-|-------|--------|
-| `checkout.session.completed` | Create subscription, send welcome email |
-| `customer.subscription.created` | Create/update subscription record |
-| `customer.subscription.updated` | Update subscription status/tier |
+| Event                           | Action                                     |
+| ------------------------------- | ------------------------------------------ |
+| `checkout.session.completed`    | Create subscription, send welcome email    |
+| `customer.subscription.created` | Create/update subscription record          |
+| `customer.subscription.updated` | Update subscription status/tier            |
 | `customer.subscription.deleted` | Revoke VPN access, send cancellation email |
 
 **Response:**
@@ -502,12 +502,12 @@ All tRPC procedures use SuperJSON transformer for type-safe data serialization.
 
 ### Procedure Types
 
-| Type | Description |
-|------|-------------|
-| `publicProcedure` | No authentication required |
+| Type                 | Description                    |
+| -------------------- | ------------------------------ |
+| `publicProcedure`    | No authentication required     |
 | `protectedProcedure` | Requires authenticated session |
-| `paidProcedure` | Requires active subscription |
-| `adminProcedure` | Requires admin role |
+| `paidProcedure`      | Requires active subscription   |
+| `adminProcedure`     | Requires admin role            |
 
 ---
 
@@ -530,7 +530,7 @@ Array<{
   serverId: string | null;
   createdAt: Date;
   updatedAt: Date;
-}>
+}>;
 ```
 
 ---
@@ -563,9 +563,9 @@ Array<{
 
 **Errors:**
 
-| Code | Message |
-|------|---------|
-| `FORBIDDEN` | Device limit reached |
+| Code                    | Message                           |
+| ----------------------- | --------------------------------- |
+| `FORBIDDEN`             | Device limit reached              |
 | `INTERNAL_SERVER_ERROR` | Control plane registration failed |
 
 ---
@@ -614,7 +614,7 @@ Array<{
 
 ```typescript
 {
-  url: string;  // Stripe Checkout URL
+  url: string; // Stripe Checkout URL
 }
 ```
 
@@ -630,7 +630,7 @@ Array<{
 
 ```typescript
 {
-  url: string;  // Stripe Portal URL
+  url: string; // Stripe Portal URL
 }
 ```
 
@@ -655,7 +655,7 @@ Array<{
   sessions: number;
   cpu?: number;
   lastSeen?: string;
-}>
+}>;
 ```
 
 ---
@@ -679,7 +679,7 @@ Array<{
   latency?: number;
   score?: number;
   country?: string;
-}>
+}>;
 ```
 
 ---
@@ -794,7 +794,7 @@ Array<{
   active: boolean;
   usageCount: number;
   createdAt: Date;
-}>
+}>;
 ```
 
 ---
@@ -809,7 +809,7 @@ Array<{
 
 ```typescript
 {
-  label: string;  // Min 1 character
+  label: string; // Min 1 character
 }
 ```
 
@@ -860,8 +860,8 @@ Array<{
 
 ```typescript
 {
-  email: string;  // Valid email
-  code: string;   // 6 characters
+  email: string; // Valid email
+  code: string; // 6 characters
 }
 ```
 
@@ -893,24 +893,20 @@ Array<{
 
 ### tRPC Error Codes
 
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| `UNAUTHORIZED` | 401 | Not authenticated |
-| `FORBIDDEN` | 403 | Insufficient permissions |
-| `NOT_FOUND` | 404 | Resource not found |
-| `BAD_REQUEST` | 400 | Invalid input |
-| `INTERNAL_SERVER_ERROR` | 500 | Server error |
+| Code                    | HTTP Status | Description              |
+| ----------------------- | ----------- | ------------------------ |
+| `UNAUTHORIZED`          | 401         | Not authenticated        |
+| `FORBIDDEN`             | 403         | Insufficient permissions |
+| `NOT_FOUND`             | 404         | Resource not found       |
+| `BAD_REQUEST`           | 400         | Invalid input            |
+| `INTERNAL_SERVER_ERROR` | 500         | Server error             |
 
 ### Rate Limits
 
-| Endpoint Category | Limit |
-|-------------------|-------|
-| Read operations | 100 req/min |
-| Write operations | 20 req/min |
-| Authentication | 10 req/min |
+| Endpoint Category | Limit       |
+| ----------------- | ----------- |
+| Read operations   | 100 req/min |
+| Write operations  | 20 req/min  |
+| Authentication    | 10 req/min  |
 
 See `TROUBLESHOOTING.md` for error resolution guidance.
-
-
-
-

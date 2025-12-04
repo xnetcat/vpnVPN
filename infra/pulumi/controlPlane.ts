@@ -27,6 +27,14 @@ export interface ControlPlaneArgs {
    * Bootstrap token for VPN node registration.
    */
   bootstrapToken?: pulumi.Input<string>;
+  /**
+   * Custom domain name for the API (e.g., api.vpnvpn.dev).
+   */
+  domainName?: pulumi.Input<string>;
+  /**
+   * ACM Certificate ARN for the custom domain.
+   */
+  certificateArn?: pulumi.Input<string>;
 }
 
 /**
@@ -53,7 +61,10 @@ export class ControlPlane extends pulumi.ComponentResource {
         "https://example-control-plane.your-domain.com";
       this.apiUrl = pulumi.output(url);
       this.functionArn = pulumi.output("");
-      this.registerOutputs({ apiUrl: this.apiUrl, functionArn: this.functionArn });
+      this.registerOutputs({
+        apiUrl: this.apiUrl,
+        functionArn: this.functionArn,
+      });
       return;
     }
 
@@ -192,6 +203,33 @@ export class ControlPlane extends pulumi.ComponentResource {
       },
       { parent: this }
     );
+
+    // Custom Domain Mapping
+    if (args.domainName && args.certificateArn) {
+      const domainName = new aws.apigatewayv2.DomainName(
+        `${name}-domain`,
+        {
+          domainName: args.domainName,
+          domainNameConfiguration: {
+            certificateArn: args.certificateArn,
+            endpointType: "REGIONAL",
+            securityPolicy: "TLS_1_2",
+          },
+          tags: { Project: "vpnvpn" },
+        },
+        { parent: this }
+      );
+
+      new aws.apigatewayv2.ApiMapping(
+        `${name}-mapping`,
+        {
+          apiId: api.id,
+          domainName: domainName.domainName,
+          stage: stage.name,
+        },
+        { parent: this }
+      );
+    }
 
     // Grant API Gateway permission to invoke Lambda
     new aws.lambda.Permission(
