@@ -140,6 +140,8 @@ fn parse_request(rpc: &JsonRpcRequest) -> Result<DaemonRequest> {
         "get_status" => Ok(DaemonRequest::GetStatus),
         "get_connection_status" => Ok(DaemonRequest::GetConnectionStatus),
         "get_settings" => Ok(DaemonRequest::GetSettings),
+        "get_vpn_tools" => Ok(DaemonRequest::GetVpnTools),
+        "refresh_vpn_tools" => Ok(DaemonRequest::RefreshVpnTools),
         "disconnect" => Ok(DaemonRequest::Disconnect),
         "disable_kill_switch" => Ok(DaemonRequest::DisableKillSwitch),
         "install_service" => Ok(DaemonRequest::InstallService),
@@ -155,6 +157,10 @@ fn parse_request(rpc: &JsonRpcRequest) -> Result<DaemonRequest> {
             Ok(req)
         }
         "enable_kill_switch" => {
+            let req: DaemonRequest = serde_json::from_value(rpc.params.clone())?;
+            Ok(req)
+        }
+        "update_binary_paths" => {
             let req: DaemonRequest = serde_json::from_value(rpc.params.clone())?;
             Ok(req)
         }
