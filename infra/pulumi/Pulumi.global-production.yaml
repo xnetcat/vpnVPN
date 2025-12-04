@@ -1,0 +1,9 @@
+config:
+  aws:region: us-east-1
+  global:ecrRepoName: vpnvpn/production
+  vpnvpn-infra:controlPlaneApiUrl: https://api.vpnvpn.dev
+  vpnvpn-infra:databaseUrl:
+    secure: AAABAKOUTD18yqmx/sAo2/JnL1f3eY2aWOJTptsy9V5WR+rTwj1Fu3qmn4bqeM2YkaQYcUv/QM+oAagh49z+8pzNB5hFD+K/ATER4RFdQC4=
+  vpnvpn-infra:controlPlaneApiKey:
+    secure: AAABAAur6vc+Q3RG/tdQjOAXAQuxBMsTHR3G3PI6tMrDzJFaJ0OXfCArfL0SPagV4hJW9YMLJngd7vxF8+dApdOa8BIVFM64c2LuIQvBRJ0lrhQevznPiIi/BWJCdZ3wO6ZCnQmHT9bkzwp4AYdEEyxbZypoTv8=
+  global:desktopBucket: vpnvpn-desktop-production

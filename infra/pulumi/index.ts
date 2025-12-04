@@ -16,11 +16,8 @@ const stack = pulumi.getStack();
 // Outputs
 let ecrUri: pulumi.Output<string> | undefined;
 let controlPlaneApiUrl: pulumi.Output<string> | undefined;
-let controlPlaneFunctionArn: pulumi.Output<string> | undefined;
 let metricsApiUrl: pulumi.Output<string> | undefined;
-let metricsFunctionArn: pulumi.Output<string> | undefined;
 let ampWorkspaceId: pulumi.Output<string> | undefined;
-let amgWorkspaceUrl: pulumi.Output<string> | undefined;
 let nlbDnsName: pulumi.Output<string> | undefined;
 let desktopBucketUrl: pulumi.Output<string> | undefined;
 let lambdaCodeBucket: pulumi.Output<string> | undefined;
@@ -186,17 +183,18 @@ if (stack.startsWith("global")) {
 
   // Control Plane Lambda + API Gateway
   // Create ECR Repo
-  const controlPlaneRepo = new awsx.ecr.Repository("control-plane-repo", {
+  const controlPlaneRepo = new aws.ecr.Repository("control-plane-repo", {
     forceDelete: true,
+    tags: { Project: "vpnvpn" },
   });
 
   // Build and push Docker image using local command (awsx.ecr.Image was flaky)
   const controlPlaneImageTag = "latest"; // In real usage, use a hash or timestamp
-  const controlPlaneImageUri = pulumi.interpolate`${controlPlaneRepo.url}:${controlPlaneImageTag}`;
+  const controlPlaneImageUri = pulumi.interpolate`${controlPlaneRepo.repositoryUrl}:${controlPlaneImageTag}`;
 
   const controlPlaneBuild = new command.local.Command("control-plane-build", {
     create: pulumi.interpolate`
-      aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${controlPlaneRepo.url}
+      aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${controlPlaneRepo.repositoryUrl}
       docker build -t ${controlPlaneImageUri} -f ../../services/control-plane/Dockerfile ../../
       docker push ${controlPlaneImageUri}
     `,
@@ -218,23 +216,24 @@ if (stack.startsWith("global")) {
   );
 
   controlPlaneApiUrl = cp.apiUrl;
-  controlPlaneFunctionArn = cp.functionArn;
+  controlPlaneApiUrl = cp.apiUrl;
 
   // Metrics Service Lambda + API Gateway
   // Create ECR Repo
-  const metricsRepo = new awsx.ecr.Repository("metrics-repo", {
+  const metricsRepo = new aws.ecr.Repository("metrics-repo", {
     forceDelete: true,
+    tags: { Project: "vpnvpn" },
   });
 
   // Build and push Docker image using local command
   const metricsImageTag = "latest";
-  const metricsImageUri = pulumi.interpolate`${metricsRepo.url}:${metricsImageTag}`;
+  const metricsImageUri = pulumi.interpolate`${metricsRepo.repositoryUrl}:${metricsImageTag}`;
 
   const metricsBuild = new command.local.Command(
     "metrics-build",
     {
       create: pulumi.interpolate`
-      aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${metricsRepo.url}
+      aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${metricsRepo.repositoryUrl}
       docker build -t ${metricsImageUri} -f ../../services/metrics/Dockerfile ../../
       docker push ${metricsImageUri}
     `,
@@ -254,12 +253,12 @@ if (stack.startsWith("global")) {
   );
 
   metricsApiUrl = metrics.apiUrl;
-  metricsFunctionArn = metrics.functionArn;
+  metricsApiUrl = metrics.apiUrl;
 
   // Observability (AMP/Grafana)
   const obs = new Observability("observability");
   ampWorkspaceId = obs.ampWorkspaceId;
-  amgWorkspaceUrl = obs.amgWorkspaceUrl;
+  ampWorkspaceId = obs.ampWorkspaceId;
 } else if (stack.startsWith("region-")) {
   // ==========================================================================
   // Regional Stack (e.g., region-us-east-1, region-eu-west-1)
@@ -301,11 +300,8 @@ if (stack.startsWith("global")) {
 export {
   ecrUri,
   controlPlaneApiUrl,
-  controlPlaneFunctionArn,
   metricsApiUrl,
-  metricsFunctionArn,
   ampWorkspaceId,
-  amgWorkspaceUrl,
   nlbDnsName,
   desktopBucketUrl,
   lambdaCodeBucket,

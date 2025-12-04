@@ -104,7 +104,26 @@ else
   CONTROL_PLANE_API_URL="https://api.staging.vpnvpn.dev"
   METRICS_API_URL="https://metrics.staging.vpnvpn.dev"
   DESKTOP_URL="${WEB_URL}/desktop?desktop=1"
+  DESKTOP_URL="${WEB_URL}/desktop?desktop=1"
 fi
+
+# Determine ECR Repository Name based on environment
+# If ECR_REPO_NAME contains "staging", we replace it for production.
+# Otherwise we append the environment if it's not already in the name.
+if [[ "$ENVIRONMENT" == "production" ]]; then
+  if [[ "$ECR_REPO_NAME" == *"staging"* ]]; then
+    REPO_NAME="${ECR_REPO_NAME/staging/production}"
+  elif [[ "$ECR_REPO_NAME" != *"production"* ]]; then
+    REPO_NAME="${ECR_REPO_NAME}/production"
+  else
+    REPO_NAME="${ECR_REPO_NAME}"
+  fi
+else
+  # Staging or other
+  REPO_NAME="${ECR_REPO_NAME}"
+fi
+
+log_info "Using ECR Repository: ${REPO_NAME}"
 
 # Parse VPN regions configuration from regions.json or environment
 REGIONS_FILE="${SCRIPT_DIR}/regions.json"
@@ -150,7 +169,9 @@ deploy_global_stack() {
   pulumi stack select "${STACK_NAME}" 2>/dev/null || pulumi stack init "${STACK_NAME}"
   
   pulumi config set aws:region us-east-1 --stack "${STACK_NAME}"
-  pulumi config set global:ecrRepoName "${ECR_REPO_NAME}" --stack "${STACK_NAME}"
+  pulumi config set aws:region us-east-1 --stack "${STACK_NAME}"
+  pulumi config set global:ecrRepoName "${REPO_NAME}" --stack "${STACK_NAME}"
+  pulumi config set controlPlaneApiUrl "${CONTROL_PLANE_API_URL}" --stack "${STACK_NAME}"
   pulumi config set controlPlaneApiUrl "${CONTROL_PLANE_API_URL}" --stack "${STACK_NAME}"
   
   # Set secrets
@@ -185,7 +206,11 @@ build_vpn_server() {
   # Generate image tag from git commit
   IMAGE_TAG="${IMAGE_TAG:-sha-$(git rev-parse --short HEAD)}"
   
-  ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${ECR_REPO_NAME}"
+  # Generate image tag from git commit
+  IMAGE_TAG="${IMAGE_TAG:-sha-$(git rev-parse --short HEAD)}"
+  
+  ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${REPO_NAME}"
+  FULL_IMAGE="${ECR_URI}:${IMAGE_TAG}"
   FULL_IMAGE="${ECR_URI}:${IMAGE_TAG}"
   
   log_info "Building image: ${FULL_IMAGE}"
@@ -276,7 +301,9 @@ deploy_vpn_nodes() {
     fi
     
     pulumi config set aws:region "${REGION}"
-    pulumi config set global:ecrRepoName "${ECR_REPO_NAME}"
+    pulumi config set aws:region "${REGION}"
+    pulumi config set global:ecrRepoName "${REPO_NAME}"
+    pulumi config set region:imageTag "${IMAGE_TAG}"
     pulumi config set region:imageTag "${IMAGE_TAG}"
     pulumi config set region:desiredInstances "${NODES}"
     pulumi config set region:minInstances "${MIN}"
