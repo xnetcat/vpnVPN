@@ -3,7 +3,7 @@ config:
   global:ecrRepoName: vpnvpn/staging
   vpnvpn-infra:controlPlaneApiUrl: https://api.staging.vpnvpn.dev
   vpnvpn-infra:databaseUrl:
-    secure: AAABAOMd5SMBN5vg21pZ88tDV+NATpTStIUMBkCxgOVyqSu9K2hhxmh/hHBAxnsSCmb5lxPipEM6CqqTbGbO121ieY1qYZGEBWRoBsRadas=
+    secure: AAABANEBGJXYK+S6vPgJNzzO8yyELIb/wMrp780VHeUE3NAd91TFzcRofFZj6TsWuQDNFI7wlh4RPjAHrLsgL924w7b0bs0U/ihV3+bmErkopYckjkmAyewXuEM2ONEl8dDTavsGubePkX/sUOPZgoHFaDKD1np2fx9IKBpX6Dq2/XvmCXdLMzXChZ2mTR60TGcdwKc6IclYmw7Q3UYN6CtefUIcykiEQND/Uby3rZeK2t0tQX5f
   vpnvpn-infra:controlPlaneApiKey:
     secure: AAABAAqFJrR4SPJUeRx0dIBByMY5csbEKDoGEzz17EcR02533kzNZdicpoXYrDVfuntzito34BfjtodaKTU35MjKiF8m3hYalKVNDljDX6uKoYjoz2yCcFhNrpWAUtcOrnlxrd19kIKAGrK6mLyfTRc7dxjwkE5QaQJBVMtz1+wPAZYGMiiB6LkzlgRTu/I=
   global:desktopBucket: vpnvpn-desktop-staging

@@ -160,10 +160,19 @@ deploy_global_stack() {
   pulumi config set controlPlaneApiUrl "${CONTROL_PLANE_API_URL}" --stack "${STACK_NAME}"
   
   # Set secrets
-  if [[ -n "${DATABASE_URL:-}" ]]; then
-    pulumi config set --secret databaseUrl "${DATABASE_URL}" --stack "${STACK_NAME}"
+  # Check if controlPlaneApiKey is already set
+  CURRENT_API_KEY=$(pulumi config get controlPlaneApiKey --stack "${STACK_NAME}" 2>/dev/null || echo "")
+  
+  if [[ -z "$CURRENT_API_KEY" ]]; then
+    log_info "Generating new Control Plane API Key..."
+    # Generate a random 32-byte hex string (64 chars)
+    NEW_API_KEY=$(openssl rand -hex 32)
+    pulumi config set --secret controlPlaneApiKey "${NEW_API_KEY}" --stack "${STACK_NAME}"
+    log_success "Generated and configured new Control Plane API Key"
+  else
+    log_info "Using existing Control Plane API Key"
   fi
-  pulumi config set --secret controlPlaneApiKey "${CONTROL_PLANE_API_KEY}" --stack "${STACK_NAME}"
+
   if [[ -n "${VPN_TOKEN:-}" ]]; then
     pulumi config set --secret bootstrapToken "${VPN_TOKEN}" --stack "${STACK_NAME}"
   fi
