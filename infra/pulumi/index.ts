@@ -195,7 +195,7 @@ if (stack.startsWith("global")) {
   const controlPlaneBuild = new command.local.Command("control-plane-build", {
     create: pulumi.interpolate`
       aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${controlPlaneRepo.repositoryUrl}
-      docker build -t ${controlPlaneImageUri} -f ../../services/control-plane/Dockerfile ../../
+      docker build --platform linux/amd64 -t ${controlPlaneImageUri} -f ../../services/control-plane/Dockerfile ../../
       docker push ${controlPlaneImageUri}
     `,
     // Triggers: run on every update for now to ensure latest code.
@@ -234,7 +234,7 @@ if (stack.startsWith("global")) {
     {
       create: pulumi.interpolate`
       aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${metricsRepo.repositoryUrl}
-      docker build -t ${metricsImageUri} -f ../../services/metrics/Dockerfile ../../
+      docker build --platform linux/amd64 -t ${metricsImageUri} -f ../../services/metrics/Dockerfile ../../
       docker push ${metricsImageUri}
     `,
       triggers: [new Date().toISOString()],

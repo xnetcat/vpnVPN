@@ -3,12 +3,8 @@ config:
   global:ecrRepoName: vpnvpn/staging
   vpnvpn-infra:controlPlaneApiUrl: https://api.staging.vpnvpn.dev
   vpnvpn-infra:databaseUrl:
-    secure: AAABABWqpU/ZMg+AdX/6Fyof5lFTUoLFIBjf8peMNInQ5/OPxwdXp+F9inAPI60AKS9hWP3L455kqCB1uPnGKkhxi7UJjl5KStUAAO5SZc0=
+    secure: AAABAO/1dRyeN/Vd344RdfOmxxfKdRwX+7jvY2hx1xnaV8d+lBdkRvU49iGN7o+BFn0TyhKSbVZZTT+kmO/LtPYYvwYKRbZUXNMxolUVk3E=
   vpnvpn-infra:controlPlaneApiKey:
-    secure: AAABAH+olRqPdYyQXBtI/1GDNAGlxllS9PwHIX6K1fVdzt3mQM+S1Tre1z+A510fHvcXyDbYVS/n51/Ktl6uMoVbvXIajC5Idy3TAGDm5A==
+    secure: AAABACSZ/Mnf2vyzMX/KfEtBlZoMbZcKH1R1bR2dZz8ArVjK/cY6mnr2TR2y3v5ut8ZAs114vu8fPU2Tq+WEPF3U8eZ4ilM4awGelIHRafKSPPZrq+vFiYXVweds+NqT4aDCGCXpOEKdyH+I9rAniY7ucpgLQkXZ5w39jp7z2hgA3DDzDXd9vc0zgZKqvN8=
   global:desktopBucket: vpnvpn-desktop-staging
   global:codeBucket: vpnvpn-lambda-deployments-staging
-  global:controlPlaneCodeKey: control-plane/1764865556.zip
-  global:metricsCodeKey: metrics/1764865558.zip
-  global:controlPlaneImageUri: ""
-  global:metricsImageUri: ""
