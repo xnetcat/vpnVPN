@@ -44,15 +44,29 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 ENVIRONMENT="${1:-staging}"
 SKIP_DESKTOP=true
 SKIP_VPN_NODES=false
+ONLY_VPN=false
+ONLY_DESKTOP=false
 
 for arg in "$@"; do
   case $arg in
     --with-desktop) SKIP_DESKTOP=false ;;
     --skip-vpn-nodes) SKIP_VPN_NODES=true ;;
+    --only-vpn) ONLY_VPN=true ;;
+    --only-desktop) ONLY_DESKTOP=true ;;
     --add-region=*) ADD_REGION="${arg#*=}" ;;
     --nodes=*) ADD_REGION_NODES="${arg#*=}" ;;
   esac
 done
+
+if [[ "$ONLY_VPN" == "true" ]]; then
+  SKIP_DESKTOP=true
+  SKIP_VPN_NODES=false
+fi
+
+if [[ "$ONLY_DESKTOP" == "true" ]]; then
+  SKIP_DESKTOP=false
+  SKIP_VPN_NODES=true
+fi
 
 if [[ "$ENVIRONMENT" != "staging" && "$ENVIRONMENT" != "production" ]]; then
   log_error "Environment must be 'staging' or 'production'"
@@ -141,7 +155,7 @@ log_success "Environment loaded successfully"
 # =============================================================================
 
 deploy_global_stack() {
-  log_info "Deploying global Pulumi stack to us-east-1..."
+  log_info "Configuring global Pulumi stack (us-east-1)..."
   
   cd "${ROOT_DIR}/infra/pulumi"
   bun install
@@ -153,10 +167,9 @@ deploy_global_stack() {
   STACK_NAME="global-${ENVIRONMENT}"
   pulumi stack select "${STACK_NAME}" 2>/dev/null || pulumi stack init "${STACK_NAME}"
   
-  pulumi config set aws:region us-east-1 --stack "${STACK_NAME}"
+  # Ensure config is set
   pulumi config set aws:region us-east-1 --stack "${STACK_NAME}"
   pulumi config set global:ecrRepoName "${REPO_NAME}" --stack "${STACK_NAME}"
-  pulumi config set controlPlaneApiUrl "${CONTROL_PLANE_API_URL}" --stack "${STACK_NAME}"
   pulumi config set controlPlaneApiUrl "${CONTROL_PLANE_API_URL}" --stack "${STACK_NAME}"
   
   # Set secrets
@@ -168,9 +181,11 @@ deploy_global_stack() {
     # Generate a random 32-byte hex string (64 chars)
     NEW_API_KEY=$(openssl rand -hex 32)
     pulumi config set --secret controlPlaneApiKey "${NEW_API_KEY}" --stack "${STACK_NAME}"
+    export CONTROL_PLANE_API_KEY="${NEW_API_KEY}"
     log_success "Generated and configured new Control Plane API Key"
   else
     log_info "Using existing Control Plane API Key"
+    export CONTROL_PLANE_API_KEY="${CURRENT_API_KEY}"
   fi
 
   if [[ -n "${VPN_TOKEN:-}" ]]; then
@@ -180,15 +195,19 @@ deploy_global_stack() {
   # Add S3 bucket for desktop downloads
   pulumi config set global:desktopBucket "${DESKTOP_S3_BUCKET:-vpnvpn-desktop-${ENVIRONMENT}}" --stack "${STACK_NAME}"
   
-  log_info "Running pulumi up for global stack..."
-  pulumi up -y
+  if [[ "$ONLY_VPN" == "true" || "$ONLY_DESKTOP" == "true" ]]; then
+    log_info "Skipping global stack deployment (--only-vpn or --only-desktop active)"
+  else
+    log_info "Running pulumi up for global stack..."
+    pulumi up -y
+  fi
   
   # Export outputs
   ECR_URI=$(pulumi stack output ecrUri --stack "${STACK_NAME}" 2>/dev/null || echo "")
   CP_TARGET=$(pulumi stack output controlPlaneDomainTarget --stack "${STACK_NAME}" 2>/dev/null || echo "")
   METRICS_TARGET=$(pulumi stack output metricsDomainTarget --stack "${STACK_NAME}" 2>/dev/null || echo "")
   
-  log_success "Global stack deployed successfully"
+  log_success "Global stack configured"
   cd "${ROOT_DIR}"
 }
 
@@ -197,6 +216,10 @@ deploy_global_stack() {
 # =============================================================================
 
 build_vpn_server() {
+  if [[ "$ONLY_DESKTOP" == "true" ]]; then
+    return
+  fi
+
   log_info "Building VPN server Docker image..."
   
   cd "${ROOT_DIR}/apps/vpn-server"

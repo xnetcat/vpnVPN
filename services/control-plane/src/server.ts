@@ -34,8 +34,12 @@ const revokeForUserSchema = z.object({
 
 async function ensureBootstrapToken() {
   const token = process.env.CONTROL_PLANE_BOOTSTRAP_TOKEN;
-  if (!token) return;
+  if (!token) {
+    console.log("[control-plane] no bootstrap token configured");
+    return;
+  }
 
+  console.log("[control-plane] ensuring bootstrap token...");
   try {
     await prisma.vpnToken.upsert({
       where: { token },
@@ -46,6 +50,7 @@ async function ensureBootstrapToken() {
         active: true,
       },
     });
+    console.log("[control-plane] bootstrap token ensured");
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("[control-plane] failed to ensure bootstrap token", err);
@@ -65,6 +70,8 @@ export async function buildServer(): Promise<FastifyInstance> {
   }
 
   const fastify = Fastify({ logger: true });
+
+  console.log("[control-plane] starting server build...");
 
   await ensureBootstrapToken();
 

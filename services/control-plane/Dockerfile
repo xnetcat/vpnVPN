@@ -17,15 +17,15 @@ RUN cd packages/db && bun run build
 WORKDIR /app/services/control-plane
 RUN bun run build
 
-FROM node:20-slim AS runner
-WORKDIR /app
+FROM public.ecr.aws/lambda/nodejs:20 AS runner
+WORKDIR ${LAMBDA_TASK_ROOT}
 ENV NODE_ENV=production
 
-# Install OpenSSL for Prisma query engine
-RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+# Install OpenSSL for Prisma query engine (Amazon Linux 2023 uses dnf)
+RUN dnf install -y openssl \
+  && dnf clean all
 
-# Copy built app and dependencies (including Prisma client + engines)
+# Copy built app and dependencies
 COPY --from=builder /app/services/control-plane/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
@@ -34,9 +34,6 @@ COPY --from=builder /app/packages/db/prisma ./prisma
 # Fail fast at build time if Prisma client/engine cannot be loaded
 RUN DATABASE_URL="postgresql://placeholder:5432/vpnvpn" node -e "require('@prisma/client'); console.log('Prisma client OK in control-plane image')"
 
-EXPOSE 4000
-
-# In Docker/prod, always use migrations, never `prisma db push`.
-CMD ["sh", "-c", "if [ \"$PRISMA_MIGRATE_DEPLOY_ON_BOOT\" = \"1\" ]; then npx prisma migrate deploy --schema prisma/schema.prisma || exit 1; fi; node dist/index.js"]
+CMD ["dist/lambda.handler"]
 
 

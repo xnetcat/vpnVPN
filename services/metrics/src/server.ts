@@ -22,6 +22,8 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   const fastify = Fastify({ logger: true });
 
+  console.log("[metrics] starting server build...");
+
   await fastify.register(cors, {
     origin: true,
   });
