@@ -10,7 +10,7 @@ package-lock.json
 
 # Rust
 target/
-Cargo.lock
+
 
 # Tauri sidecar binaries (generated during build)
 apps/desktop/src-tauri/binaries/
