@@ -20,3 +20,6 @@ pnpm-debug.log*
 local/vpn-data
 
 
+
+dist
+**/dist

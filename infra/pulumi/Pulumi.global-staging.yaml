@@ -8,3 +8,5 @@ config:
     secure: AAABAAqFJrR4SPJUeRx0dIBByMY5csbEKDoGEzz17EcR02533kzNZdicpoXYrDVfuntzito34BfjtodaKTU35MjKiF8m3hYalKVNDljDX6uKoYjoz2yCcFhNrpWAUtcOrnlxrd19kIKAGrK6mLyfTRc7dxjwkE5QaQJBVMtz1+wPAZYGMiiB6LkzlgRTu/I=
   global:desktopBucket: vpnvpn-desktop-staging
   global:codeBucket: vpnvpn-lambda-deployments-staging
+  vpnvpn-infra:bootstrapToken:
+    secure: AAABAPZZ3lhgQa9baVCLeGl419oMBo2igYLW1G+4cQFJUpMlPThRQ8HfOdb+w0ECzodV/jRW2hCi68RVGxgsLhphVE06B0vOYjf9Aw0LlSHJjIyOJXtPRJt0Vki964+0

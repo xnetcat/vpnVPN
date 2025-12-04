@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "bun run src/index.ts",
-    "build": "bun build src/index.ts --target=node --outdir=dist && bun build src/lambda.ts --target=node --outdir=dist/lambda",
+    "build": "rm -rf dist && bun build src/index.ts --target=node --outfile=dist/index.mjs && bun build src/lambda.ts --target=node --outfile=dist/lambda/lambda.mjs --minify",
     "build:lambda": "bun build src/lambda.ts --target=node --outfile=dist/lambda/lambda.mjs --minify",
-    "start": "node dist/index.js",
+    "start": "node dist/index.mjs",
     "lint": "biome lint .",
     "test": "vitest run",
     "format": "biome format --write .",
