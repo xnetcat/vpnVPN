@@ -128,6 +128,7 @@ export class ControlPlane extends pulumi.ComponentResource {
           timeout: 30,
           memorySize: 512,
           environment,
+          architectures: ["x86_64"],
           tags: { Project: "vpnvpn" },
         },
         { parent: this }

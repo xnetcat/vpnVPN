@@ -189,6 +189,8 @@ deploy_global_stack() {
   
   # Export outputs
   ECR_URI=$(pulumi stack output ecrUri --stack "${STACK_NAME}" 2>/dev/null || echo "")
+  CP_TARGET=$(pulumi stack output controlPlaneDomainTarget --stack "${STACK_NAME}" 2>/dev/null || echo "")
+  METRICS_TARGET=$(pulumi stack output metricsDomainTarget --stack "${STACK_NAME}" 2>/dev/null || echo "")
   
   log_success "Global stack deployed successfully"
   cd "${ROOT_DIR}"
@@ -477,10 +479,74 @@ upload_desktop_to_s3() {
   
   # Print download URLs
   echo ""
-  log_info "Desktop Download URLs:"
-  echo "  macOS:  https://${S3_BUCKET}.s3.amazonaws.com/${S3_PREFIX}/vpnvpn-desktop-latest.dmg"
   echo "  Linux:  https://${S3_BUCKET}.s3.amazonaws.com/${S3_PREFIX}/vpnvpn-desktop-latest.AppImage"
   echo ""
+}
+
+# =============================================================================
+# Step 6: Verify Deployment
+# =============================================================================
+
+verify_deployment() {
+  log_info "Verifying deployment..."
+  
+  # Check Control Plane Health
+  if [[ -n "${CONTROL_PLANE_API_URL}" ]]; then
+    log_info "Checking Control Plane: ${CONTROL_PLANE_API_URL}/health"
+    if curl -s -f -o /dev/null "${CONTROL_PLANE_API_URL}/health"; then
+      log_success "Control Plane is healthy"
+    else
+      log_warn "Control Plane health check failed!"
+      
+      # Check for SSL/DNS mismatch
+      if [[ -n "${CP_TARGET}" ]]; then
+        DOMAIN=$(echo "${CONTROL_PLANE_API_URL}" | awk -F/ '{print $3}')
+        RESOLVED=$(dig +short "$DOMAIN" | grep "execute-api" || echo "")
+        
+        if [[ -n "$RESOLVED" && "$RESOLVED" != *"$CP_TARGET"* ]]; then
+           log_error "DNS MISMATCH DETECTED!"
+           echo "  Domain:   $DOMAIN"
+           echo "  Resolved: $RESOLVED"
+           echo "  Expected: $CP_TARGET"
+           echo ""
+           echo -e "${YELLOW}ACTION REQUIRED:${NC} Update your CNAME record for $DOMAIN to point to $CP_TARGET"
+        elif [[ -z "$RESOLVED" ]]; then
+           # If dig didn't return a CNAME (maybe it returned an IP), try to see if it's a CNAME record
+           CNAME=$(dig +short CNAME "$DOMAIN")
+           if [[ -n "$CNAME" && "$CNAME" != *"$CP_TARGET"* ]]; then
+             log_error "DNS MISMATCH DETECTED!"
+             echo "  Domain:   $DOMAIN"
+             echo "  Current:  $CNAME"
+             echo "  Expected: $CP_TARGET"
+             echo ""
+             echo -e "${YELLOW}ACTION REQUIRED:${NC} Update your CNAME record for $DOMAIN to point to $CP_TARGET"
+           fi
+        fi
+      fi
+    fi
+  fi
+
+  # Check Metrics Health
+  if [[ -n "${METRICS_API_URL}" ]]; then
+    log_info "Checking Metrics Service: ${METRICS_API_URL}/health"
+    if curl -s -f -o /dev/null "${METRICS_API_URL}/health"; then
+      log_success "Metrics Service is healthy"
+    else
+      log_warn "Metrics Service health check failed!"
+       if [[ -n "${METRICS_TARGET}" ]]; then
+        DOMAIN=$(echo "${METRICS_API_URL}" | awk -F/ '{print $3}')
+        CNAME=$(dig +short CNAME "$DOMAIN")
+         if [[ -n "$CNAME" && "$CNAME" != *"$METRICS_TARGET"* ]]; then
+             log_error "DNS MISMATCH DETECTED!"
+             echo "  Domain:   $DOMAIN"
+             echo "  Current:  $CNAME"
+             echo "  Expected: $METRICS_TARGET"
+             echo ""
+             echo -e "${YELLOW}ACTION REQUIRED:${NC} Update your CNAME record for $DOMAIN to point to $METRICS_TARGET"
+         fi
+       fi
+    fi
+  fi
 }
 
 # =============================================================================
@@ -526,6 +592,8 @@ main() {
   deploy_vpn_nodes
   build_desktop_apps
   upload_desktop_to_s3
+
+  verify_deployment
   print_summary
 }
 

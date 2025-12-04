@@ -21,6 +21,8 @@ let ampWorkspaceId: pulumi.Output<string> | undefined;
 let nlbDnsName: pulumi.Output<string> | undefined;
 let desktopBucketUrl: pulumi.Output<string> | undefined;
 let lambdaCodeBucket: pulumi.Output<string> | undefined;
+let controlPlaneDomainTarget: pulumi.Output<string> | undefined;
+let metricsDomainTarget: pulumi.Output<string> | undefined;
 
 if (stack.startsWith("global")) {
   // ==========================================================================
@@ -157,20 +159,28 @@ if (stack.startsWith("global")) {
   }
 
   // Create Global DomainName resources (Static AWS Addresses)
+  let controlPlaneDomain: aws.apigatewayv2.DomainName | undefined;
   if (domainName && certificateArn) {
-    new aws.apigatewayv2.DomainName("control-plane-domain", {
-      domainName: domainName,
-      domainNameConfiguration: {
-        certificateArn: certificateArn,
-        endpointType: "REGIONAL",
-        securityPolicy: "TLS_1_2",
-      },
-      tags: { Project: "vpnvpn" },
-    });
+    controlPlaneDomain = new aws.apigatewayv2.DomainName(
+      "control-plane-domain",
+      {
+        domainName: domainName,
+        domainNameConfiguration: {
+          certificateArn: certificateArn,
+          endpointType: "REGIONAL",
+          securityPolicy: "TLS_1_2",
+        },
+        tags: { Project: "vpnvpn" },
+      }
+    );
+    controlPlaneDomainTarget = controlPlaneDomain.domainNameConfiguration.apply(
+      (c) => c.targetDomainName
+    );
   }
 
+  let metricsDomain: aws.apigatewayv2.DomainName | undefined;
   if (metricsDomainName && metricsCertificateArn) {
-    new aws.apigatewayv2.DomainName("metrics-domain", {
+    metricsDomain = new aws.apigatewayv2.DomainName("metrics-domain", {
       domainName: metricsDomainName,
       domainNameConfiguration: {
         certificateArn: metricsCertificateArn,
@@ -179,6 +189,9 @@ if (stack.startsWith("global")) {
       },
       tags: { Project: "vpnvpn" },
     });
+    metricsDomainTarget = metricsDomain.domainNameConfiguration.apply(
+      (c) => c.targetDomainName
+    );
   }
 
   // Control Plane Lambda + API Gateway
@@ -195,7 +208,7 @@ if (stack.startsWith("global")) {
   const controlPlaneBuild = new command.local.Command("control-plane-build", {
     create: pulumi.interpolate`
       aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${controlPlaneRepo.repositoryUrl}
-      docker build --platform linux/amd64 -t ${controlPlaneImageUri} -f ../../services/control-plane/Dockerfile ../../
+      docker build --platform linux/amd64 --provenance=false -t ${controlPlaneImageUri} -f ../../services/control-plane/Dockerfile ../../
       docker push ${controlPlaneImageUri}
     `,
     // Triggers: run on every update for now to ensure latest code.
@@ -212,7 +225,11 @@ if (stack.startsWith("global")) {
       bootstrapToken,
       domainName,
     },
-    { dependsOn: [controlPlaneBuild] }
+    {
+      dependsOn: [controlPlaneBuild, controlPlaneDomain].filter(
+        (x) => !!x
+      ) as pulumi.Resource[],
+    }
   );
 
   controlPlaneApiUrl = cp.apiUrl;
@@ -234,7 +251,7 @@ if (stack.startsWith("global")) {
     {
       create: pulumi.interpolate`
       aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${metricsRepo.repositoryUrl}
-      docker build --platform linux/amd64 -t ${metricsImageUri} -f ../../services/metrics/Dockerfile ../../
+      docker build --platform linux/amd64 --provenance=false -t ${metricsImageUri} -f ../../services/metrics/Dockerfile ../../
       docker push ${metricsImageUri}
     `,
       triggers: [new Date().toISOString()],
@@ -249,7 +266,11 @@ if (stack.startsWith("global")) {
       databaseUrl,
       domainName: metricsDomainName,
     },
-    { dependsOn: [metricsBuild] }
+    {
+      dependsOn: [metricsBuild, metricsDomain].filter(
+        (x) => !!x
+      ) as pulumi.Resource[],
+    }
   );
 
   metricsApiUrl = metrics.apiUrl;
@@ -305,4 +326,6 @@ export {
   nlbDnsName,
   desktopBucketUrl,
   lambdaCodeBucket,
+  controlPlaneDomainTarget,
+  metricsDomainTarget,
 };
