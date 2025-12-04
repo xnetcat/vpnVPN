@@ -22,13 +22,13 @@ This guide covers best practices for managing secrets across vpnVPN's infrastruc
 
 vpnVPN uses secrets across multiple platforms:
 
-| Platform | Purpose | Secret Types |
-|----------|---------|--------------|
-| Vercel | Web app hosting | API keys, OAuth credentials, database URL |
-| AWS | Infrastructure & Lambda | IAM credentials, database URL, API keys |
-| Pulumi | Infrastructure as Code | Stack configuration, encrypted values |
-| GitHub Actions | CI/CD | Deployment credentials, tokens |
-| Local | Development | All of the above (non-production values) |
+| Platform       | Purpose                 | Secret Types                              |
+| -------------- | ----------------------- | ----------------------------------------- |
+| Vercel         | Web app hosting         | API keys, OAuth credentials, database URL |
+| AWS            | Infrastructure & Lambda | IAM credentials, database URL, API keys   |
+| Pulumi         | Infrastructure as Code  | Stack configuration, encrypted values     |
+| GitHub Actions | CI/CD                   | Deployment credentials, tokens            |
+| Local          | Development             | All of the above (non-production values)  |
 
 ---
 
@@ -62,11 +62,11 @@ vpnVPN uses secrets across multiple platforms:
 
 Vercel supports three environment scopes:
 
-| Scope | When Used | Use For |
-|-------|-----------|---------|
-| Production | Production deployments only | Live API keys, production DB |
-| Preview | Preview deployments (PRs) | Staging API keys, test DB |
-| Development | `vercel dev` locally | Development values |
+| Scope       | When Used                   | Use For                      |
+| ----------- | --------------------------- | ---------------------------- |
+| Production  | Production deployments only | Live API keys, production DB |
+| Preview     | Preview deployments (PRs)   | Staging API keys, test DB    |
+| Development | `vercel dev` locally        | Development values           |
 
 ### Setting Environment Variables
 
@@ -119,7 +119,7 @@ RESEND_API_KEY=re_...
 EMAIL_FROM=noreply@vpnvpn.com
 
 # Control Plane
-CONTROL_PLANE_API_URL=https://api.vpnvpn.com
+CONTROL_PLANE_API_URL=https://api.vpnvpn.dev
 CONTROL_PLANE_API_KEY=<secure-random-key>
 
 # Public Variables (NEXT_PUBLIC_ prefix)
@@ -146,11 +146,11 @@ Mark these as "Sensitive" in Vercel:
 
 ### Options Comparison
 
-| Service | Best For | Cost | Rotation |
-|---------|----------|------|----------|
-| Secrets Manager | Critical secrets | $0.40/secret/month | Built-in |
-| Parameter Store (SecureString) | Most secrets | Free (up to 10K) | Manual |
-| Environment Variables | Lambda config | Free | Redeploy |
+| Service                        | Best For         | Cost               | Rotation |
+| ------------------------------ | ---------------- | ------------------ | -------- |
+| Secrets Manager                | Critical secrets | $0.40/secret/month | Built-in |
+| Parameter Store (SecureString) | Most secrets     | Free (up to 10K)   | Manual   |
+| Environment Variables          | Lambda config    | Free               | Redeploy |
 
 ### AWS Secrets Manager
 
@@ -234,23 +234,28 @@ Examples:
 # Trust Policy
 {
   "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Federated": "arn:aws:iam::ACCOUNT:oidc-provider/token.actions.githubusercontent.com"
+  "Statement":
+    [
+      {
+        "Effect": "Allow",
+        "Principal":
+          {
+            "Federated": "arn:aws:iam::ACCOUNT:oidc-provider/token.actions.githubusercontent.com",
+          },
+        "Action": "sts:AssumeRoleWithWebIdentity",
+        "Condition":
+          {
+            "StringEquals":
+              {
+                "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+              },
+            "StringLike":
+              {
+                "token.actions.githubusercontent.com:sub": "repo:your-org/vpnvpn:*",
+              },
+          },
       },
-      "Action": "sts:AssumeRoleWithWebIdentity",
-      "Condition": {
-        "StringEquals": {
-          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
-        },
-        "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:your-org/vpnvpn:*"
-        }
-      }
-    }
-  ]
+    ],
 }
 ```
 
@@ -293,9 +298,9 @@ config:
   aws:region: us-east-1
   vpnvpn:environment: production
   vpnvpn:databaseUrl:
-    secure: AAABAxxxxxxxxx...  # Encrypted
+    secure: AAABAxxxxxxxxx... # Encrypted
   vpnvpn:controlPlaneApiKey:
-    secure: AAABAxxxxxxxxx...  # Encrypted
+    secure: AAABAxxxxxxxxx... # Encrypted
 ```
 
 ### Accessing Secrets in Code
@@ -315,7 +320,7 @@ const region = config.require("region");
 const lambda = new aws.lambda.Function("control-plane", {
   environment: {
     variables: {
-      DATABASE_URL: dbUrl,  // Pulumi handles secret propagation
+      DATABASE_URL: dbUrl, // Pulumi handles secret propagation
     },
   },
 });
@@ -354,16 +359,16 @@ gh secret set PULUMI_ACCESS_TOKEN --body "pul-xxxxxxxxxxxx"
 
 ### Required Secrets
 
-| Secret | Purpose |
-|--------|---------|
-| `AWS_REGION` | AWS region for deployment |
-| `AWS_ACCOUNT_ID` | AWS account ID |
-| `AWS_ROLE_TO_ASSUME` | IAM role ARN for OIDC |
-| `PULUMI_ACCESS_TOKEN` | Pulumi service authentication |
-| `DATABASE_URL` | Database connection string |
+| Secret                  | Purpose                          |
+| ----------------------- | -------------------------------- |
+| `AWS_REGION`            | AWS region for deployment        |
+| `AWS_ACCOUNT_ID`        | AWS account ID                   |
+| `AWS_ROLE_TO_ASSUME`    | IAM role ARN for OIDC            |
+| `PULUMI_ACCESS_TOKEN`   | Pulumi service authentication    |
+| `DATABASE_URL`          | Database connection string       |
 | `CONTROL_PLANE_API_KEY` | Control plane API authentication |
-| `VPN_TOKEN` | Bootstrap token for VPN nodes |
-| `DESKTOP_S3_BUCKET` | S3 bucket for desktop releases |
+| `VPN_TOKEN`             | Bootstrap token for VPN nodes    |
+| `DESKTOP_S3_BUCKET`     | S3 bucket for desktop releases   |
 
 ### Environment-Specific Secrets
 
@@ -372,7 +377,7 @@ Use GitHub Environments for staging vs production:
 ```yaml
 jobs:
   deploy:
-    environment: production  # Uses production secrets
+    environment: production # Uses production secrets
     steps:
       - name: Deploy
         env:
@@ -431,7 +436,7 @@ Before committing, verify:
 
 ```bash
 # Check for accidentally staged secrets
-git diff --staged | grep -E "(sk_|whsec_|re_|password|secret)" 
+git diff --staged | grep -E "(sk_|whsec_|re_|password|secret)"
 ```
 
 ---
@@ -440,13 +445,13 @@ git diff --staged | grep -E "(sk_|whsec_|re_|password|secret)"
 
 ### Rotation Schedule
 
-| Secret Type | Rotation Frequency | Method |
-|-------------|-------------------|--------|
-| Database credentials | 90 days | AWS Secrets Manager auto-rotation |
-| API keys | 180 days | Manual rotation with overlap |
-| OAuth secrets | Yearly | Provider dashboard |
-| VPN node tokens | On compromise | Admin panel revoke/create |
-| NEXTAUTH_SECRET | Never (unless compromised) | Invalidates all sessions |
+| Secret Type          | Rotation Frequency         | Method                            |
+| -------------------- | -------------------------- | --------------------------------- |
+| Database credentials | 90 days                    | AWS Secrets Manager auto-rotation |
+| API keys             | 180 days                   | Manual rotation with overlap      |
+| OAuth secrets        | Yearly                     | Provider dashboard                |
+| VPN node tokens      | On compromise              | Admin panel revoke/create         |
+| NEXTAUTH_SECRET      | Never (unless compromised) | Invalidates all sessions          |
 
 ### Rotation Procedure
 
@@ -499,7 +504,7 @@ cd infra/pulumi && pulumi up
 - Never share secrets via Slack/email
 - Never use production secrets in development
 - Never hardcode secrets in source code
-- Never store secrets in frontend code (NEXT_PUBLIC_ vars are public!)
+- Never store secrets in frontend code (NEXT*PUBLIC* vars are public!)
 
 ### Monitoring
 
@@ -562,7 +567,3 @@ pulumi config --show-secrets
 # GitHub (can't view values, only names)
 gh secret list
 ```
-
-
-
-

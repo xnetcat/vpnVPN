@@ -1,267 +1,255 @@
-# CI/CD Overview
-
-vpnVPN uses GitHub Actions, Bun/Turborepo, and Pulumi to build, test, and deploy the monorepo.
-
-## Workflows
-
-### `.github/workflows/ci.yml`
-
-**Triggers:** Pushes and pull requests to `main` and `staging` branches.
-
-**Steps:**
-
-1. Checkout repository
-2. Setup Bun (`oven-sh/setup-bun@v1`)
-3. `bun install` at the monorepo root
-4. `bun run lint` → `turbo run lint`
-5. `bun run test` → `turbo run test`
-6. `bun run build` → `turbo run build`
-
-**Scope:**
-
-- Apps: `apps/web`, `apps/desktop`, `apps/vpn-server`
-- Services: `services/control-plane`, `services/metrics`
-- Shared packages: `packages/db`
-
-### `.github/workflows/rust-build-push.yml`
-
-**Name:** Build and Push Rust Server
-
-**Triggers:** Pushes to `main` or `staging` that touch `apps/vpn-server/**` or the workflow file itself.
-
-**Steps:**
-
-1. Configure AWS credentials via OIDC
-2. Login to Amazon ECR
-3. Build the `apps/vpn-server` Docker image
-4. Tag as `${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:sha-${GITHUB_SHA}`
-5. Push the image to ECR
-
-**Outputs:** `IMAGE_TAG`, `ECR_URI`
-
-### `.github/workflows/services-deploy.yml`
-
-**Name:** Deploy Services (Control Plane + Metrics)
-
-**Triggers:**
-
-- Pushes to `main` or `staging` that touch `services/**` or `packages/db/**`
-- Manual `workflow_dispatch` with environment selection
-
-**Steps:**
-
-1. Build Lambda-compatible bundles for control-plane and metrics
-2. Package as ZIP files
-3. Upload to S3 Lambda code bucket
-4. Deploy via Pulumi to AWS Lambda + API Gateway
-
-**Outputs:** Control Plane API URL, Metrics API URL
-
-### `.github/workflows/pulumi-deploy.yml`
-
-**Name:** Pulumi Deploy (Global + Region)
-
-**Triggers:**
-
-- On completion of "Build and Push Rust Server" workflow
-- Manual `workflow_dispatch`
-
-**Environment Variables (from secrets):**
-
-- `AWS_REGION`, `AWS_ACCOUNT_ID`
-- `PULUMI_ACCESS_TOKEN`
-- `ECR_REPO_NAME`, `AWS_ROLE_TO_ASSUME`
-- `DATABASE_URL`, `CONTROL_PLANE_API_KEY`
-
-**Steps:**
-
-1. Checkout repository
-2. Configure AWS credentials via OIDC
-3. Setup Node.js 20 and Bun
-4. `bun install` in `infra/pulumi`
-5. `pulumi login`
-6. Ensure `global` and `region-us-east-1` stacks exist
-7. Configure and deploy `global` stack (ECR, S3, Lambda functions, observability)
-8. Configure and deploy `region-us-east-1` stack (VPC, NLB, ASG with vpn-server containers)
-
-### `.github/workflows/desktop-build.yml`
-
-**Name:** Build Desktop App
-
-**Triggers:**
-
-- Pushes to `main` or `staging` that touch `apps/desktop/**`
-- Manual `workflow_dispatch` with environment selection
-
-**Platforms:**
-
-- macOS (ARM64 and x64)
-- Linux (x64)
-- Windows (x64)
-
-**Steps:**
-
-1. Build frontend with Vite (environment-specific URLs)
-2. Build Tauri desktop app for target platform
-3. Upload artifacts to GitHub Actions
-4. Upload to S3 bucket for distribution
-
-**Outputs:** Desktop executables in S3 bucket
-
-## Architecture
-
-### Services
-
-| Component | Implementation | Deployment |
-| --------- | -------------- | ---------- |
-| Control Plane | `services/control-plane` (Bun/Fastify + Postgres) | AWS Lambda + API Gateway |
-| Metrics | `services/metrics` (Bun/Fastify + Postgres) | AWS Lambda + API Gateway |
-| VPN Server | `apps/vpn-server` (Rust) | Container on EC2 ASG via Pulumi |
-| Web App | `apps/web` (Next.js) | Vercel |
-| Desktop | `apps/desktop` (Tauri) | S3 bucket distribution |
-
-### Lambda Deployment
-
-Control Plane and Metrics services support dual deployment modes:
-
-1. **Lambda Mode:** Services are bundled and deployed as AWS Lambda functions with API Gateway
-2. **Standalone Mode:** Services run as Docker containers or directly with `bun run dev`
-
-The same codebase supports both modes through Fastify's `inject()` method for Lambda.
-
-### Pulumi Stacks
-
-- **`global`**: ECR repository, S3 buckets, Lambda functions, API Gateway, observability (AMP/Grafana)
-- **`region-*`**: VPC, NLB, security groups, EC2 ASG running vpn-server containers
-
-## Responsibilities by Layer
-
-### CI (lint, test, build)
-
-- Ensures all TS/Rust code compiles, lints cleanly, and passes tests
-- Uses Turborepo caching to keep runs fast
-
-### Image Build (Rust vpn-server)
-
-- Produces a versioned Docker image for the vpn-server data-plane
-- Does not deploy; only pushes to ECR
-
-### Services Deploy (Lambda)
-
-- Builds Lambda deployment packages for control-plane and metrics
-- Deploys to AWS Lambda with API Gateway endpoints
-
-### Infra Deploy (Pulumi)
-
-Provisions and updates:
-
-- ECR repository for vpn-server
-- S3 buckets for Lambda code and desktop releases
-- Lambda functions and API Gateway for control-plane and metrics
-- VPC, NLB, security groups, and ASG for running vpn-server containers
-- AMP/Grafana for observability
-
-### Desktop Build
-
-- Builds native desktop apps for macOS, Linux, and Windows
-- Uploads to S3 for distribution via web app download links
-
-## Required GitHub Secrets
-
-| Secret | Description |
-| ------ | ----------- |
-| `AWS_REGION` | AWS region (e.g., `us-east-1`) |
-| `AWS_ACCOUNT_ID` | AWS account ID |
-| `AWS_ROLE_TO_ASSUME` | IAM role ARN for OIDC authentication |
-| `PULUMI_ACCESS_TOKEN` | Pulumi access token for state management |
-| `ECR_REPO_NAME` | ECR repository name (e.g., `vpnvpn/rust-server`) |
-| `DATABASE_URL` | PostgreSQL connection string |
-| `CONTROL_PLANE_API_KEY` | API key for control plane authentication |
-| `VPN_TOKEN` | Bootstrap token for VPN node registration |
-| `DESKTOP_S3_BUCKET` | S3 bucket for desktop app downloads |
-
-## Optional GitHub Variables
-
-Set these in GitHub repository variables to control VPN node deployment:
-
-| Variable | Description | Default |
-| -------- | ----------- | ------- |
-| `VPN_DESIRED_INSTANCES` | Number of VPN nodes to deploy | 2 |
-| `VPN_MIN_INSTANCES` | Minimum nodes (autoscaling floor) | 1 |
-| `VPN_MAX_INSTANCES` | Maximum nodes (autoscaling ceiling) | 10 |
-
-## Node Distribution Configuration
-
-The number of VPN nodes and regional distribution is controlled by Pulumi stack configuration:
-
-| Config Key                | Description                                    | Default |
-| ------------------------- | ---------------------------------------------- | ------- |
-| `region:desiredInstances` | Number of VPN nodes to deploy in this region   | minInstances |
-| `region:minInstances`     | Minimum nodes (autoscaling floor)              | 1 |
-| `region:maxInstances`     | Maximum nodes (autoscaling ceiling)            | 10 |
-
-### Example: Multi-Region Deployment
+## CI/CD Overview
+
+vpnVPN uses GitHub Actions, Bun/Turborepo, Pulumi, Vercel, and AWS to build, test, and deploy the monorepo.
+
+### Environment model
+
+| Component                    | Staging (`staging` branch)                               | Production (`main` branch)                        |
+| ---------------------------- | -------------------------------------------------------- | ------------------------------------------------- |
+| Web (Next.js)                | `staging.vpnvpn.dev` + `*.staging.vpnvpn.dev` via Vercel | `vpnvpn.dev` + `*.vpnvpn.dev` via Vercel          |
+| App hostnames                | `app.staging.vpnvpn.dev` → `/desktop`                    | `app.vpnvpn.dev` → `/desktop`                     |
+| Admin hostnames              | `admin.staging.vpnvpn.dev` → `/admin`                    | `admin.vpnvpn.dev` → `/admin`                     |
+| Dashboard hostnames          | `dashboard.staging.vpnvpn.dev` → `/dashboard`            | `dashboard.vpnvpn.dev` → `/dashboard`             |
+| API hostname                 | `api.staging.vpnvpn.dev` (AWS)                           | `api.vpnvpn.dev` (AWS)                            |
+| Metrics hostname             | `metrics.staging.vpnvpn.dev` (AWS)                       | `metrics.vpnvpn.dev` (AWS)                        |
+| Control Plane stack          | `global-staging`                                         | `global-production`                               |
+| VPN region stack (us‑east‑1) | `region-us-east-1-staging`                               | `region-us-east-1-production`                     |
+| Rust image tags (ECR)        | `staging-sha-<git_sha>`, `staging-latest`                | `prod-sha-<git_sha>`, `production-latest`         |
+| Desktop build                | `desktop-build.yml` with `environment=staging`           | `desktop-build.yml` with `environment=production` |
+
+**Branch rule:** merges to `staging` deploy the staging environment; merges to `main` deploy production. Manual `workflow_dispatch` always accepts an explicit `environment` input and can override the branch-derived default.
+
+---
+
+## Workflows (by environment)
+
+### `.github/workflows/ci.yml` (Lint, test, build)
+
+- **Triggers:** Pushes and pull requests to `main` and `staging`.
+- **Behavior:** Pure CI (no deploy). Runs `bun run lint`, `bun run test`, and `bun run build` across:
+  - `apps/web`, `apps/desktop`, `apps/vpn-server`
+  - `services/control-plane`, `services/metrics`
+  - `packages/db`
+
+### `.github/workflows/rust-build-push.yml` (Rust data-plane image)
+
+- **Name:** Build and Push Rust Server
+- **Triggers:** Pushes to `main` or `staging` that touch `apps/vpn-server/**` or the workflow file.
+- **Environment resolution:**
+  - `DEPLOY_ENV=production` when `refs/heads/main`
+  - `DEPLOY_ENV=staging` for `refs/heads/staging`
+- **Tagging strategy:**
+  - Always builds `ECR_URI:sha-${GITHUB_SHA}` and pushes it.
+  - Also pushes an env-scoped tag:
+    - Staging: `ECR_URI:staging-sha-${GITHUB_SHA}`
+    - Production: `ECR_URI:prod-sha-${GITHUB_SHA}`
+- **Outputs:** `IMAGE_TAG=sha-${GITHUB_SHA}`, `ECR_URI`, `ENV_TAG`.
+- **Usage:** Pulumi stacks can either pin to a specific sha tag or to an env-specific tag if you want “latest staging/prod” semantics.
+
+### `.github/workflows/services-deploy.yml` (Control Plane + Metrics Lambdas)
+
+- **Name:** Deploy Services (Control Plane + Metrics)
+- **Triggers:**
+  - Pushes to `main` or `staging` that touch `services/**` or `packages/db/**`.
+  - Manual `workflow_dispatch` with `environment` choice (`staging`, `production`).
+- **Environment selection:**
+  - If `workflow_dispatch`: uses `github.event.inputs.environment`.
+  - Else: `main` → `production`, anything else (`staging`) → `staging`.
+- **Pulumi stacks:**
+  - Staging: `global-staging`
+  - Production: `global-production`
+- **Steps (per env):**
+  1. Build Lambda bundles for `services/control-plane` and `services/metrics`.
+  2. Zip and upload to `s3://$LAMBDA_CODE_BUCKET/control-plane/...` and `.../metrics/...`, maintaining `latest/` keys.
+  3. `pulumi stack select global-${environment} || pulumi stack init ...`.
+  4. Configure `aws:region`, DB/keys (`databaseUrl`, `controlPlaneApiKey`, `bootstrapToken`), and `global:controlPlaneCodeKey` / `global:metricsCodeKey`.
+  5. `pulumi up -y --stack global-${environment}`.
+- **API URLs:**
+  - The `global-*` stack outputs `controlPlaneApiUrl` and `metricsApiUrl`. In production, this should be `https://api.vpnvpn.dev`. In staging, `https://api.staging.vpnvpn.dev`.
+
+### `.github/workflows/pulumi-deploy.yml` (Global + Region vpn-server infra)
+
+- **Name:** Pulumi Deploy (Global + Region)
+- **Triggers:**
+  - `workflow_run` of "Build and Push Rust Server" (automatic infra rollout after image build).
+  - Manual `workflow_dispatch` with `environment` choice.
+- **Environment selection:**
+  - `workflow_dispatch`: `environment` input wins.
+  - `workflow_run`: `head_branch == main` → `DEPLOY_ENV=production`, otherwise `DEPLOY_ENV=staging`.
+- **Pulumi stacks:**
+  - Global: `global-${DEPLOY_ENV}`.
+  - Region us‑east‑1: `region-us-east-1-${DEPLOY_ENV}`.
+- **Behavior:**
+  1. Ensure both stacks exist (`pulumi stack select ... || pulumi stack init ...`).
+  2. For `global-${DEPLOY_ENV}`:
+     - Set `aws:region`, `global:ecrRepoName`, and secrets `databaseUrl`, `controlPlaneApiKey`, `bootstrapToken`.
+     - `pulumi up -y --stack global-${DEPLOY_ENV}`.
+  3. For `region-us-east-1-${DEPLOY_ENV}`:
+     - Set `aws:region`, `global:ecrRepoName`.
+     - Set `region:imageTag` to `sha-${GITHUB_SHA}` (or swap to `staging-sha-...` / `prod-sha-...` if you prefer env tags).
+     - Set `region:desiredInstances`, `region:minInstances`, `region:maxInstances`, `region:adminCidr`.
+     - `pulumi up -y --stack region-us-east-1-${DEPLOY_ENV}`.
+- **Domains:**
+  - You should configure Route 53/ACM so that:
+    - `api.vpnvpn.dev` → production control-plane API (global-production).
+    - `api.staging.vpnvpn.dev` → staging control-plane API (global-staging).
+
+### `.github/workflows/desktop-build.yml` (Desktop app build + S3 upload)
+
+- **Name:** Build Desktop App
+- **Triggers:**
+  - Pushes to `main` or `staging` that touch `apps/desktop/**`.
+  - Manual `workflow_dispatch` with `environment` choice.
+- **Environment selection:**
+  - Same pattern as other workflows: `main` → `production`, otherwise `staging`, unless overridden by `workflow_dispatch` input.
+- **URLs baked into desktop:**
+  - Production:
+    - `web_url=https://vpnvpn.dev`
+    - `desktop_url=https://vpnvpn.dev/desktop?desktop=1`
+  - Staging:
+    - `web_url=https://staging.vpnvpn.dev`
+    - `desktop_url=https://staging.vpnvpn.dev/desktop?desktop=1`
+- **Outputs:**
+  - Artifacts per platform uploaded to GitHub.
+  - S3 uploads to `s3://vpnvpn-desktop-{environment}/releases/{environment}` (or a custom `DESKTOP_S3_BUCKET`), plus `vpnvpn-desktop-latest.*` convenience objects.
+
+---
+
+## Vercel and domains
+
+- Single Vercel project for `apps/web` with:
+  - Production domain: `vpnvpn.dev`.
+  - Staging domain: `staging.vpnvpn.dev`.
+- Additional subdomains (all via Vercel DNS or your registrar, CNAMEs into the Vercel project):
+  - `app.vpnvpn.dev`, `app.staging.vpnvpn.dev` → app/desktop UI (`/desktop`).
+  - `admin.vpnvpn.dev`, `admin.staging.vpnvpn.dev` → admin UI (`/admin`).
+  - `dashboard.vpnvpn.dev`, `dashboard.staging.vpnvpn.dev` → dashboard (`/dashboard`).
+- Host-based routing is implemented in `apps/web/middleware.ts`:
+  - `dashboard.*` → `/dashboard`.
+  - `admin.*` → `/admin`.
+  - `app.*` → `/desktop`.
+- Required Vercel environment variables (per environment):
+  - `NEXTAUTH_URL`
+  - `NEXT_PUBLIC_API_URL` (point this to `https://api.staging.vpnvpn.dev` or `https://api.vpnvpn.dev`).
+  - Any NextAuth provider secrets, Stripe keys, etc., scoped per environment.
+
+---
+
+## AWS / Pulumi stacks
+
+### Stack naming
+
+- **Global (control-plane, metrics, shared infra):**
+  - Staging: `global-staging`
+  - Production: `global-production`
+- **Regional VPN nodes (example: us‑east‑1):**
+  - Staging: `region-us-east-1-staging`
+  - Production: `region-us-east-1-production`
+
+Pulumi will create `Pulumi.global-staging.yaml`, `Pulumi.global-production.yaml`, `Pulumi.region-us-east-1-staging.yaml`, etc., the first time each stack is initialized. Those files should be committed once they contain the desired baseline configuration.
+
+### Key config values
+
+- **Global stacks (`global-*`):**
+  - `aws:region` → `us-east-1`.
+  - `global:ecrRepoName` → e.g. `vpnvpn/rust-server`.
+  - `databaseUrl` (secret) → staging vs production Postgres URLs.
+  - `controlPlaneApiKey` (secret) → separate keys per environment.
+  - `bootstrapToken` (secret) → separate node bootstrap tokens per environment.
+  - `global:controlPlaneCodeKey` / `global:metricsCodeKey` → S3 keys for latest Lambda bundles.
+  - `controlPlaneApiUrl` (output) → should be wired to `https://api.staging.vpnvpn.dev` or `https://api.vpnvpn.dev`.
+  - `metricsApiUrl` (output) → should be wired to `https://metrics.staging.vpnvpn.dev` or `https://metrics.vpnvpn.dev`.
+- **Region stacks (`region-*`):**
+  - `aws:region` → region of the ASG (e.g. `us-east-1`).
+  - `global:ecrRepoName` → same repo, but image tag is env-specific.
+  - `region:imageTag` → `sha-<git_sha>` or `staging-sha-<git_sha>` / `prod-sha-<git_sha>`.
+  - `region:desiredInstances`, `region:minInstances`, `region:maxInstances`, `region:instanceType`, `region:adminCidr`, `region:targetSessionsPerInstance`.
+
+See `infra/README.md` for more detailed Pulumi examples.
+
+---
+
+## GitHub secrets and vars (per environment)
+
+The same secret names are used for staging and production, but scoped via GitHub Environments:
+
+| Location        | Secret/Var                                                        | Notes                                      |
+| --------------- | ----------------------------------------------------------------- | ------------------------------------------ |
+| Repo or env     | `AWS_REGION`                                                      | Usually `us-east-1`.                       |
+| Repo or env     | `AWS_ACCOUNT_ID`                                                  | Shared account, same for staging and prod. |
+| Repo or env     | `AWS_ROLE_TO_ASSUME`                                              | IAM role for OIDC GitHub → AWS.            |
+| Repo or env     | `PULUMI_ACCESS_TOKEN`                                             | Pulumi backend.                            |
+| Env: staging    | `DATABASE_URL`                                                    | Staging Postgres DSN.                      |
+| Env: production | `DATABASE_URL`                                                    | Production Postgres DSN.                   |
+| Env: staging    | `CONTROL_PLANE_API_KEY`                                           | Staging API key.                           |
+| Env: production | `CONTROL_PLANE_API_KEY`                                           | Production API key.                        |
+| Env: staging    | `VPN_TOKEN`                                                       | Staging node bootstrap token.              |
+| Env: production | `VPN_TOKEN`                                                       | Production node bootstrap token.           |
+| Env: staging    | `DESKTOP_S3_BUCKET`                                               | `vpnvpn-desktop-staging` or similar.       |
+| Env: production | `DESKTOP_S3_BUCKET`                                               | `vpnvpn-desktop-production` or similar.    |
+| Repo vars       | `VPN_DESIRED_INSTANCES`, `VPN_MIN_INSTANCES`, `VPN_MAX_INSTANCES` | Defaults for vpn-server ASGs.              |
+
+---
+
+## Manual deployment vs CI
+
+### Normal flows (recommended)
+
+- **Staging:**
+  - Merge to `staging`.
+  - GitHub Actions:
+    - Runs tests/builds (`ci.yml`).
+    - Builds and pushes Rust image (`rust-build-push.yml`).
+    - Deploys control-plane + metrics (`services-deploy.yml` with `environment=staging`).
+    - Deploys infra + VPN nodes (`pulumi-deploy.yml` with `DEPLOY_ENV=staging`).
+    - Builds and publishes desktop artifacts (`desktop-build.yml` with `environment=staging`).
+- **Production:**
+  - Merge to `main`.
+  - Same workflows, but with `environment=production` / `DEPLOY_ENV=production`.
+
+### Manual infra deployment (`scripts/deploy.sh`)
+
+From the repo root:
 
 ```bash
-# US East - 4 nodes
-pulumi stack select region-us-east-1
-pulumi config set region:desiredInstances 4
-pulumi up -y
-
-# EU West - 3 nodes
-pulumi stack select region-eu-west-1
-pulumi config set region:desiredInstances 3
-pulumi up -y
-```
-
-## Manual Deployment
-
-### Using the Deployment Script
-
-The recommended way to deploy is using the deployment script:
-
-```bash
-# From project root - deploy to staging
+# Staging infra
 ./scripts/deploy.sh staging
 
-# Deploy to production
+# Production infra
 ./scripts/deploy.sh production
 
-# Options
-./scripts/deploy.sh staging --skip-desktop    # Skip desktop app build
-./scripts/deploy.sh staging --skip-vpn-nodes  # Skip VPN node deployment
+# Optionally also build/upload desktop from your machine (legacy path)
+./scripts/deploy.sh staging --with-desktop
 ```
 
 The script:
-1. Loads environment variables from root `.env`
-2. Deploys global Pulumi stack to us-east-1 (ECR, S3, Lambda, observability)
-3. Builds and pushes vpn-server Docker image
-4. Deploys VPN nodes to regions defined in `scripts/regions.json`
-5. Builds desktop apps with hardcoded API endpoints
-6. Uploads desktop executables to S3
 
-### Region Configuration
+1. Loads environment variables from root `.env`.
+2. Deploys the environment-specific global Pulumi stack (`global-staging` / `global-production`).
+3. Builds and pushes the vpn-server Docker image to ECR with an env-specific tag.
+4. Deploys VPN nodes to regions defined in `scripts/regions.json` using `region-<aws-region>-<environment>` stacks.
+5. Optionally builds desktop apps and uploads them to S3 when `--with-desktop` is supplied (CI is preferred for desktop).
 
-Edit `scripts/regions.json` to configure VPN node distribution:
+### Region configuration (manual + script)
+
+`scripts/regions.json` controls how many nodes you want per region and per environment:
 
 ```json
 {
-  "staging": [
-    {"region": "us-east-1", "nodes": 1, "min": 1, "max": 3}
-  ],
+  "staging": [{ "region": "us-east-1", "nodes": 1, "min": 1, "max": 3 }],
   "production": [
-    {"region": "us-east-1", "nodes": 3, "min": 2, "max": 10},
-    {"region": "eu-west-1", "nodes": 2, "min": 1, "max": 8},
-    {"region": "ap-southeast-1", "nodes": 1, "min": 1, "max": 5}
+    { "region": "us-east-1", "nodes": 3, "min": 2, "max": 10 },
+    { "region": "eu-west-1", "nodes": 2, "min": 1, "max": 8 },
+    { "region": "ap-southeast-1", "nodes": 1, "min": 1, "max": 5 }
   ]
 }
 ```
 
-### Manual Pulumi Commands
+Each entry results in a separate Pulumi stack named `region-<region>-<environment>` (for example `region-us-east-1-staging`).
 
-For detailed manual Pulumi deployment instructions, see `infra/README.md`.
+---
 
-## CrossGuard Policy Tests
+## CrossGuard policy tests
 
 The infrastructure includes CrossGuard policies for security and compliance validation:
 
@@ -269,6 +257,7 @@ The infrastructure includes CrossGuard policies for security and compliance vali
 cd infra/pulumi
 
 # Run with policy enforcement
+pulumi preview --policy-pack ./policy
 pulumi up --policy-pack ./policy
 
 # Policies include:
@@ -278,3 +267,231 @@ pulumi up --policy-pack ./policy
 # - No unrestricted SSH access
 # - ECR scan-on-push enabled
 ```
+
+---
+
+## Staging deployment cookbook (CI-first)
+
+This section is a concrete, copy-pasteable guide for deploying **staging** from scratch.
+
+### 1. One-time setup
+
+1. **Vercel**
+   - Create/import the project from the GitHub repo pointing at `apps/web`.
+   - Add domains:
+     - `staging.vpnvpn.dev` (primary).
+     - `app.staging.vpnvpn.dev`, `admin.staging.vpnvpn.dev`, `dashboard.staging.vpnvpn.dev` (CNAME → Vercel).
+   - Set env vars for **Preview + Production** in Vercel to match staging:
+     - `NEXTAUTH_URL=https://staging.vpnvpn.dev`.
+     - `NEXT_PUBLIC_API_URL=https://api.staging.vpnvpn.dev`.
+     - All NextAuth provider secrets, Stripe keys, etc., for staging.
+
+2. **AWS / Route 53**
+   - Create `api.staging.vpnvpn.dev` in Route 53:
+     - If using API Gateway: CNAME to the staging API Gateway hostname.
+     - If using ALB: alias to the staging ALB.
+   - Create `metrics.staging.vpnvpn.dev` pointing at the staging metrics endpoint
+     exported by `metricsApiUrl` from `global-staging`.
+   - Issue ACM certificates for:
+     - `api.staging.vpnvpn.dev`.
+     - `metrics.staging.vpnvpn.dev`.
+     - `*.staging.vpnvpn.dev` if needed for control-plane → web callbacks.
+
+3. **Pulumi stacks**
+   - From `infra/pulumi`:
+
+```bash
+cd infra/pulumi
+bun install
+pulumi login
+
+# Global staging stack
+pulumi stack init global-staging
+pulumi config set aws:region us-east-1 --stack global-staging
+pulumi config set global:ecrRepoName vpnvpn/rust-server --stack global-staging
+pulumi config set --secret databaseUrl "postgres://staging-user:..." --stack global-staging
+pulumi config set --secret controlPlaneApiKey "staging-api-key" --stack global-staging
+pulumi config set --secret bootstrapToken "staging-bootstrap-token" --stack global-staging
+
+# First deploy
+pulumi up -y --stack global-staging
+```
+
+- Note `controlPlaneApiUrl` from `pulumi stack output controlPlaneApiUrl --stack global-staging` and point `api.staging.vpnvpn.dev` at it.
+
+4. **GitHub environments / secrets**
+   - In the repo Settings → Environments, create a `staging` environment.
+   - Add:
+     - `AWS_REGION=us-east-1`.
+     - `AWS_ACCOUNT_ID=...`.
+     - `AWS_ROLE_TO_ASSUME=arn:aws:iam::<account>:role/github-oidc-role`.
+     - `PULUMI_ACCESS_TOKEN=...`.
+     - `DATABASE_URL` → the same DSN you used in `global-staging`.
+     - `CONTROL_PLANE_API_KEY` → same as `controlPlaneApiKey` in `global-staging`.
+     - `VPN_TOKEN` → same as `bootstrapToken` in `global-staging`.
+     - `DESKTOP_S3_BUCKET=vpnvpn-desktop-staging` (or your chosen name).
+   - Add repo-level variables (optional but recommended):
+
+```bash
+VPN_DESIRED_INSTANCES=2
+VPN_MIN_INSTANCES=1
+VPN_MAX_INSTANCES=10
+```
+
+5. **Regions JSON**
+
+```json
+{
+  "staging": [{ "region": "us-east-1", "nodes": 1, "min": 1, "max": 3 }],
+  "production": []
+}
+```
+
+### 2. Day-to-day staging deploy (after setup)
+
+1. Open a PR targeting `staging`.
+2. CI (`ci.yml`) runs lint/test/build.
+3. Merge into `staging`:
+   - `rust-build-push.yml` builds `apps/vpn-server`, pushes:
+     - `ECR_URI:sha-<sha>`.
+     - `ECR_URI:staging-sha-<sha>`.
+   - `services-deploy.yml` runs with `environment=staging`:
+     - Builds Lambdas and updates `global-staging` with latest Lambda S3 keys.
+   - `pulumi-deploy.yml` runs with `DEPLOY_ENV=staging`:
+     - Updates `global-staging` (infra).
+     - Updates `region-us-east-1-staging` with fresh `region:imageTag=sha-<sha>` and node counts from repo vars.
+   - `desktop-build.yml` runs with `environment=staging`:
+     - Builds desktop for all platforms and pushes to `s3://vpnvpn-desktop-staging/releases/staging`.
+
+4. Validate:
+   - Web: `https://staging.vpnvpn.dev`.
+   - API: `https://api.staging.vpnvpn.dev/health`.
+   - Desktop downloads: URLs printed at the end of `desktop-build.yml` logs.
+
+---
+
+## Production deployment cookbook (CI-first)
+
+Production is almost identical to staging, but uses:
+
+- Branch: `main`.
+- Pulumi stacks: `global-production`, `region-us-east-1-production`, etc.
+- Hostnames: `vpnvpn.dev`, `app.vpnvpn.dev`, `admin.vpnvpn.dev`, `dashboard.vpnvpn.dev`, `api.vpnvpn.dev`.
+
+### 1. One-time setup
+
+1. **Vercel**
+   - Ensure the same project also has:
+     - Production domain: `vpnvpn.dev`.
+     - `app.vpnvpn.dev`, `admin.vpnvpn.dev`, `dashboard.vpnvpn.dev`.
+   - Set Production env vars:
+     - `NEXTAUTH_URL=https://vpnvpn.dev`.
+     - `NEXT_PUBLIC_API_URL=https://api.vpnvpn.dev`.
+     - Production NextAuth provider secrets, Stripe keys, etc.
+
+2. **AWS / Route 53**
+   - Configure `api.vpnvpn.dev` pointing at the **production** control-plane API (API Gateway or ALB) output by `controlPlaneApiUrl` in `global-production`.
+   - Configure `metrics.vpnvpn.dev` pointing at the **production** metrics endpoint from `metricsApiUrl` in `global-production`.
+   - Issue ACM certs for:
+     - `api.vpnvpn.dev`.
+     - `metrics.vpnvpn.dev`.
+     - `*.vpnvpn.dev` if required.
+
+3. **Pulumi stacks**
+
+```bash
+cd infra/pulumi
+
+# Global production stack
+pulumi stack init global-production
+pulumi config set aws:region us-east-1 --stack global-production
+pulumi config set global:ecrRepoName vpnvpn/rust-server --stack global-production
+pulumi config set --secret databaseUrl "postgres://prod-user:..." --stack global-production
+pulumi config set --secret controlPlaneApiKey "prod-api-key" --stack global-production
+pulumi config set --secret bootstrapToken "prod-bootstrap-token" --stack global-production
+
+pulumi up -y --stack global-production
+```
+
+- Wire `api.vpnvpn.dev` to `controlPlaneApiUrl` from `global-production`.
+
+4. **GitHub environments / secrets**
+   - Create `production` environment in the repo.
+   - Add:
+     - `AWS_REGION`, `AWS_ACCOUNT_ID`, `AWS_ROLE_TO_ASSUME`, `PULUMI_ACCESS_TOKEN`.
+     - `DATABASE_URL` (production DSN).
+     - `CONTROL_PLANE_API_KEY` (prod key).
+     - `VPN_TOKEN` (prod bootstrap token).
+     - `DESKTOP_S3_BUCKET=vpnvpn-desktop-production`.
+   - Optionally override VPN node counts for prod via repo vars if needed.
+
+5. **Regions JSON**
+
+```json
+{
+  "staging": [{ "region": "us-east-1", "nodes": 1, "min": 1, "max": 3 }],
+  "production": [
+    { "region": "us-east-1", "nodes": 3, "min": 2, "max": 10 },
+    { "region": "eu-west-1", "nodes": 2, "min": 1, "max": 8 }
+  ]
+}
+```
+
+### 2. Day-to-day production deploy (after setup)
+
+1. Open a PR targeting `main` (from `staging` or feature branches).
+2. CI (`ci.yml`) runs on the PR.
+3. Merge into `main`:
+   - `rust-build-push.yml` builds the VPN server image and pushes:
+     - `ECR_URI:sha-<sha>`.
+     - `ECR_URI:prod-sha-<sha>`.
+   - `services-deploy.yml` runs with `environment=production`, updating `global-production` with latest Lambda bundles and secrets.
+   - `pulumi-deploy.yml` runs with `DEPLOY_ENV=production`, updating:
+     - `global-production`.
+     - `region-us-east-1-production` and any additional `region-*-production` stacks configured.
+   - `desktop-build.yml` runs with `environment=production`, building and publishing production desktop installers.
+
+4. Validate:
+   - Web: `https://vpnvpn.dev`.
+   - API: `https://api.vpnvpn.dev/health`.
+   - Admin: `https://admin.vpnvpn.dev`.
+   - Dashboard: `https://dashboard.vpnvpn.dev`.
+   - Desktop downloads: `vpnvpn-desktop-production` S3 bucket URLs from workflow logs.
+
+---
+
+## Manual Pulumi workflows (advanced)
+
+If you need to bypass CI for a one-off change:
+
+### Update only staging VPN node count (no image change)
+
+```bash
+cd infra/pulumi
+pulumi stack select region-us-east-1-staging
+pulumi config set region:desiredInstances 5
+pulumi up -y
+```
+
+### Roll back staging to a previous image tag
+
+1. Find the previous `sha-<sha>` you want (from `rust-build-push.yml` history).
+2. Update the stack:
+
+```bash
+cd infra/pulumi
+pulumi stack select region-us-east-1-staging
+pulumi config set region:imageTag sha-<previous_sha>
+pulumi up -y
+```
+
+### Re-run only the global production stack
+
+```bash
+cd infra/pulumi
+pulumi stack select global-production
+pulumi up -y
+```
+
+For more Pulumi-specific details (components, outputs, and local workflows),
+see `infra/README.md`.

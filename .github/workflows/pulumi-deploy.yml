@@ -5,6 +5,15 @@ on:
     workflows: ["Build and Push Rust Server"]
     types: ["completed"]
   workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -21,14 +30,24 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || (github.event.workflow_run.head_branch == 'main' && 'production' || 'staging') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set defaults
+        id: defaults
         run: |
           echo "ECR_REPO_NAME=${ECR_REPO_NAME:-vpnvpn/rust-server}" >> $GITHUB_ENV
           echo "AWS_REGION=${AWS_REGION:-us-east-1}" >> $GITHUB_ENV
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.environment }}" ]; then
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
+          elif [ "${{ github.event.workflow_run.head_branch }}" = "main" ]; then
+            ENVIRONMENT="production"
+          else
+            ENVIRONMENT="staging"
+          fi
+          echo "DEPLOY_ENV=${ENVIRONMENT}" >> $GITHUB_ENV
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -62,8 +81,8 @@ jobs:
       - name: Ensure stacks
         working-directory: infra/pulumi
         run: |
-          pulumi stack select global || pulumi stack init global
-          pulumi stack select region-us-east-1 || pulumi stack init region-us-east-1
+          pulumi stack select "global-${DEPLOY_ENV}" || pulumi stack init "global-${DEPLOY_ENV}"
+          pulumi stack select "region-us-east-1-${DEPLOY_ENV}" || pulumi stack init "region-us-east-1-${DEPLOY_ENV}"
 
       - name: Configure global stack
         working-directory: infra/pulumi
@@ -72,23 +91,23 @@ jobs:
           CONTROL_PLANE_API_KEY: ${{ secrets.CONTROL_PLANE_API_KEY }}
           BOOTSTRAP_TOKEN: ${{ secrets.VPN_TOKEN }}
         run: |
-          pulumi config set aws:region $AWS_REGION --stack global
-          pulumi config set global:ecrRepoName $ECR_REPO_NAME --stack global
+          pulumi config set aws:region $AWS_REGION --stack "global-${DEPLOY_ENV}"
+          pulumi config set global:ecrRepoName $ECR_REPO_NAME --stack "global-${DEPLOY_ENV}"
 
           # Configure secrets for Lambda deployment (if deploying services)
           if [ -n "$DATABASE_URL" ]; then
-            pulumi config set --secret databaseUrl "$DATABASE_URL" --stack global
+            pulumi config set --secret databaseUrl "$DATABASE_URL" --stack "global-${DEPLOY_ENV}"
           fi
           if [ -n "$CONTROL_PLANE_API_KEY" ]; then
-            pulumi config set --secret controlPlaneApiKey "$CONTROL_PLANE_API_KEY" --stack global
+            pulumi config set --secret controlPlaneApiKey "$CONTROL_PLANE_API_KEY" --stack "global-${DEPLOY_ENV}"
           fi
           if [ -n "$BOOTSTRAP_TOKEN" ]; then
-            pulumi config set --secret bootstrapToken "$BOOTSTRAP_TOKEN" --stack global
+            pulumi config set --secret bootstrapToken "$BOOTSTRAP_TOKEN" --stack "global-${DEPLOY_ENV}"
           fi
 
       - name: Pulumi up (global)
         working-directory: infra/pulumi
-        run: pulumi up -y --stack global
+        run: pulumi up -y --stack "global-${DEPLOY_ENV}"
 
       - name: Compute image tag
         id: image
@@ -98,14 +117,14 @@ jobs:
       - name: Configure region stack
         working-directory: infra/pulumi
         run: |
-          pulumi config set aws:region $AWS_REGION --stack region-us-east-1
-          pulumi config set global:ecrRepoName $ECR_REPO_NAME --stack region-us-east-1
-          pulumi config set region:imageTag ${{ steps.image.outputs.tag }} --stack region-us-east-1
-          pulumi config set region:desiredInstances ${VPN_DESIRED_INSTANCES:-2} --stack region-us-east-1
-          pulumi config set region:minInstances ${VPN_MIN_INSTANCES:-1} --stack region-us-east-1
-          pulumi config set region:maxInstances ${VPN_MAX_INSTANCES:-10} --stack region-us-east-1
-          pulumi config set region:adminCidr 0.0.0.0/0 --stack region-us-east-1
+          pulumi config set aws:region $AWS_REGION --stack "region-us-east-1-${DEPLOY_ENV}"
+          pulumi config set global:ecrRepoName $ECR_REPO_NAME --stack "region-us-east-1-${DEPLOY_ENV}"
+          pulumi config set region:imageTag ${{ steps.image.outputs.tag }} --stack "region-us-east-1-${DEPLOY_ENV}"
+          pulumi config set region:desiredInstances ${VPN_DESIRED_INSTANCES:-2} --stack "region-us-east-1-${DEPLOY_ENV}"
+          pulumi config set region:minInstances ${VPN_MIN_INSTANCES:-1} --stack "region-us-east-1-${DEPLOY_ENV}"
+          pulumi config set region:maxInstances ${VPN_MAX_INSTANCES:-10} --stack "region-us-east-1-${DEPLOY_ENV}"
+          pulumi config set region:adminCidr 0.0.0.0/0 --stack "region-us-east-1-${DEPLOY_ENV}"
 
       - name: Pulumi up (region)
         working-directory: infra/pulumi
-        run: pulumi up -y --stack region-us-east-1
+        run: pulumi up -y --stack "region-us-east-1-${DEPLOY_ENV}"

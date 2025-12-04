@@ -39,7 +39,7 @@ curl -s http://NODE_IP:8080/pubkey
 
 # 4. Check if peer is registered on server
 curl -s -H "Authorization: Bearer TOKEN" \
-  "https://api.vpnvpn.com/server/peers" | jq '.peers[] | select(.public_key == "CLIENT_PUBKEY")'
+  "https://api.vpnvpn.dev/server/peers" | jq '.peers[] | select(.public_key == "CLIENT_PUBKEY")'
 ```
 
 #### Common Causes & Solutions
@@ -138,10 +138,10 @@ curl -s http://NODE_IP:8080/status | jq '.[].active_sessions'
 
 ```bash
 # 1. Test control plane health
-curl -s https://api.vpnvpn.com/health | jq .
+curl -s https://api.vpnvpn.dev/health | jq .
 
 # 2. Verify token is valid
-curl -X POST https://api.vpnvpn.com/server/register \
+curl -X POST https://api.vpnvpn.dev/server/register \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"id":"test","publicKey":"test","listenPort":51820}'
@@ -175,7 +175,7 @@ docker logs vpn-node 2>&1 | grep -i register
 ```bash
 # 1. Manual peer fetch
 curl -s -H "Authorization: Bearer YOUR_TOKEN" \
-  "https://api.vpnvpn.com/server/peers?id=YOUR_SERVER_ID" | jq .
+  "https://api.vpnvpn.dev/server/peers?id=YOUR_SERVER_ID" | jq .
 
 # 2. Check WireGuard interface
 wg show wg0 peers
@@ -207,7 +207,7 @@ docker logs vpn-node 2>&1 | grep -i peer
 ```bash
 # 1. Test API directly
 curl -s -H "x-api-key: YOUR_API_KEY" \
-  https://api.vpnvpn.com/servers
+  https://api.vpnvpn.dev/servers
 
 # 2. Verify key in Vercel env vars
 vercel env ls
@@ -516,20 +516,20 @@ psql $DATABASE_URL -c "SELECT 1"
 ### Useful Commands
 
 ```bash
-# Web app health
-curl -s https://vpnvpn.com/api/health | jq .
+# Web app health (production)
+curl -s https://vpnvpn.dev/api/health | jq .
 
-# Control plane health
-curl -s https://api.vpnvpn.com/health | jq .
+# Control plane health (production)
+curl -s https://api.vpnvpn.dev/health | jq .
 
-# Metrics service health
-curl -s https://metrics.vpnvpn.com/health | jq .
+# Metrics service health (production)
+curl -s https://metrics.vpnvpn.dev/health | jq .
 
 # VPN node health
 curl -s http://NODE_IP:8080/health | jq .
 
-# List all servers
-curl -s -H "x-api-key: API_KEY" https://api.vpnvpn.com/servers | jq .
+# List all servers (production)
+curl -s -H "x-api-key: API_KEY" https://api.vpnvpn.dev/servers | jq .
 
 # Test WireGuard connectivity
 wg show

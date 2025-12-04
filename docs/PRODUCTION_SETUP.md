@@ -23,14 +23,14 @@ Stripe webhooks notify vpnVPN of billing events (subscriptions, payments, cancel
 
 Configure Stripe to send these events:
 
-| Event | Purpose |
-|-------|---------|
-| `checkout.session.completed` | New subscription created via Checkout |
-| `customer.subscription.created` | Subscription record created |
+| Event                           | Purpose                                |
+| ------------------------------- | -------------------------------------- |
+| `checkout.session.completed`    | New subscription created via Checkout  |
+| `customer.subscription.created` | Subscription record created            |
 | `customer.subscription.updated` | Plan changes, renewals, status updates |
-| `customer.subscription.deleted` | Cancellations, revokes VPN access |
-| `invoice.payment_succeeded` | Payment confirmation (optional) |
-| `invoice.payment_failed` | Payment failure alerts (optional) |
+| `customer.subscription.deleted` | Cancellations, revokes VPN access      |
+| `invoice.payment_succeeded`     | Payment confirmation (optional)        |
+| `invoice.payment_failed`        | Payment failure alerts (optional)      |
 
 ### Setup Steps
 
@@ -82,14 +82,14 @@ Resend handles transactional emails (magic links, notifications). A verified sen
 
 ### Email Templates Used
 
-| Template | Trigger |
-|----------|---------|
-| `welcome` | New user signup |
-| `magic_link` | Email authentication |
-| `subscription_active` | Successful subscription |
-| `subscription_cancelled` | Subscription ended |
-| `device_added` | New device registered |
-| `device_revoked` | Device removed |
+| Template                 | Trigger                 |
+| ------------------------ | ----------------------- |
+| `welcome`                | New user signup         |
+| `magic_link`             | Email authentication    |
+| `subscription_active`    | Successful subscription |
+| `subscription_cancelled` | Subscription ended      |
+| `device_added`           | New device registered   |
+| `device_revoked`         | Device removed          |
 
 ### DNS Configuration
 
@@ -154,7 +154,7 @@ VPN nodes authenticate with the control plane using bearer tokens. Tokens are ma
    ```bash
    # Set in node environment
    VPN_TOKEN=your-generated-token
-   CONTROL_PLANE_URL=https://api.vpnvpn.com
+   CONTROL_PLANE_URL=https://api.vpnvpn.dev
    ```
 
 ### Token Security Best Practices
@@ -190,6 +190,7 @@ This token is auto-created on control plane startup if set.
 ### Test Flow
 
 #### Step 1: User Signup
+
 - [ ] Visit production URL
 - [ ] Click "Sign In" → Enter email
 - [ ] Receive magic link email
@@ -197,6 +198,7 @@ This token is auto-created on control plane startup if set.
 - [ ] Welcome email received
 
 #### Step 2: Subscription
+
 - [ ] Navigate to pricing page
 - [ ] Select a plan (e.g., Pro)
 - [ ] Complete Stripe Checkout
@@ -205,6 +207,7 @@ This token is auto-created on control plane startup if set.
 - [ ] Subscription active email received
 
 #### Step 3: Device Registration
+
 - [ ] Click "Add Device"
 - [ ] Enter device name
 - [ ] Select server (if applicable)
@@ -212,6 +215,7 @@ This token is auto-created on control plane startup if set.
 - [ ] Device added email received
 
 #### Step 4: VPN Connection
+
 - [ ] Import config into WireGuard client
 - [ ] Activate VPN connection
 - [ ] Verify handshake completes
@@ -219,12 +223,14 @@ This token is auto-created on control plane startup if set.
 - [ ] Verify DNS resolution works
 
 #### Step 5: Traffic Verification
+
 - [ ] Browse websites normally
 - [ ] Test streaming services (if applicable)
 - [ ] Verify no DNS leaks (dnsleaktest.com)
 - [ ] Check WebRTC leak protection
 
 #### Step 6: Subscription Cancellation
+
 - [ ] Navigate to Account → Manage Billing
 - [ ] Cancel subscription in Stripe portal
 - [ ] Verify subscription_cancelled email received
@@ -249,6 +255,7 @@ This token is auto-created on control plane startup if set.
    - Enter your domain (e.g., `vpnvpn.com`, `www.vpnvpn.com`)
 
 2. **Configure DNS**:
+
    ```
    # Apex domain
    Type: A
@@ -268,9 +275,10 @@ This token is auto-created on control plane startup if set.
 ### API Gateway Custom Domain (Control Plane)
 
 1. **Request Certificate in ACM**:
+
    ```bash
    aws acm request-certificate \
-     --domain-name api.vpnvpn.com \
+     --domain-name api.vpnvpn.dev \
      --validation-method DNS \
      --region us-east-1
    ```
@@ -280,9 +288,10 @@ This token is auto-created on control plane startup if set.
    - Wait for validation (usually < 30 minutes)
 
 3. **Create Custom Domain in API Gateway**:
+
    ```bash
    aws apigateway create-domain-name \
-     --domain-name api.vpnvpn.com \
+     --domain-name api.vpnvpn.dev \
      --regional-certificate-arn arn:aws:acm:us-east-1:...
    ```
 
@@ -352,7 +361,7 @@ STRIPE_PRICE_ID_PRO=price_...
 STRIPE_PRICE_ID_ENTERPRISE=price_...
 
 # Control Plane
-CONTROL_PLANE_API_URL=https://api.vpnvpn.com
+CONTROL_PLANE_API_URL=https://api.vpnvpn.dev
 CONTROL_PLANE_API_KEY=<secure-api-key>
 
 # WireGuard
@@ -374,8 +383,8 @@ CONTROL_PLANE_API_KEY=<same-as-vercel>
 
 ```bash
 VPN_TOKEN=<node-specific-token>
-CONTROL_PLANE_URL=https://api.vpnvpn.com
-METRICS_URL=https://metrics.vpnvpn.com
+CONTROL_PLANE_URL=https://api.vpnvpn.dev
+METRICS_URL=https://metrics.vpnvpn.dev
 REGION=us-east-1
 ```
 
@@ -402,7 +411,3 @@ REGION=us-east-1
 - Verify WireGuard handshake in node logs
 
 See `TROUBLESHOOTING.md` for detailed debugging steps.
-
-
-
-

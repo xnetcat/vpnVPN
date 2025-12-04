@@ -124,18 +124,19 @@ jobs:
           CONTROL_PLANE_API_KEY: ${{ secrets.CONTROL_PLANE_API_KEY }}
           BOOTSTRAP_TOKEN: ${{ secrets.VPN_TOKEN }}
         run: |
-          pulumi stack select global || pulumi stack init global
+          STACK_NAME="global-${{ steps.env.outputs.environment }}"
+          pulumi stack select "${STACK_NAME}" || pulumi stack init "${STACK_NAME}"
 
           # Configure stack
-          pulumi config set aws:region us-east-1
-          pulumi config set --secret databaseUrl "$DATABASE_URL"
-          pulumi config set --secret controlPlaneApiKey "$CONTROL_PLANE_API_KEY"
-          pulumi config set --secret bootstrapToken "$BOOTSTRAP_TOKEN"
-          pulumi config set global:controlPlaneCodeKey "$CONTROL_PLANE_CODE_KEY"
-          pulumi config set global:metricsCodeKey "$METRICS_CODE_KEY"
+          pulumi config set aws:region us-east-1 --stack "${STACK_NAME}"
+          pulumi config set --secret databaseUrl "$DATABASE_URL" --stack "${STACK_NAME}"
+          pulumi config set --secret controlPlaneApiKey "$CONTROL_PLANE_API_KEY" --stack "${STACK_NAME}"
+          pulumi config set --secret bootstrapToken "$BOOTSTRAP_TOKEN" --stack "${STACK_NAME}"
+          pulumi config set global:controlPlaneCodeKey "$CONTROL_PLANE_CODE_KEY" --stack "${STACK_NAME}"
+          pulumi config set global:metricsCodeKey "$METRICS_CODE_KEY" --stack "${STACK_NAME}"
 
           # Deploy
-          pulumi up -y --stack global
+          pulumi up -y --stack "${STACK_NAME}"
 
           # Output API URLs
           echo "Control Plane URL: $(pulumi stack output controlPlaneApiUrl)"

@@ -60,7 +60,7 @@ If automatic renewal fails:
 ```bash
 # Request new certificate
 aws acm request-certificate \
-  --domain-name api.vpnvpn.com \
+  --domain-name api.vpnvpn.dev \
   --validation-method DNS \
   --region us-east-1
 
@@ -174,7 +174,7 @@ Via Admin Panel:
 
 Via API:
 ```bash
-curl -X POST https://api.vpnvpn.com/tokens \
+curl -X POST https://api.vpnvpn.dev/tokens \
   -H "x-api-key: ADMIN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"label": "us-east-1-prod-2024"}'
@@ -206,13 +206,13 @@ curl -X POST https://api.vpnvpn.com/tokens \
    ```bash
    # Check node registration with new token
    curl -s -H "x-api-key: API_KEY" \
-     https://api.vpnvpn.com/servers | jq '.[].lastSeen'
+     https://api.vpnvpn.dev/servers | jq '.[].lastSeen'
    ```
 
 4. **Revoke Old Token**
    ```bash
    # Via admin panel or API
-   curl -X DELETE "https://api.vpnvpn.com/tokens/OLD_TOKEN" \
+   curl -X DELETE "https://api.vpnvpn.dev/tokens/OLD_TOKEN" \
      -H "x-api-key: ADMIN_API_KEY"
    ```
 
@@ -222,7 +222,7 @@ If token is compromised:
 
 ```bash
 # 1. Immediately revoke compromised token
-curl -X DELETE "https://api.vpnvpn.com/tokens/COMPROMISED_TOKEN" \
+curl -X DELETE "https://api.vpnvpn.dev/tokens/COMPROMISED_TOKEN" \
   -H "x-api-key: ADMIN_API_KEY"
 
 # 2. Create new token
@@ -305,7 +305,7 @@ Used for web app → control plane communication.
 4. **Verify**
    ```bash
    curl -s -H "x-api-key: $NEW_KEY" \
-     https://api.vpnvpn.com/servers
+     https://api.vpnvpn.dev/servers
    ```
 
 ### Stripe Keys
@@ -423,7 +423,7 @@ done
 
 set -e
 
-CONTROL_PLANE_URL="https://api.vpnvpn.com"
+CONTROL_PLANE_URL="https://api.vpnvpn.dev"
 API_KEY="$ADMIN_API_KEY"
 LABEL_PREFIX="vpn-node-$(date +%Y%m)"
 
@@ -484,7 +484,7 @@ aws acm describe-certificate --certificate-arn ARN \
 
 # View all tokens
 curl -s -H "x-api-key: KEY" \
-  https://api.vpnvpn.com/tokens | jq '.[] | {label, createdAt, active}'
+  https://api.vpnvpn.dev/tokens | jq '.[] | {label, createdAt, active}'
 ```
 
 ### Emergency Contacts

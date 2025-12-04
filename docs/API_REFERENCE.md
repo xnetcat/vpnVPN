@@ -15,7 +15,7 @@ Complete API documentation for vpnVPN services.
 
 ## Control Plane API
 
-**Base URL:** `https://api.vpnvpn.com` (production) or `http://localhost:4000` (development)
+**Base URL:** `https://api.vpnvpn.dev` (production) or `http://localhost:4000` (development)
 
 ### Authentication
 
@@ -300,7 +300,7 @@ DELETE /peers/:publicKey
 
 ## Metrics Service API
 
-**Base URL:** `https://metrics.vpnvpn.com` (production) or `http://localhost:4001` (development)
+**Base URL:** `https://metrics.vpnvpn.dev` (production) or `http://localhost:4001` (development)
 
 ### Health Check
 

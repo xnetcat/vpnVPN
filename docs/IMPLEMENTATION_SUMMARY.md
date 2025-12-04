@@ -170,7 +170,7 @@ STRIPE_PRICE_ID_ENTERPRISE="price_..."
 RESEND_API_KEY="re_..."
 
 # Control Plane
-CONTROL_PLANE_API_URL="https://api.vpnvpn.com"
+CONTROL_PLANE_API_URL="https://api.vpnvpn.dev"
 CONTROL_PLANE_API_KEY="..."
 
 # WireGuard

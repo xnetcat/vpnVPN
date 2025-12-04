@@ -62,13 +62,13 @@ This runbook covers the deployment, management, and troubleshooting of vpnVPN se
 
 ### Configuration Requirements
 
-| Item | Source | Example |
-|------|--------|---------|
-| VPN Token | Admin Panel | `vpn_abc123...` |
-| Control Plane URL | Pulumi Output | `https://api.vpnvpn.com` |
-| Metrics URL | Pulumi Output | `https://metrics.vpnvpn.com/metrics/vpn` |
-| ECR Image URI | Pulumi Output | `123456789.dkr.ecr.us-east-1.amazonaws.com/vpnvpn/rust-server:latest` |
-| Region | AWS Region | `us-east-1` |
+| Item              | Source        | Example                                                                    |
+| ----------------- | ------------- | -------------------------------------------------------------------------- |
+| VPN Token         | Admin Panel   | `vpn_abc123...`                                                            |
+| Control Plane URL | Pulumi Output | `https://api.vpnvpn.dev` (prod) / `https://api.staging.vpnvpn.dev`         |
+| Metrics URL       | Pulumi Output | `https://metrics.vpnvpn.dev/metrics/vpn` (or `metrics.staging.vpnvpn.dev`) |
+| ECR Image URI     | Pulumi Output | `123456789.dkr.ecr.us-east-1.amazonaws.com/vpnvpn/rust-server:latest`      |
+| Region            | AWS Region    | `us-east-1`                                                                |
 
 ### Generate VPN Token
 
@@ -82,9 +82,9 @@ This runbook covers the deployment, management, and troubleshooting of vpnVPN se
 
 ## Deployment Methods
 
-### Method 1: Pulumi (Recommended for Production)
+### Method 1: Pulumi (Recommended for Staging + Production)
 
-#### Initial Setup
+#### Initial Setup (choose environment-specific stack)
 
 ```bash
 cd infra/pulumi
@@ -93,15 +93,19 @@ bun install
 # Login to Pulumi
 pulumi login
 
-# Select or create regional stack
-pulumi stack select region-us-east-1 --create
+# Select or create environment-specific regional stack
+# Staging:
+pulumi stack select region-us-east-1-staging --create
+
+# Production:
+# pulumi stack select region-us-east-1-production --create
 ```
 
 #### Configure Stack
 
 ```bash
 # Required configuration
-pulumi config set region:imageTag sha-abc123  # From ECR push
+pulumi config set region:imageTag sha-abc123  # From ECR push or CI output
 pulumi config set region:minInstances 2
 pulumi config set region:maxInstances 10
 pulumi config set region:desiredInstances 3
@@ -132,15 +136,15 @@ pulumi stack output nlbDnsName
 cd apps/vpn-server
 docker build -t vpn-server:local .
 
-# Run with Docker
+# Run with Docker (production-style URLs)
 docker run -d \
   --name vpn-node \
   --cap-add NET_ADMIN \
   -p 51820:51820/udp \
   -p 8080:8080 \
-  -e API_URL=https://api.vpnvpn.com \
+  -e API_URL=https://api.vpnvpn.dev \
   -e VPN_TOKEN=your-token-here \
-  -e METRICS_URL=https://metrics.vpnvpn.com/metrics/vpn \
+  -e METRICS_URL=https://metrics.vpnvpn.dev/metrics/vpn \
   -e SERVER_ID=local-dev-01 \
   -e VPN_REGION=us-east-1 \
   vpn-server:local run
@@ -158,7 +162,7 @@ sudo apt-get install -y wireguard-tools openvpn strongswan
 
 # Run
 ./target/release/vpn-server run \
-  --api-url https://api.vpnvpn.com \
+  --api-url https://api.vpnvpn.dev \
   --token your-token-here \
   --listen-port 51820 \
   --admin-port 8080
@@ -166,17 +170,17 @@ sudo apt-get install -y wireguard-tools openvpn strongswan
 
 ### Environment Variables Reference
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `API_URL` | Yes | - | Control Plane API URL |
-| `VPN_TOKEN` | Yes | - | Authentication token |
-| `LISTEN_UDP_PORT` | No | `51820` | WireGuard listen port |
-| `ADMIN_PORT` | No | `8080` | Admin API port |
-| `SERVER_ID` | No | `$HOSTNAME` | Unique server identifier |
-| `VPN_REGION` | No | - | AWS region for metrics |
-| `METRICS_URL` | No | - | Metrics ingestion endpoint |
-| `VPN_PROTOCOLS` | No | `wireguard,openvpn,ikev2` | Enabled protocols |
-| `RUST_LOG` | No | `info` | Log level |
+| Variable          | Required | Default                   | Description                |
+| ----------------- | -------- | ------------------------- | -------------------------- |
+| `API_URL`         | Yes      | -                         | Control Plane API URL      |
+| `VPN_TOKEN`       | Yes      | -                         | Authentication token       |
+| `LISTEN_UDP_PORT` | No       | `51820`                   | WireGuard listen port      |
+| `ADMIN_PORT`      | No       | `8080`                    | Admin API port             |
+| `SERVER_ID`       | No       | `$HOSTNAME`               | Unique server identifier   |
+| `VPN_REGION`      | No       | -                         | AWS region for metrics     |
+| `METRICS_URL`     | No       | -                         | Metrics ingestion endpoint |
+| `VPN_PROTOCOLS`   | No       | `wireguard,openvpn,ikev2` | Enabled protocols          |
+| `RUST_LOG`        | No       | `info`                    | Log level                  |
 
 ---
 
@@ -212,7 +216,7 @@ curl -s http://NODE_IP:8080/health | jq .
 ```bash
 # List servers via control plane
 curl -s -H "x-api-key: YOUR_API_KEY" \
-  https://api.vpnvpn.com/servers | jq '.[] | select(.id == "your-server-id")'
+  https://api.vpnvpn.dev/servers | jq '.[] | select(.id == "your-server-id")'
 ```
 
 #### 3. Check Peer Sync
@@ -275,13 +279,14 @@ exit 0
 
 ```bash
 cd infra/pulumi
-pulumi stack select region-us-east-1
 
-# Scale up
+# Example: scale up staging in us-east-1
+pulumi stack select region-us-east-1-staging
 pulumi config set region:desiredInstances 5
 pulumi up -y
 
-# Scale down
+# Example: scale down production in eu-west-1
+pulumi stack select region-eu-west-1-production
 pulumi config set region:desiredInstances 2
 pulumi up -y
 ```
@@ -340,12 +345,12 @@ curl http://NODE_IP:8080/metrics
 
 **Available Metrics:**
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `vpn_active_sessions_total` | Gauge | Total active VPN sessions |
-| `vpn_active_sessions_by_protocol` | Gauge | Sessions by protocol |
-| `vpn_egress_bytes_total` | Counter | Total bytes sent |
-| `vpn_ingress_bytes_total` | Counter | Total bytes received |
+| Metric                            | Type    | Description               |
+| --------------------------------- | ------- | ------------------------- |
+| `vpn_active_sessions_total`       | Gauge   | Total active VPN sessions |
+| `vpn_active_sessions_by_protocol` | Gauge   | Sessions by protocol      |
+| `vpn_egress_bytes_total`          | Counter | Total bytes sent          |
+| `vpn_ingress_bytes_total`         | Counter | Total bytes received      |
 
 ### CloudWatch Metrics
 
@@ -456,6 +461,7 @@ docker logs vpn-node
 **Possible Causes:**
 
 1. **Missing dependencies**
+
    ```bash
    # Run doctor command
    ./vpn-server doctor
@@ -478,10 +484,10 @@ docker logs vpn-node
 
 ```bash
 # Check control plane is accessible
-curl -v https://api.vpnvpn.com/health
+curl -v https://api.vpnvpn.dev/health
 
 # Verify token
-curl -X POST https://api.vpnvpn.com/server/register \
+curl -X POST https://api.vpnvpn.dev/server/register \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"id":"test","publicKey":"test","listenPort":51820}'
@@ -496,7 +502,7 @@ curl -X POST https://api.vpnvpn.com/server/register \
 ```bash
 # Manual peer fetch test
 curl -H "Authorization: Bearer YOUR_TOKEN" \
-  "https://api.vpnvpn.com/server/peers?id=YOUR_SERVER_ID"
+  "https://api.vpnvpn.dev/server/peers?id=YOUR_SERVER_ID"
 
 # Check WireGuard interface
 wg show
@@ -574,12 +580,12 @@ If issues persist:
 
 ### Admin API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check with component status |
-| `/metrics` | GET | Prometheus metrics |
-| `/status` | GET | VPN backend status |
-| `/pubkey` | GET | WireGuard public key |
+| Endpoint   | Method | Description                        |
+| ---------- | ------ | ---------------------------------- |
+| `/health`  | GET    | Health check with component status |
+| `/metrics` | GET    | Prometheus metrics                 |
+| `/status`  | GET    | VPN backend status                 |
+| `/pubkey`  | GET    | WireGuard public key               |
 
 ### Useful AWS Commands
 
@@ -597,7 +603,3 @@ aws autoscaling describe-scaling-activities \
 aws elbv2 describe-load-balancers \
   --query "LoadBalancers[?contains(LoadBalancerName,'vpnvpn')].DNSName"
 ```
-
-
-
-

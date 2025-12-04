@@ -2,9 +2,38 @@
 
 This package defines the AWS compute, networking, and observability stack for vpnVPN's VPN data-plane and services.
 
+## Environments and stacks
+
+We run a single AWS account with separate **Pulumi stacks** for staging and production:
+
+- **Global (control-plane, metrics, shared infra):**
+  - Staging: `global-staging`
+  - Production: `global-production`
+- **Regional VPN nodes:**
+  - Staging: `region-us-east-1-staging`, `region-eu-west-1-staging`, ...
+  - Production: `region-us-east-1-production`, `region-eu-west-1-production`, ...
+
+Each stack has a corresponding `Pulumi.<stack>.yaml` file (for example `Pulumi.global-staging.yaml`).
+These files should be committed, while any secrets are stored via `pulumi config set --secret`.
+
+See `docs/CI_CD.md` for how GitHub Actions selects stacks based on branch (`staging` vs `main`)
+and environment (`staging` vs `production`).
+
 ## Quick Start
 
-Use the deployment script for automated deployment:
+### CI-driven deployment (preferred)
+
+For day-to-day deployments, rely on CI:
+
+- `rust-build-push.yml` builds and pushes the vpn-server image to ECR.
+- `services-deploy.yml` deploys control-plane + metrics Lambdas into `global-*`.
+- `pulumi-deploy.yml` deploys global infra + VPN node stacks (`global-*`, `region-*`).
+
+See `docs/CI_CD.md` for the full environment matrix and workflow behavior.
+
+### Manual deployment script (infra-focused)
+
+You can also deploy infra from your machine with the helper script:
 
 ```bash
 # Deploy to staging (from project root)
@@ -13,16 +42,17 @@ Use the deployment script for automated deployment:
 # Deploy to production
 ./scripts/deploy.sh production
 
-# Skip desktop builds
-./scripts/deploy.sh staging --skip-desktop
-
-# Skip VPN node deployment
-./scripts/deploy.sh production --skip-vpn-nodes
+# Additionally build/upload desktop artifacts from your machine (legacy path)
+./scripts/deploy.sh staging --with-desktop
 ```
 
 The script reads configuration from:
+
 - **Root `.env`** - Environment variables for all services
-- **`scripts/regions.json`** - VPN node distribution per region
+- **`scripts/regions.json`** - VPN node distribution per region and per environment
+
+> Desktop builds are primarily handled by `.github/workflows/desktop-build.yml`.
+> The `--with-desktop` flag is a convenience for local testing.
 
 ## Architecture
 
@@ -37,53 +67,55 @@ The vpnVPN infrastructure includes:
 
 ## Stacks
 
-### `global` (us-east-1)
+### Global stacks (`global-staging`, `global-production`)
 
-- ECR repository for `vpn-server` Docker images
-- S3 bucket for desktop app downloads
-- S3 bucket for Lambda deployment packages
-- Control Plane Lambda + API Gateway
-- Metrics Service Lambda + API Gateway
-- Observability resources (Amazon Managed Prometheus, Amazon Managed Grafana)
+Global stacks live in `us-east-1` and include:
 
-### `region-*` (e.g., `region-us-east-1`, `region-eu-west-1`)
+- ECR repository for `vpn-server` Docker images.
+- S3 bucket for desktop app downloads.
+- S3 bucket for Lambda deployment packages.
+- Control Plane Lambda + API Gateway.
+- Metrics Service Lambda + API Gateway.
+- Observability resources (Amazon Managed Prometheus, Amazon Managed Grafana).
 
-Each regional stack creates:
+### Regional stacks (`region-*-staging`, `region-*-production`)
 
-- VPC with public/private subnets across 2 availability zones
-- Security groups for VPN protocols (WireGuard 51820/udp, OpenVPN 1194/udp, IKEv2 500+4500/udp) and admin port (8080/tcp)
-- Network Load Balancer (NLB) for exposing VPN endpoints
-- EC2 Auto Scaling Group running the `vpn-server` container
-- Target-tracking autoscaling based on `ActiveSessions` CloudWatch metric
+Each regional stack (for example `region-us-east-1-staging`) creates:
+
+- VPC with public/private subnets across 2 availability zones.
+- Security groups for VPN protocols (WireGuard 51820/udp, OpenVPN 1194/udp, IKEv2 500+4500/udp) and admin port (8080/tcp).
+- Network Load Balancer (NLB) for exposing VPN endpoints.
+- EC2 Auto Scaling Group running the `vpn-server` container.
+- Target-tracking autoscaling based on `ActiveSessions` CloudWatch metric.
 
 ## Configuration Reference
 
 ### Global Stack
 
-| Config Key                 | Description                                         | Default |
-| -------------------------- | --------------------------------------------------- | ------- |
-| `global:ecrRepoName`       | ECR repository name                                 | `vpnvpn/rust-server` |
-| `global:desktopBucket`     | S3 bucket for desktop releases                      | `vpnvpn-desktop-releases` |
-| `global:codeBucket`        | S3 bucket for Lambda code                           | `vpnvpn-lambda-deployments` |
-| `global:controlPlaneCodeKey` | S3 key for control-plane Lambda package           | - |
-| `global:controlPlaneImageUri` | ECR URI for control-plane Docker image           | - |
-| `global:metricsCodeKey`    | S3 key for metrics Lambda package                   | - |
-| `global:metricsImageUri`   | ECR URI for metrics Docker image                    | - |
-| `databaseUrl` (secret)     | PostgreSQL connection string                        | Required |
-| `controlPlaneApiKey` (secret) | API key for control plane                        | Required |
-| `bootstrapToken` (secret)  | Bootstrap token for VPN nodes                       | - |
+| Config Key                    | Description                             | Default                     |
+| ----------------------------- | --------------------------------------- | --------------------------- |
+| `global:ecrRepoName`          | ECR repository name                     | `vpnvpn/rust-server`        |
+| `global:desktopBucket`        | S3 bucket for desktop releases          | `vpnvpn-desktop-releases`   |
+| `global:codeBucket`           | S3 bucket for Lambda code               | `vpnvpn-lambda-deployments` |
+| `global:controlPlaneCodeKey`  | S3 key for control-plane Lambda package | -                           |
+| `global:controlPlaneImageUri` | ECR URI for control-plane Docker image  | -                           |
+| `global:metricsCodeKey`       | S3 key for metrics Lambda package       | -                           |
+| `global:metricsImageUri`      | ECR URI for metrics Docker image        | -                           |
+| `databaseUrl` (secret)        | PostgreSQL connection string            | Required                    |
+| `controlPlaneApiKey` (secret) | API key for control plane               | Required                    |
+| `bootstrapToken` (secret)     | Bootstrap token for VPN nodes           | -                           |
 
 ### Region Stack
 
-| Config Key                         | Description                                              | Default |
-| ---------------------------------- | -------------------------------------------------------- | ------- |
-| `region:imageTag`                  | Docker image tag (e.g., `sha-abc123`)                    | Required |
-| `region:desiredInstances`          | **Number of VPN nodes to deploy**                        | Same as minInstances |
-| `region:minInstances`              | Minimum ASG instances (autoscaling floor)                | 1 |
-| `region:maxInstances`              | Maximum ASG instances (autoscaling ceiling)              | 10 |
-| `region:instanceType`              | EC2 instance type                                        | `t3.medium` |
-| `region:adminCidr`                 | CIDR for admin port access                               | `0.0.0.0/0` |
-| `region:targetSessionsPerInstance` | Target sessions per instance for autoscaling             | 100 |
+| Config Key                         | Description                                  | Default              |
+| ---------------------------------- | -------------------------------------------- | -------------------- |
+| `region:imageTag`                  | Docker image tag (e.g., `sha-abc123`)        | Required             |
+| `region:desiredInstances`          | **Number of VPN nodes to deploy**            | Same as minInstances |
+| `region:minInstances`              | Minimum ASG instances (autoscaling floor)    | 1                    |
+| `region:maxInstances`              | Maximum ASG instances (autoscaling ceiling)  | 10                   |
+| `region:instanceType`              | EC2 instance type                            | `t3.medium`          |
+| `region:adminCidr`                 | CIDR for admin port access                   | `0.0.0.0/0`          |
+| `region:targetSessionsPerInstance` | Target sessions per instance for autoscaling | 100                  |
 
 ---
 
@@ -103,32 +135,40 @@ bun install
 pulumi login
 ```
 
-### Step 2: Deploy Global Stack (Lambda Services)
+### Step 2: Deploy Global Stacks (Lambda Services)
+
+These examples use **staging**; swap `staging` → `production` for prod.
 
 ```bash
-pulumi stack select global || pulumi stack init global
+cd infra/pulumi
+
+# Create/select staging global stack
+pulumi stack select global-staging || pulumi stack init global-staging
 
 # Configure AWS region
-pulumi config set aws:region us-east-1
+pulumi config set aws:region us-east-1 --stack global-staging
 
 # Configure ECR repository
-pulumi config set global:ecrRepoName vpnvpn/rust-server
+pulumi config set global:ecrRepoName vpnvpn/rust-server --stack global-staging
 
 # Configure secrets
-pulumi config set --secret databaseUrl "postgresql://..."
-pulumi config set --secret controlPlaneApiKey "your-api-key"
-pulumi config set --secret bootstrapToken "your-bootstrap-token"
+pulumi config set --secret databaseUrl "postgresql://staging-user:..." --stack global-staging
+pulumi config set --secret controlPlaneApiKey "staging-api-key" --stack global-staging
+pulumi config set --secret bootstrapToken "staging-bootstrap-token" --stack global-staging
 
 # Deploy
-pulumi up -y
+pulumi up -y --stack global-staging
 ```
 
 After deployment, note the outputs:
-- `controlPlaneApiUrl` - URL for the control plane API
-- `metricsApiUrl` - URL for the metrics API
-- `ecrUri` - ECR repository URL
 
-### Step 3: Build and Push VPN Server Image
+- `controlPlaneApiUrl` - URL for the control plane API (wire this to `api.staging.vpnvpn.dev`).
+- `metricsApiUrl` - URL for the metrics API.
+- `ecrUri` - ECR repository URL.
+
+Repeat the same process for `global-production` with production credentials.
+
+### Step 3: Build and Push VPN Server Image (manual path)
 
 ```bash
 cd ../../apps/vpn-server
@@ -146,40 +186,35 @@ docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/vpnvpn/rust-server:v1.0
 
 ### Step 4: Deploy Regional Stacks (VPN Nodes)
 
-Deploy to one or more regions with your desired node count:
+Deploy to one or more regions with your desired node count. These examples
+use staging; swap `-staging` → `-production` for prod.
 
 ```bash
 cd ../../infra/pulumi
-```
 
-#### Example: US East (3 nodes)
+# US East - staging, 3 nodes
+pulumi stack select region-us-east-1-staging || pulumi stack init region-us-east-1-staging
 
-```bash
-pulumi stack select region-us-east-1 || pulumi stack init region-us-east-1
+pulumi config set aws:region us-east-1 --stack region-us-east-1-staging
+pulumi config set global:ecrRepoName vpnvpn/rust-server --stack region-us-east-1-staging
+pulumi config set region:imageTag sha-abc123 --stack region-us-east-1-staging
+pulumi config set region:desiredInstances 3 --stack region-us-east-1-staging
+pulumi config set region:minInstances 1 --stack region-us-east-1-staging
+pulumi config set region:maxInstances 10 --stack region-us-east-1-staging
 
-pulumi config set aws:region us-east-1
-pulumi config set global:ecrRepoName vpnvpn/rust-server
-pulumi config set region:imageTag v1.0.0
-pulumi config set region:desiredInstances 3
-pulumi config set region:minInstances 1
-pulumi config set region:maxInstances 10
+pulumi up -y --stack region-us-east-1-staging
 
-pulumi up -y
-```
+# EU West - staging, 2 nodes
+pulumi stack select region-eu-west-1-staging || pulumi stack init region-eu-west-1-staging
 
-#### Example: EU West (5 nodes)
+pulumi config set aws:region eu-west-1 --stack region-eu-west-1-staging
+pulumi config set global:ecrRepoName vpnvpn/rust-server --stack region-eu-west-1-staging
+pulumi config set region:imageTag sha-abc123 --stack region-eu-west-1-staging
+pulumi config set region:desiredInstances 2 --stack region-eu-west-1-staging
+pulumi config set region:minInstances 1 --stack region-eu-west-1-staging
+pulumi config set region:maxInstances 8 --stack region-eu-west-1-staging
 
-```bash
-pulumi stack select region-eu-west-1 || pulumi stack init region-eu-west-1
-
-pulumi config set aws:region eu-west-1
-pulumi config set global:ecrRepoName vpnvpn/rust-server
-pulumi config set region:imageTag v1.0.0
-pulumi config set region:desiredInstances 5
-pulumi config set region:minInstances 2
-pulumi config set region:maxInstances 15
-
-pulumi up -y
+pulumi up -y --stack region-eu-west-1-staging
 ```
 
 ---
@@ -258,6 +293,7 @@ pulumi up --policy-pack ./policy
 ```
 
 Policies include:
+
 - Required `Project` tags on all resources
 - No public S3 buckets (except desktop releases)
 - Lambda timeout and memory limits
@@ -268,26 +304,26 @@ Policies include:
 
 ## Scaling Operations
 
-### Scale Up a Region
+### Scale Up a Region (staging example)
 
 ```bash
-pulumi stack select region-us-east-1
+pulumi stack select region-us-east-1-staging
 pulumi config set region:desiredInstances 6
 pulumi up -y
 ```
 
-### Scale Down a Region
+### Scale Down a Region (production example)
 
 ```bash
-pulumi stack select region-eu-west-1
+pulumi stack select region-eu-west-1-production
 pulumi config set region:desiredInstances 2
 pulumi up -y
 ```
 
-### Destroy a Region
+### Destroy a Region (staging example)
 
 ```bash
-pulumi stack select region-ap-southeast-1
+pulumi stack select region-ap-southeast-1-staging
 pulumi destroy -y
 ```
 
@@ -299,27 +335,35 @@ After deployment, each stack outputs:
 
 ### Global Stack
 
-| Output                  | Description                              |
-| ----------------------- | ---------------------------------------- |
-| `ecrUri`                | ECR repository URL                       |
-| `controlPlaneApiUrl`    | Control Plane API Gateway URL            |
-| `metricsApiUrl`         | Metrics API Gateway URL                  |
-| `desktopBucketUrl`      | S3 bucket URL for desktop downloads      |
-| `lambdaCodeBucket`      | S3 bucket for Lambda code                |
+| Output               | Description                         |
+| -------------------- | ----------------------------------- |
+| `ecrUri`             | ECR repository URL                  |
+| `controlPlaneApiUrl` | Control Plane API Gateway URL       |
+| `metricsApiUrl`      | Metrics API Gateway URL             |
+| `desktopBucketUrl`   | S3 bucket URL for desktop downloads |
+| `lambdaCodeBucket`   | S3 bucket for Lambda code           |
 
 ### Regional Stack
 
-| Output        | Description                              |
-| ------------- | ---------------------------------------- |
-| `nlbDnsName`  | Network Load Balancer DNS name for VPN connections |
+| Output       | Description                                        |
+| ------------ | -------------------------------------------------- |
+| `nlbDnsName` | Network Load Balancer DNS name for VPN connections |
 
 Get outputs:
 
 ```bash
-pulumi stack select global
+# Staging
+pulumi stack select global-staging
 pulumi stack output controlPlaneApiUrl
 
-pulumi stack select region-us-east-1
+pulumi stack select region-us-east-1-staging
+pulumi stack output nlbDnsName
+
+# Production
+pulumi stack select global-production
+pulumi stack output controlPlaneApiUrl
+
+pulumi stack select region-us-east-1-production
 pulumi stack output nlbDnsName
 ```
 
@@ -330,6 +374,7 @@ pulumi stack output nlbDnsName
 ### ControlPlane (`controlPlane.ts`)
 
 Creates Lambda + API Gateway for the control-plane service:
+
 - IAM role with basic Lambda and VPC access
 - Lambda function (ZIP or Docker image)
 - HTTP API Gateway with CORS
@@ -338,6 +383,7 @@ Creates Lambda + API Gateway for the control-plane service:
 ### MetricsService (`metricsService.ts`)
 
 Creates Lambda + API Gateway for the metrics service:
+
 - IAM role with basic Lambda and VPC access
 - Lambda function (ZIP or Docker image)
 - HTTP API Gateway with CORS
@@ -346,6 +392,7 @@ Creates Lambda + API Gateway for the metrics service:
 ### VpnAsg (`components/vpnAsg.ts`)
 
 Creates an EC2 Auto Scaling Group with:
+
 - Amazon Linux 2 instances running Docker
 - User data that pulls the vpn-server image from ECR
 - IP forwarding and NAT masquerade for VPN traffic

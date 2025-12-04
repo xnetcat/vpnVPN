@@ -7,8 +7,7 @@
 # 2. Deploys global Pulumi stack to us-east-1
 # 3. Builds and pushes vpn-server Docker image
 # 4. Deploys VPN nodes to specified regions
-# 5. Builds desktop apps for staging/production
-# 6. Uploads desktop executables to S3
+# 5. (Optional, legacy) Builds desktop apps and uploads to S3
 #
 # Usage:
 #   ./scripts/deploy.sh [staging|production] [--skip-desktop] [--skip-vpn-nodes]
@@ -43,12 +42,12 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # =============================================================================
 
 ENVIRONMENT="${1:-staging}"
-SKIP_DESKTOP=false
+SKIP_DESKTOP=true
 SKIP_VPN_NODES=false
 
 for arg in "$@"; do
   case $arg in
-    --skip-desktop) SKIP_DESKTOP=true ;;
+    --with-desktop) SKIP_DESKTOP=false ;;
     --skip-vpn-nodes) SKIP_VPN_NODES=true ;;
   esac
 done
@@ -126,21 +125,23 @@ deploy_global_stack() {
   
   pulumi login
   
-  # Always deploy global to us-east-1
-  pulumi stack select global 2>/dev/null || pulumi stack init global
+  # Use environment-specific global stack so staging and production
+  # are fully isolated (global-staging, global-production).
+  STACK_NAME="global-${ENVIRONMENT}"
+  pulumi stack select "${STACK_NAME}" 2>/dev/null || pulumi stack init "${STACK_NAME}"
   
-  pulumi config set aws:region us-east-1
-  pulumi config set global:ecrRepoName "${ECR_REPO_NAME}"
-  pulumi config set controlPlaneApiUrl "${CONTROL_PLANE_API_URL}"
+  pulumi config set aws:region us-east-1 --stack "${STACK_NAME}"
+  pulumi config set global:ecrRepoName "${ECR_REPO_NAME}" --stack "${STACK_NAME}"
+  pulumi config set controlPlaneApiUrl "${CONTROL_PLANE_API_URL}" --stack "${STACK_NAME}"
   
   # Add S3 bucket for desktop downloads
-  pulumi config set global:desktopBucket "${DESKTOP_S3_BUCKET:-vpnvpn-desktop-${ENVIRONMENT}}"
+  pulumi config set global:desktopBucket "${DESKTOP_S3_BUCKET:-vpnvpn-desktop-${ENVIRONMENT}}" --stack "${STACK_NAME}"
   
   log_info "Running pulumi up for global stack..."
   pulumi up -y
   
   # Export outputs
-  ECR_URI=$(pulumi stack output ecrUri 2>/dev/null || echo "")
+  ECR_URI=$(pulumi stack output ecrUri --stack "${STACK_NAME}" 2>/dev/null || echo "")
   
   log_success "Global stack deployed successfully"
   cd "${ROOT_DIR}"
@@ -207,7 +208,7 @@ deploy_vpn_nodes() {
     MAX=$(echo "$region_config" | jq -r '.max // 10')
     INSTANCE_TYPE=$(echo "$region_config" | jq -r '.instanceType // "t3.medium"')
     
-    STACK_NAME="region-${REGION}"
+    STACK_NAME="region-${REGION}-${ENVIRONMENT}"
     
     log_info "Deploying ${NODES} nodes to ${REGION}..."
     
