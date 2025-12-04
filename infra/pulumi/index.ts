@@ -301,9 +301,10 @@ if (stack.startsWith("global")) {
   const computedEcrUri = pulumi.interpolate`${accountId}.dkr.ecr.${regionName}.amazonaws.com/${ecrRepoName}:${imageTag}`;
 
   // Get global stack reference for API URL
-  const globalStackName = stack
-    .replace("region-", "global-")
-    .replace(/-[a-z0-9]+-[0-9]+/, ""); // e.g. region-us-east-1-staging -> global-staging
+  const org = pulumi.getOrganization();
+  const project = pulumi.getProject();
+  const env = stack.split("-").pop(); // e.g. region-us-east-1-staging -> staging
+  const globalStackName = `${org}/${project}/global-${env}`;
   const globalStack = new pulumi.StackReference(globalStackName);
   const apiUrl = globalStack.getOutput("controlPlaneApiUrl");
 
