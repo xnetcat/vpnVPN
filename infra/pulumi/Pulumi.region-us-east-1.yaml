@@ -1,6 +1,6 @@
 config:
   aws:region: us-east-1
-  vpnvpn-infra:global:ecrRepoName: vpnvpn/rust-server
+  vpnvpn-infra:global:ecrRepoName: vpnvpn/staging
   vpnvpn-infra:region:imageTag: latest
   vpnvpn-infra:region:desiredInstances: "2"
   vpnvpn-infra:region:minInstances: "1"

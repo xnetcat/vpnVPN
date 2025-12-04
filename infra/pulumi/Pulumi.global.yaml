@@ -1,4 +1,4 @@
 config:
   aws:region: us-east-1
-  vpnvpn-infra:global:ecrRepoName: vpnvpn/rust-server
-  vpnvpn-infra:controlPlaneApiUrl: https://example-control-plane.your-domain.com
+  vpnvpn-infra:global:ecrRepoName: vpnvpn/staging
+  vpnvpn-infra:controlPlaneApiUrl: https://api.vpnvpn.dev
