@@ -40,8 +40,51 @@ async fn check_ping() -> bool {
 }
 
 /// Ping a specific host.
-#[cfg(unix)]
+/// Note: `ping` CLI flags differ between Unix variants, so we
+/// use per-OS implementations to keep timeouts sane.
+#[cfg(target_os = "macos")]
 async fn ping_host(host: &str) -> bool {
+    // macOS `ping`: `-W` is a deadline in seconds.
+    let output = timeout(
+        Duration::from_secs(2),
+        tokio::process::Command::new("ping")
+            .args(["-c", "1", "-W", "2", host])
+            .output(),
+    )
+    .await;
+
+    match output {
+        Ok(Ok(result)) => result.status.success(),
+        Ok(Err(_)) => false,
+        Err(_) => false, // Timeout
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn ping_host(host: &str) -> bool {
+    // Many Linux `ping` implementations treat `-W` as milliseconds.
+    // Use 2000ms to align with the 2s overall timeout.
+    let output = timeout(
+        Duration::from_secs(2),
+        tokio::process::Command::new("ping")
+            .args(["-c", "1", "-W", "2000", host])
+            .output(),
+    )
+    .await;
+
+    match output {
+        Ok(Ok(result)) => result.status.success(),
+        Ok(Err(_)) => false,
+        Err(_) => false, // Timeout
+    }
+}
+
+#[cfg(all(
+    unix,
+    not(any(target_os = "macos", target_os = "linux"))
+))]
+async fn ping_host(host: &str) -> bool {
+    // Fallback for other Unix-like OSes – keep the original behavior.
     let output = timeout(
         Duration::from_secs(2),
         tokio::process::Command::new("ping")
