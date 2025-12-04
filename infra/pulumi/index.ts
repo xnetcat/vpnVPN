@@ -36,6 +36,7 @@ if (stack.startsWith("global")) {
     name: ecrRepoName,
     imageScanningConfiguration: { scanOnPush: true },
     imageTagMutability: "MUTABLE",
+    forceDelete: true,
     tags: { Project: "vpnvpn" },
   });
 

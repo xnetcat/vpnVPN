@@ -352,7 +352,7 @@ async fn apply_linux(config_path: &std::path::Path) -> Result<()> {
         ));
     }
 
-    let wg_quick = find_wg_quick()?;
+    let wg_quick = get_wg_quick_path()?;
     info!("Using wg-quick at: {}", wg_quick);
 
     let output = tokio::process::Command::new(&wg_quick)
@@ -381,7 +381,7 @@ async fn apply_linux(config_path: &std::path::Path) -> Result<()> {
 
 #[cfg(target_os = "linux")]
 async fn disconnect_linux() -> Result<()> {
-    let wg_quick = find_wg_quick()?;
+    let wg_quick = get_wg_quick_path()?;
     let config_path = get_config_path()?;
 
     info!(

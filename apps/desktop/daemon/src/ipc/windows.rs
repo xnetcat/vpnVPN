@@ -23,17 +23,15 @@ pub async fn run_server(state: Arc<RwLock<DaemonState>>) -> Result<()> {
         let pipe = create_pipe_instance()?;
 
         // Wait for a client to connect
-        let connected_pipe = match pipe.connect().await {
-            Ok(p) => p,
-            Err(e) => {
-                error!("Pipe connect error: {}", e);
-                continue;
-            }
-        };
+        // Wait for a client to connect
+        if let Err(e) = pipe.connect().await {
+            error!("Pipe connect error: {}", e);
+            continue;
+        }
 
         let state = Arc::clone(&state);
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(connected_pipe, state).await {
+            if let Err(e) = handle_connection(pipe, state).await {
                 error!("Connection error: {}", e);
             }
         });

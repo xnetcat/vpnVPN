@@ -9,8 +9,9 @@ RUN cargo build --release
 
 FROM debian:bullseye-slim AS runtime
 WORKDIR /
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    iproute2 iptables iputils-ping curl wireguard-tools openvpn strongswan openssl ca-certificates \
+RUN for i in 1 2 3; do apt-get update && break || sleep 5; done && \
+    for i in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    iproute2 iptables iputils-ping curl wireguard-tools openvpn strongswan openssl ca-certificates && break || sleep 5; done \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /src/target/release/vpn-server /usr/local/bin/vpn-server
 USER root
