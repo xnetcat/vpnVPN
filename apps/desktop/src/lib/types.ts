@@ -82,5 +82,9 @@ export type OnboardingState = {
 };
 
 export type AppView = "main" | "settings" | "onboarding";
-export type SettingsTab = "general" | "connection" | "service" | "about" | "debug";
-
+export type SettingsTab =
+  | "general"
+  | "connection"
+  | "service"
+  | "about"
+  | "debug";

@@ -199,7 +199,7 @@ export async function buildServer(): Promise<FastifyInstance> {
 
       req.log.info(
         { count: payload.peers.length, serverId: serverId ?? null },
-        "server_peers_listed"
+        "server_peers_listed",
       );
       return reply.code(200).send(payload);
     } catch (err: unknown) {
@@ -300,7 +300,7 @@ export async function buildServer(): Promise<FastifyInstance> {
 
       req.log.info(
         { userId: body.userId, serverId: body.serverId },
-        "addPeer persisted"
+        "addPeer persisted",
       );
 
       return reply.code(204).send();

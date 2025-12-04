@@ -192,6 +192,7 @@ fn parse_request(rpc: &JsonRpcRequest) -> Result<DaemonRequest> {
 // Stub for non-Windows platforms
 #[cfg(not(windows))]
 pub async fn run_server(_state: Arc<RwLock<DaemonState>>) -> Result<()> {
-    Err(anyhow::anyhow!("Windows named pipes not available on this platform"))
+    Err(anyhow::anyhow!(
+        "Windows named pipes not available on this platform"
+    ))
 }
-

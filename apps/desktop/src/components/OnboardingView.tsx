@@ -52,38 +52,48 @@ const PROTOCOL_OPTIONS: {
   {
     id: "wireguard",
     name: "WireGuard",
-    description: "Modern, fast protocol with excellent security. Recommended for most users.",
+    description:
+      "Modern, fast protocol with excellent security. Recommended for most users.",
     recommended: true,
   },
   {
     id: "openvpn",
     name: "OpenVPN",
-    description: "Battle-tested protocol with wide compatibility. Good for restrictive networks.",
+    description:
+      "Battle-tested protocol with wide compatibility. Good for restrictive networks.",
   },
   {
     id: "ikev2",
     name: "IKEv2/IPsec",
-    description: "Native OS support with good mobile performance. Built into macOS and Windows.",
+    description:
+      "Native OS support with good mobile performance. Built into macOS and Windows.",
   },
 ];
 
 const STEPS: { id: OnboardingStep; title: string; icon: React.ReactNode }[] = [
   { id: "welcome", title: "Welcome", icon: <Shield className="h-5 w-5" /> },
   { id: "protocol", title: "Protocol", icon: <Wifi className="h-5 w-5" /> },
-  { id: "killswitch", title: "Kill Switch", icon: <Lock className="h-5 w-5" /> },
+  {
+    id: "killswitch",
+    title: "Kill Switch",
+    icon: <Lock className="h-5 w-5" />,
+  },
   { id: "install", title: "Install", icon: <Settings className="h-5 w-5" /> },
   { id: "complete", title: "Complete", icon: <Check className="h-5 w-5" /> },
 ];
 
-export function OnboardingView({ onComplete, initialState }: OnboardingViewProps) {
+export function OnboardingView({
+  onComplete,
+  initialState,
+}: OnboardingViewProps) {
   const [step, setStep] = useState<OnboardingStep>(
-    (initialState?.current_step as OnboardingStep) || "welcome"
+    (initialState?.current_step as OnboardingStep) || "welcome",
   );
   const [selectedProtocol, setSelectedProtocol] = useState<Protocol | null>(
-    initialState?.selected_protocol || "wireguard"
+    initialState?.selected_protocol || "wireguard",
   );
   const [killSwitchEnabled, setKillSwitchEnabled] = useState(
-    initialState?.kill_switch_enabled ?? false
+    initialState?.kill_switch_enabled ?? false,
   );
   const [allowLan, setAllowLan] = useState(initialState?.allow_lan ?? true);
   const [isInstalling, setIsInstalling] = useState(false);
@@ -99,11 +109,11 @@ export function OnboardingView({ onComplete, initialState }: OnboardingViewProps
   const verifyDaemonConnection = useCallback(async (): Promise<boolean> => {
     setIsVerifying(true);
     setVerificationFailed(false);
-    
+
     // Try multiple times with delays (daemon may take time to start)
     for (let attempt = 0; attempt < 5; attempt++) {
       setVerificationAttempts(attempt + 1);
-      
+
       try {
         const available = await isDaemonAvailable();
         if (available) {
@@ -117,11 +127,11 @@ export function OnboardingView({ onComplete, initialState }: OnboardingViewProps
       } catch (e) {
         console.error("Daemon verification attempt failed:", e);
       }
-      
+
       // Wait before retry (increasing delay)
       await new Promise((resolve) => setTimeout(resolve, 1000 + attempt * 500));
     }
-    
+
     setIsVerifying(false);
     setVerificationFailed(true);
     return false;
@@ -150,10 +160,10 @@ export function OnboardingView({ onComplete, initialState }: OnboardingViewProps
       // Call Tauri command to install daemon
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("install_daemon");
-      
+
       // Verify daemon is actually running
       const isRunning = await verifyDaemonConnection();
-      
+
       if (isRunning) {
         setInstallSuccess(true);
         // Wait a moment then proceed
@@ -162,12 +172,14 @@ export function OnboardingView({ onComplete, initialState }: OnboardingViewProps
         }, 1500);
       } else {
         setInstallError(
-          "Service installed but failed to start. Click 'Retry Connection' or try reinstalling."
+          "Service installed but failed to start. Click 'Retry Connection' or try reinstalling.",
         );
       }
     } catch (error: any) {
       console.error("Install failed:", error);
-      setInstallError(error.message || "Installation failed. Please try again.");
+      setInstallError(
+        error.message || "Installation failed. Please try again.",
+      );
     } finally {
       setIsInstalling(false);
     }
@@ -176,7 +188,7 @@ export function OnboardingView({ onComplete, initialState }: OnboardingViewProps
   const handleRetryVerification = async () => {
     setVerificationFailed(false);
     setInstallError(null);
-    
+
     const isRunning = await verifyDaemonConnection();
     if (isRunning) {
       setInstallSuccess(true);
@@ -185,7 +197,7 @@ export function OnboardingView({ onComplete, initialState }: OnboardingViewProps
       }, 1500);
     } else {
       setInstallError(
-        "Service is still not responding. Try restarting the app or reinstalling the service."
+        "Service is still not responding. Try restarting the app or reinstalling the service.",
       );
     }
   };
@@ -254,9 +266,9 @@ export function OnboardingView({ onComplete, initialState }: OnboardingViewProps
                 Welcome to vpnVPN
               </h1>
               <p className="mb-8 text-lg text-slate-400">
-                Let's set up your secure VPN connection. This wizard will guide you
-                through configuring your preferred settings and installing the
-                necessary components.
+                Let's set up your secure VPN connection. This wizard will guide
+                you through configuring your preferred settings and installing
+                the necessary components.
               </p>
               <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 text-left">
                 <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
@@ -299,8 +311,8 @@ export function OnboardingView({ onComplete, initialState }: OnboardingViewProps
                 Choose Your Protocol
               </h2>
               <p className="mb-6 text-slate-400">
-                Select the VPN protocol that best fits your needs. You can change
-                this later in settings.
+                Select the VPN protocol that best fits your needs. You can
+                change this later in settings.
               </p>
               <div className="space-y-3">
                 {PROTOCOL_OPTIONS.map((protocol) => (
@@ -348,8 +360,8 @@ export function OnboardingView({ onComplete, initialState }: OnboardingViewProps
                 Kill Switch Settings
               </h2>
               <p className="mb-6 text-slate-400">
-                The kill switch protects your privacy by blocking internet access if
-                the VPN connection drops unexpectedly.
+                The kill switch protects your privacy by blocking internet
+                access if the VPN connection drops unexpectedly.
               </p>
 
               <div className="space-y-4">
@@ -419,8 +431,8 @@ export function OnboardingView({ onComplete, initialState }: OnboardingViewProps
                 <div className="flex items-start gap-3 rounded-xl border border-blue-500/30 bg-blue-500/10 p-4">
                   <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-400" />
                   <p className="text-sm text-blue-300">
-                    The kill switch requires the VPN helper service to be installed.
-                    You'll set this up in the next step.
+                    The kill switch requires the VPN helper service to be
+                    installed. You'll set this up in the next step.
                   </p>
                 </div>
               </div>
@@ -449,8 +461,8 @@ export function OnboardingView({ onComplete, initialState }: OnboardingViewProps
                             Administrator privileges required
                           </p>
                           <p className="mt-1 text-sm text-amber-300/80">
-                            You'll be prompted to enter your password to install the
-                            service. This is a one-time setup.
+                            You'll be prompted to enter your password to install
+                            the service. This is a one-time setup.
                           </p>
                         </div>
                       </div>
@@ -466,7 +478,8 @@ export function OnboardingView({ onComplete, initialState }: OnboardingViewProps
                             Verifying service connection...
                           </p>
                           <p className="mt-1 text-sm text-blue-300/80">
-                            Attempt {verificationAttempts} of 5 - Please wait while we confirm the service is running.
+                            Attempt {verificationAttempts} of 5 - Please wait
+                            while we confirm the service is running.
                           </p>
                         </div>
                       </div>
@@ -563,8 +576,8 @@ export function OnboardingView({ onComplete, initialState }: OnboardingViewProps
                 You're All Set!
               </h2>
               <p className="mb-8 text-lg text-slate-400">
-                vpnVPN is configured and ready to use. Connect to a server to start
-                browsing securely.
+                vpnVPN is configured and ready to use. Connect to a server to
+                start browsing securely.
               </p>
 
               <div className="mb-8 rounded-xl border border-slate-800 bg-slate-900/50 p-6 text-left">
@@ -575,7 +588,10 @@ export function OnboardingView({ onComplete, initialState }: OnboardingViewProps
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-400">Protocol</span>
                     <span className="text-sm font-medium text-slate-200">
-                      {PROTOCOL_OPTIONS.find((p) => p.id === selectedProtocol)?.name}
+                      {
+                        PROTOCOL_OPTIONS.find((p) => p.id === selectedProtocol)
+                          ?.name
+                      }
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
@@ -648,4 +664,3 @@ export function OnboardingView({ onComplete, initialState }: OnboardingViewProps
     </div>
   );
 }
-

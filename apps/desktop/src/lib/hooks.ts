@@ -113,7 +113,7 @@ export function useVpnTools(): {
 // Hook to check actual VPN connection status from the system
 export function useVpnConnectionStatus(
   appStatus: "disconnected" | "connecting" | "connected",
-  pollInterval = 5000
+  pollInterval = 5000,
 ): VpnConnectionStatus | null {
   const [connectionStatus, setConnectionStatus] =
     useState<VpnConnectionStatus | null>(null);
@@ -278,7 +278,7 @@ export function useDeviceRegistration() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ json: params }),
-          }
+          },
         );
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
@@ -294,7 +294,7 @@ export function useDeviceRegistration() {
         setIsLoading(false);
       }
     },
-    []
+    [],
   );
 
   // Confirm connection - call this after VPN connection is verified
@@ -306,7 +306,7 @@ export function useDeviceRegistration() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ json: { deviceId } }),
-        }
+        },
       );
       if (!res.ok) {
         logError("Failed to confirm connection:", res.status);
@@ -325,7 +325,7 @@ export function useDeviceRegistration() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ json: { deviceId } }),
-        }
+        },
       );
       if (!res.ok) {
         logError("Failed to cancel connection:", res.status);
@@ -354,7 +354,7 @@ export function useServerPubkey() {
     (async () => {
       try {
         const res = await authFetch(
-          `${API_BASE_URL}/api/trpc/desktop.serverPubkey`
+          `${API_BASE_URL}/api/trpc/desktop.serverPubkey`,
         );
         if (!res.ok) return;
         const data = await res.json();

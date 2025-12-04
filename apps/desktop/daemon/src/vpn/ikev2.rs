@@ -189,11 +189,11 @@ async fn check_status_macos() -> Result<ConnectionStatus> {
 
 #[cfg(target_os = "macos")]
 fn build_macos_mobileconfig(config: &VpnConfig) -> String {
-    let identity = config
-        .ikev2_identity
+    let identity = config.ikev2_identity.as_deref().unwrap_or("vpnvpn-client");
+    let remote_id = config
+        .ikev2_remote_id
         .as_deref()
-        .unwrap_or("vpnvpn-client");
-    let remote_id = config.ikev2_remote_id.as_deref().unwrap_or(&config.server_endpoint);
+        .unwrap_or(&config.server_endpoint);
 
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -349,9 +349,7 @@ async fn connect_windows(config: &VpnConfig) -> Result<()> {
     let vpn_name = "vpnVPN-IKEv2";
 
     // Check if VPN connection exists
-    let check = tokio::process::Command::new("rasdial")
-        .output()
-        .await?;
+    let check = tokio::process::Command::new("rasdial").output().await?;
 
     let connections = String::from_utf8_lossy(&check.stdout);
 
@@ -398,9 +396,7 @@ async fn disconnect_windows() -> Result<()> {
 
 #[cfg(target_os = "windows")]
 async fn check_status_windows() -> Result<ConnectionStatus> {
-    let output = tokio::process::Command::new("rasdial")
-        .output()
-        .await;
+    let output = tokio::process::Command::new("rasdial").output().await;
 
     let state = match output {
         Ok(o) => {
@@ -437,4 +433,3 @@ fn get_config_path() -> Result<std::path::PathBuf> {
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     Ok(profiles_dir.join("ikev2").join("vpnvpn-ikev2.conf"))
 }
-

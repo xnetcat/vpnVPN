@@ -55,7 +55,7 @@ export function setStoredUser(user: {
 // Helper to make authenticated fetch requests
 export async function authFetch(
   url: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<Response> {
   const token = getStoredSessionToken();
   const headers = new Headers(options.headers);

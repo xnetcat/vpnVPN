@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     console.error("[signout] Error:", error);
     return NextResponse.json(
       { error: "Failed to sign out" },
-      { status: 500, headers: corsHeaders }
+      { status: 500, headers: corsHeaders },
     );
   }
 }

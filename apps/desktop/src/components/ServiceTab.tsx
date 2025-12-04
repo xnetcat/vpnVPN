@@ -100,8 +100,7 @@ function ActionButton({
   const variantStyles = {
     default:
       "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white",
-    danger:
-      "border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20",
+    danger: "border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20",
     warning:
       "border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20",
   };
@@ -145,7 +144,7 @@ export function ServiceTab({
       setShowLogs(false);
       return;
     }
-    
+
     setLogsLoading(true);
     try {
       const logContent = await getDaemonLogs();
@@ -196,9 +195,7 @@ export function ServiceTab({
             <div className="flex items-center gap-4">
               <div
                 className={`flex h-14 w-14 items-center justify-center rounded-xl ${
-                  daemonStatus.running
-                    ? "bg-emerald-500/20"
-                    : "bg-red-500/20"
+                  daemonStatus.running ? "bg-emerald-500/20" : "bg-red-500/20"
                 }`}
               >
                 {daemonStatus.running ? (
@@ -227,7 +224,9 @@ export function ServiceTab({
                   {daemonStatus.running && (
                     <>
                       <span>•</span>
-                      <span>Uptime: {formatUptime(daemonStatus.uptime_secs)}</span>
+                      <span>
+                        Uptime: {formatUptime(daemonStatus.uptime_secs)}
+                      </span>
                     </>
                   )}
                 </div>
@@ -361,7 +360,7 @@ export function ServiceTab({
             {showLogs ? "Hide Logs" : "View Logs"}
           </button>
         </div>
-        
+
         {showLogs && (
           <div className="rounded-xl border border-slate-700 bg-slate-950 p-4">
             <pre className="max-h-96 overflow-auto whitespace-pre-wrap font-mono text-xs text-slate-300">
@@ -386,8 +385,9 @@ export function ServiceTab({
               <div className="flex-1">
                 <p className="font-medium text-purple-300">Update Daemon</p>
                 <p className="mt-1 text-sm text-purple-300/80">
-                  Rebuild the daemon from source and reinstall it. This will stop
-                  any running daemon, build the new version, and start it again.
+                  Rebuild the daemon from source and reinstall it. This will
+                  stop any running daemon, build the new version, and start it
+                  again.
                 </p>
                 <div className="mt-3">
                   <ActionButton
@@ -422,4 +422,3 @@ export function ServiceTab({
     </div>
   );
 }
-

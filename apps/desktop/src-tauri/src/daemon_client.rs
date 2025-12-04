@@ -23,7 +23,7 @@ fn get_socket_path() -> &'static str {
         eprintln!("[daemon_client] Using dev socket: {}", DEV_SOCKET_PATH);
         return DEV_SOCKET_PATH;
     }
-    
+
     // Fall back to production socket
     SOCKET_PATH
 }
@@ -78,22 +78,28 @@ impl Default for DaemonStatus {
 /// Check if daemon is available (checks dev socket first, then production).
 pub fn is_daemon_available() -> bool {
     eprintln!("[daemon_client] Checking if daemon is available...");
-    
+
     #[cfg(unix)]
     {
         // Check dev socket first
         if std::path::Path::new(DEV_SOCKET_PATH).exists() {
-            eprintln!("[daemon_client] Dev socket {} exists, trying to connect...", DEV_SOCKET_PATH);
+            eprintln!(
+                "[daemon_client] Dev socket {} exists, trying to connect...",
+                DEV_SOCKET_PATH
+            );
             if let Ok(_) = UnixStream::connect(DEV_SOCKET_PATH) {
                 eprintln!("[daemon_client] Successfully connected to dev socket");
                 return true;
             }
         }
-        
+
         // Check production socket
         let socket_exists = std::path::Path::new(SOCKET_PATH).exists();
-        eprintln!("[daemon_client] Production socket {} exists: {}", SOCKET_PATH, socket_exists);
-        
+        eprintln!(
+            "[daemon_client] Production socket {} exists: {}",
+            SOCKET_PATH, socket_exists
+        );
+
         if socket_exists {
             match UnixStream::connect(SOCKET_PATH) {
                 Ok(_) => {
@@ -101,7 +107,10 @@ pub fn is_daemon_available() -> bool {
                     true
                 }
                 Err(e) => {
-                    eprintln!("[daemon_client] Failed to connect to production socket: {}", e);
+                    eprintln!(
+                        "[daemon_client] Failed to connect to production socket: {}",
+                        e
+                    );
                     false
                 }
             }
@@ -122,9 +131,9 @@ pub fn is_daemon_available() -> bool {
 #[cfg(unix)]
 fn send_request(method: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
     eprintln!("[daemon_client] send_request: method={}", method);
-    
+
     let socket_path = get_socket_path();
-    
+
     // Connect to socket
     eprintln!("[daemon_client] Connecting to socket: {}", socket_path);
     let mut stream = UnixStream::connect(socket_path).map_err(|e| {
@@ -149,42 +158,47 @@ fn send_request(method: &str, params: serde_json::Value) -> Result<serde_json::V
     };
 
     // Send request
-    let request_json =
-        serde_json::to_string(&request).map_err(|e| format!("Failed to serialize request: {}", e))?;
+    let request_json = serde_json::to_string(&request)
+        .map_err(|e| format!("Failed to serialize request: {}", e))?;
 
     eprintln!("[daemon_client] Sending request: {}", request_json);
-    
+
     stream
         .write_all(request_json.as_bytes())
         .map_err(|e| format!("Failed to send request: {}", e))?;
     stream
         .write_all(b"\n")
         .map_err(|e| format!("Failed to send newline: {}", e))?;
-    stream.flush().map_err(|e| format!("Failed to flush: {}", e))?;
-    
+    stream
+        .flush()
+        .map_err(|e| format!("Failed to flush: {}", e))?;
+
     eprintln!("[daemon_client] Request sent, waiting for response...");
 
     // Read response
     let mut reader = BufReader::new(stream);
     let mut response_line = String::new();
-    reader
-        .read_line(&mut response_line)
-        .map_err(|e| {
-            eprintln!("[daemon_client] Failed to read response: {}", e);
-            format!("Failed to read response: {}", e)
-        })?;
+    reader.read_line(&mut response_line).map_err(|e| {
+        eprintln!("[daemon_client] Failed to read response: {}", e);
+        format!("Failed to read response: {}", e)
+    })?;
 
-    eprintln!("[daemon_client] Received response: {}", response_line.trim());
+    eprintln!(
+        "[daemon_client] Received response: {}",
+        response_line.trim()
+    );
 
     // Parse response
-    let response: JsonRpcResponse = serde_json::from_str(&response_line)
-        .map_err(|e| {
-            eprintln!("[daemon_client] Failed to parse response: {}", e);
-            format!("Failed to parse response: {}", e)
-        })?;
+    let response: JsonRpcResponse = serde_json::from_str(&response_line).map_err(|e| {
+        eprintln!("[daemon_client] Failed to parse response: {}", e);
+        format!("Failed to parse response: {}", e)
+    })?;
 
     if let Some(error) = response.error {
-        eprintln!("[daemon_client] Daemon returned error: {} - {}", error.code, error.message);
+        eprintln!(
+            "[daemon_client] Daemon returned error: {} - {}",
+            error.code, error.message
+        );
         return Err(format!("Daemon error ({}): {}", error.code, error.message));
     }
 
@@ -212,7 +226,7 @@ pub fn ping() -> Result<(), String> {
 /// Get daemon status.
 pub fn get_status() -> Result<DaemonStatus, String> {
     eprintln!("[daemon_client] Getting daemon status...");
-    
+
     let result = send_request("get_status", serde_json::Value::Null)?;
 
     eprintln!("[daemon_client] Raw status result: {:?}", result);
@@ -220,16 +234,18 @@ pub fn get_status() -> Result<DaemonStatus, String> {
     // Extract nested status from response
     if let Some(status_obj) = result.get("Status") {
         eprintln!("[daemon_client] Found Status object: {:?}", status_obj);
-        serde_json::from_value(status_obj.clone())
-            .map_err(|e| {
-                eprintln!("[daemon_client] Failed to parse Status: {}", e);
-                format!("Failed to parse status: {}", e)
-            })
+        serde_json::from_value(status_obj.clone()).map_err(|e| {
+            eprintln!("[daemon_client] Failed to parse Status: {}", e);
+            format!("Failed to parse status: {}", e)
+        })
     } else {
         // Try parsing the whole result
         eprintln!("[daemon_client] No Status object, trying to parse whole result");
         serde_json::from_value(result.clone()).map_err(|e| {
-            eprintln!("[daemon_client] Failed to parse result as DaemonStatus: {}", e);
+            eprintln!(
+                "[daemon_client] Failed to parse result as DaemonStatus: {}",
+                e
+            );
             format!("Failed to parse status: {}", e)
         })
     }
@@ -313,16 +329,26 @@ pub struct ConnectionStatus {
 /// Connect to VPN via daemon.
 pub fn connect_vpn(config: VpnConfig) -> Result<ConnectionStatus, String> {
     eprintln!("[daemon_client] connect_vpn called");
-    eprintln!("[daemon_client] Config: protocol={}, endpoint={}:{}", 
-        config.protocol, config.server_endpoint, config.server_port);
-    eprintln!("[daemon_client] Config: assigned_ip={:?}, wg_private_key={}", 
-        config.assigned_ip, 
-        config.wg_private_key.as_ref().map(|_| "[REDACTED]").unwrap_or("None"));
-    eprintln!("[daemon_client] Config: wg_server_public_key={:?}", 
-        config.wg_server_public_key);
-    
+    eprintln!(
+        "[daemon_client] Config: protocol={}, endpoint={}:{}",
+        config.protocol, config.server_endpoint, config.server_port
+    );
+    eprintln!(
+        "[daemon_client] Config: assigned_ip={:?}, wg_private_key={}",
+        config.assigned_ip,
+        config
+            .wg_private_key
+            .as_ref()
+            .map(|_| "[REDACTED]")
+            .unwrap_or("None")
+    );
+    eprintln!(
+        "[daemon_client] Config: wg_server_public_key={:?}",
+        config.wg_server_public_key
+    );
+
     ensure_daemon_running()?;
-    
+
     let params = serde_json::json!({
         "type": "connect",
         "config": config
@@ -338,7 +364,7 @@ pub fn connect_vpn(config: VpnConfig) -> Result<ConnectionStatus, String> {
         return serde_json::from_value(status.clone())
             .map_err(|e| format!("Failed to parse connection status: {}", e));
     }
-    
+
     if let Some(error) = result.get("Error") {
         let msg = error
             .get("message")
@@ -360,7 +386,7 @@ pub fn connect_vpn(config: VpnConfig) -> Result<ConnectionStatus, String> {
 /// Disconnect VPN via daemon.
 pub fn disconnect_vpn() -> Result<(), String> {
     ensure_daemon_running()?;
-    
+
     let result = send_request("disconnect", serde_json::Value::Null)?;
 
     if let Some(error) = result.get("Error") {
@@ -377,7 +403,7 @@ pub fn disconnect_vpn() -> Result<(), String> {
 /// Get current VPN connection status from daemon.
 pub fn get_connection_status() -> Result<ConnectionStatus, String> {
     ensure_daemon_running()?;
-    
+
     let result = send_request("get_connection_status", serde_json::Value::Null)?;
 
     // Parse connection status from response
@@ -432,24 +458,26 @@ pub struct VpnBinaryPaths {
 /// Get VPN tools status from daemon.
 pub fn get_vpn_tools() -> Result<VpnToolsStatus, String> {
     eprintln!("[daemon_client] Getting VPN tools status...");
-    
+
     let result = send_request("get_vpn_tools", serde_json::Value::Null)?;
-    
+
     eprintln!("[daemon_client] Raw VPN tools result: {:?}", result);
-    
+
     // Extract VpnTools from response
     if let Some(tools_obj) = result.get("VpnTools") {
         eprintln!("[daemon_client] Found VpnTools object: {:?}", tools_obj);
-        serde_json::from_value(tools_obj.clone())
-            .map_err(|e| {
-                eprintln!("[daemon_client] Failed to parse VpnTools: {}", e);
-                format!("Failed to parse VPN tools: {}", e)
-            })
+        serde_json::from_value(tools_obj.clone()).map_err(|e| {
+            eprintln!("[daemon_client] Failed to parse VpnTools: {}", e);
+            format!("Failed to parse VPN tools: {}", e)
+        })
     } else {
         // Try parsing the whole result
         eprintln!("[daemon_client] No VpnTools object, trying to parse whole result");
         serde_json::from_value(result.clone()).map_err(|e| {
-            eprintln!("[daemon_client] Failed to parse result as VpnToolsStatus: {}", e);
+            eprintln!(
+                "[daemon_client] Failed to parse result as VpnToolsStatus: {}",
+                e
+            );
             format!("Failed to parse VPN tools: {}", e)
         })
     }
@@ -458,9 +486,9 @@ pub fn get_vpn_tools() -> Result<VpnToolsStatus, String> {
 /// Refresh VPN tools detection in daemon.
 pub fn refresh_vpn_tools() -> Result<VpnToolsStatus, String> {
     eprintln!("[daemon_client] Refreshing VPN tools...");
-    
+
     let result = send_request("refresh_vpn_tools", serde_json::Value::Null)?;
-    
+
     // Extract VpnTools from response
     if let Some(tools_obj) = result.get("VpnTools") {
         serde_json::from_value(tools_obj.clone())
@@ -474,16 +502,16 @@ pub fn refresh_vpn_tools() -> Result<VpnToolsStatus, String> {
 pub fn update_binary_paths(paths: VpnBinaryPaths) -> Result<VpnToolsStatus, String> {
     eprintln!("[daemon_client] Updating VPN binary paths...");
     eprintln!("[daemon_client] Paths: {:?}", paths);
-    
+
     let params = serde_json::json!({
         "type": "update_binary_paths",
         "paths": paths
     });
-    
+
     let result = send_request("update_binary_paths", params)?;
-    
+
     eprintln!("[daemon_client] Update binary paths result: {:?}", result);
-    
+
     // Extract VpnTools from response
     if let Some(tools_obj) = result.get("VpnTools") {
         serde_json::from_value(tools_obj.clone())
@@ -496,9 +524,9 @@ pub fn update_binary_paths(paths: VpnBinaryPaths) -> Result<VpnToolsStatus, Stri
 /// Get VPN tools from daemon status (includes vpn_tools field).
 pub fn get_vpn_tools_from_status() -> Result<VpnToolsStatus, String> {
     eprintln!("[daemon_client] Getting VPN tools from daemon status...");
-    
+
     let result = send_request("get_status", serde_json::Value::Null)?;
-    
+
     // Extract vpn_tools from Status response
     if let Some(status_obj) = result.get("Status") {
         if let Some(tools_obj) = status_obj.get("vpn_tools") {
@@ -506,7 +534,6 @@ pub fn get_vpn_tools_from_status() -> Result<VpnToolsStatus, String> {
                 .map_err(|e| format!("Failed to parse VPN tools from status: {}", e));
         }
     }
-    
+
     Err("VPN tools not found in daemon status".to_string())
 }
-

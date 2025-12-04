@@ -469,7 +469,7 @@ export default function App() {
     if (!selectedServer) return;
     if (!isCurrentProtocolAvailable) {
       showError(
-        `${protocol === "wireguard" ? "WireGuard" : protocol === "openvpn" ? "OpenVPN" : "IKEv2"} is not installed. Check Settings → Connection for installation instructions.`
+        `${protocol === "wireguard" ? "WireGuard" : protocol === "openvpn" ? "OpenVPN" : "IKEv2"} is not installed. Check Settings → Connection for installation instructions.`,
       );
       return;
     }
@@ -477,7 +477,7 @@ export default function App() {
     // but cannot verify connection status programmatically
     if (protocol === "ikev2" && !vpnTools?.ikev2.available) {
       showError(
-        "IKEv2/IPsec is not available on this system. Please install strongSwan or use a different protocol."
+        "IKEv2/IPsec is not available on this system. Please install strongSwan or use a different protocol.",
       );
       return;
     }
@@ -495,17 +495,17 @@ export default function App() {
         try {
           const { invoke } = await import("@tauri-apps/api/core");
           const [privateKey, pubKey] = await invoke<[string, string]>(
-            "generate_wireguard_keys"
+            "generate_wireguard_keys",
           );
           localPrivateKey = privateKey;
           publicKey = pubKey;
           console.log(
-            "[App] Generated WireGuard keys locally (private key not sent to server)"
+            "[App] Generated WireGuard keys locally (private key not sent to server)",
           );
         } catch (e) {
           console.warn(
             "[App] Failed to generate keys locally, falling back to server-side:",
-            e
+            e,
           );
           // Fall back to server-side generation if wg genkey is not available
         }
@@ -525,11 +525,11 @@ export default function App() {
         console.log("[App] Building WireGuard config with:");
         console.log(
           "[App]   selectedServer.publicIp:",
-          selectedServer.publicIp
+          selectedServer.publicIp,
         );
         console.log(
           "[App]   selectedServer.metadata:",
-          selectedServer.metadata
+          selectedServer.metadata,
         );
         console.log("[App]   wgServerPublicKey:", wgServerPublicKey);
 
@@ -537,7 +537,7 @@ export default function App() {
         const privateKey = localPrivateKey || result.privateKey;
         if (!privateKey) {
           throw new Error(
-            "No private key available for WireGuard configuration"
+            "No private key available for WireGuard configuration",
           );
         }
 
@@ -575,7 +575,7 @@ export default function App() {
         // for manual import into System Settings
         if (protocol === "ikev2") {
           info(
-            "IKEv2 config file opened. Please import it into your System Settings to complete the connection."
+            "IKEv2 config file opened. Please import it into your System Settings to complete the connection.",
           );
           setStatus("disconnected");
           // Don't confirm the device since we can't verify the connection
@@ -601,7 +601,7 @@ export default function App() {
 
           if (attempt < maxRetries - 1) {
             log(
-              `VPN connection not ready yet (attempt ${attempt + 1}/${maxRetries}), waiting for peer sync...`
+              `VPN connection not ready yet (attempt ${attempt + 1}/${maxRetries}), waiting for peer sync...`,
             );
           }
         }
@@ -616,7 +616,7 @@ export default function App() {
         } else {
           warning(
             "VPN config applied but connection could not be verified after multiple attempts. " +
-              "The peer may not have synced to the VPN node yet. Please try again in a few seconds."
+              "The peer may not have synced to the VPN node yet. Please try again in a few seconds.",
           );
           setStatus("disconnected");
           log("VPN connection not verified after retries:", vpnStatus);
@@ -626,7 +626,7 @@ export default function App() {
       } catch (e) {
         logError("Failed to apply VPN config via Tauri", e);
         warning(
-          "Config generated, but failed to apply VPN settings locally. You may need to import it manually."
+          "Config generated, but failed to apply VPN settings locally. You may need to import it manually.",
         );
         // Config was generated but not applied - stay disconnected
         setStatus("disconnected");
@@ -652,7 +652,7 @@ export default function App() {
             onClick: () => {
               void openInBrowser(`${API_BASE_URL}/devices`);
             },
-          }
+          },
         );
       } else {
         showError(errorMessage);
@@ -669,7 +669,7 @@ export default function App() {
     setConfig(null);
     setStatus("disconnected");
     void disconnectVpn(protocol).catch((e) =>
-      logError("Failed to disconnect VPN via Tauri", e)
+      logError("Failed to disconnect VPN via Tauri", e),
     );
   }, [protocol]);
 
@@ -732,7 +732,7 @@ export default function App() {
             } catch (e) {
               logError("Failed to toggle kill switch", e);
             }
-          }
+          },
         );
         unlisten.push(unlistenKillSwitch);
 
@@ -803,7 +803,7 @@ export default function App() {
       protocol,
       wgServerPublicKey,
       userCountry,
-    ]
+    ],
   );
 
   // Show loading screen while checking auth

@@ -89,4 +89,3 @@ export async function buildServer(): Promise<FastifyInstance> {
 }
 
 export { prisma };
-

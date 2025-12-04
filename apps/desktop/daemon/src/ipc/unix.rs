@@ -12,9 +12,9 @@ use vpnvpn_shared::ipc::{DaemonRequest, DaemonResponse, JsonRpcRequest, JsonRpcR
 /// Run the Unix Domain Socket server.
 pub async fn run_server(state: Arc<RwLock<DaemonState>>) -> Result<()> {
     let socket_path = crate::get_socket_path();
-    
+
     info!("Starting IPC server...");
-    
+
     // Remove existing socket file
     if let Err(e) = std::fs::remove_file(&socket_path) {
         if e.kind() != std::io::ErrorKind::NotFound {
@@ -201,4 +201,3 @@ fn parse_request(rpc: &JsonRpcRequest) -> Result<DaemonRequest> {
         _ => Err(anyhow::anyhow!("Unknown method: {}", rpc.method)),
     }
 }
-

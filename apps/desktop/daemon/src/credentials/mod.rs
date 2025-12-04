@@ -31,7 +31,9 @@ pub fn store(key: &str, value: &str) -> Result<()> {
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = (key, value);
-        Err(anyhow::anyhow!("Credential storage not supported on this platform"))
+        Err(anyhow::anyhow!(
+            "Credential storage not supported on this platform"
+        ))
     }
 }
 
@@ -49,7 +51,9 @@ pub fn get(key: &str) -> Result<Option<String>> {
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = key;
-        Err(anyhow::anyhow!("Credential storage not supported on this platform"))
+        Err(anyhow::anyhow!(
+            "Credential storage not supported on this platform"
+        ))
     }
 }
 
@@ -67,7 +71,8 @@ pub fn delete(key: &str) -> Result<()> {
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = key;
-        Err(anyhow::anyhow!("Credential storage not supported on this platform"))
+        Err(anyhow::anyhow!(
+            "Credential storage not supported on this platform"
+        ))
     }
 }
-

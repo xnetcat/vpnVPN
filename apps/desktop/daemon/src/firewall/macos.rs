@@ -132,4 +132,3 @@ mod tests {
         assert!(rules.contains("10.0.0.0/8"));
     }
 }
-

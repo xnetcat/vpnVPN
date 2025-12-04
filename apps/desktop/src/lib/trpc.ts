@@ -32,7 +32,7 @@ class ApiClient {
 
   private async fetch<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
   ): Promise<T> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",

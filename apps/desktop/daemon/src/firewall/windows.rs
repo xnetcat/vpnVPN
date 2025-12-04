@@ -208,10 +208,15 @@ fn disable_netsh_rules() -> Result<()> {
 
     for rule in known_rules {
         let _ = std::process::Command::new("netsh")
-            .args(["advfirewall", "firewall", "delete", "rule", &format!("name={}", rule)])
+            .args([
+                "advfirewall",
+                "firewall",
+                "delete",
+                "rule",
+                &format!("name={}", rule),
+            ])
             .output();
     }
 
     Ok(())
 }
-

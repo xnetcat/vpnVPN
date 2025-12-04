@@ -11,7 +11,7 @@ const WEB_BASE_URL = process.env.NEXTAUTH_URL || "http://localhost:3000";
 
 if (!resend) {
   console.warn(
-    "[email] RESEND_API_KEY not set. Email notifications will be skipped."
+    "[email] RESEND_API_KEY not set. Email notifications will be skipped.",
   );
 }
 
@@ -114,7 +114,7 @@ const secondaryButtonStyle = `
 
 function buildEmailContent(
   template: EmailTemplate,
-  data: Record<string, any>
+  data: Record<string, any>,
 ): { subject: string; html: string; text: string } {
   switch (template) {
     case "welcome": {
@@ -470,7 +470,7 @@ export async function sendEmail(context: EmailContext): Promise<void> {
     // so the frontend can surface an error instead of pretending success.
     if (context.template === "magic_link" || context.template === "otp_code") {
       throw new Error(
-        "RESEND_API_KEY is not configured; cannot send authentication email"
+        "RESEND_API_KEY is not configured; cannot send authentication email",
       );
     }
     return;

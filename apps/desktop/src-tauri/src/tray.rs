@@ -205,9 +205,7 @@ fn load_tray_icon(connected: bool) -> Result<Image<'static>, Box<dyn std::error:
 
 /// Update tray state (call from frontend via command)
 pub fn update_tray_state(app: &AppHandle<Wry>, state: &TrayState) -> Result<(), String> {
-    let tray = app
-        .tray_by_id("vpnvpn-tray")
-        .ok_or("Tray not found")?;
+    let tray = app.tray_by_id("vpnvpn-tray").ok_or("Tray not found")?;
 
     // Update icon
     let icon = load_tray_icon(state.connected).map_err(|e| e.to_string())?;
@@ -226,7 +224,8 @@ pub fn update_tray_state(app: &AppHandle<Wry>, state: &TrayState) -> Result<(), 
     } else {
         "vpnVPN - Disconnected".to_string()
     };
-    tray.set_tooltip(Some(&tooltip)).map_err(|e| e.to_string())?;
+    tray.set_tooltip(Some(&tooltip))
+        .map_err(|e| e.to_string())?;
 
     // Rebuild menu with new state
     let menu = build_tray_menu(app, state).map_err(|e| e.to_string())?;
@@ -234,4 +233,3 @@ pub fn update_tray_state(app: &AppHandle<Wry>, state: &TrayState) -> Result<(), 
 
     Ok(())
 }
-

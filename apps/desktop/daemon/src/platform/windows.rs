@@ -8,7 +8,8 @@ pub fn init() -> Result<()> {
     info!("Initializing Windows platform...");
 
     // Create required directories
-    let program_data = std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".to_string());
+    let program_data =
+        std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".to_string());
     std::fs::create_dir_all(format!(r"{}\vpnvpn", program_data))?;
 
     Ok(())
@@ -20,14 +21,12 @@ pub fn is_admin() -> bool {
     {
         // Check if we're running elevated
         use std::process::Command;
-        
-        let output = Command::new("net")
-            .args(["session"])
-            .output();
-        
+
+        let output = Command::new("net").args(["session"]).output();
+
         matches!(output, Ok(o) if o.status.success())
     }
-    
+
     #[cfg(not(windows))]
     {
         false
@@ -38,7 +37,7 @@ pub fn is_admin() -> bool {
 pub fn install_service_commands(bundled_path: &str) -> Vec<String> {
     let install_dir = r"C:\Program Files\vpnVPN";
     let daemon_path = format!(r"{}\vpnvpn-daemon.exe", install_dir);
-    
+
     vec![
         format!(r#"mkdir "{}" 2>nul"#, install_dir),
         format!(r#"copy "{}" "{}""#, bundled_path, daemon_path),
@@ -102,4 +101,3 @@ Write-Host "vpnVPN Daemon installed successfully"
         bundled_path
     )
 }
-

@@ -16,4 +16,3 @@ export default function DesktopLayout({
   // The DesktopShell component handles its own full-screen layout with header.
   return <>{children}</>;
 }
-

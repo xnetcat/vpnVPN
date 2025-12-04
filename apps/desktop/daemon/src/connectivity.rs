@@ -1,7 +1,7 @@
 //! Internet connectivity checking.
 
-use tracing::{debug, warn};
 use tokio::time::{timeout, Duration};
+use tracing::{debug, warn};
 
 /// Check if internet connectivity is available.
 /// Uses hybrid method: tries ICMP ping first, falls back to DNS lookup if ping fails.
@@ -29,13 +29,13 @@ pub async fn check_internet_connectivity() -> bool {
 /// Tries both 8.8.8.8 (Google DNS) and 1.1.1.1 (Cloudflare DNS).
 async fn check_ping() -> bool {
     let ping_targets = ["8.8.8.8", "1.1.1.1"];
-    
+
     for target in &ping_targets {
         if ping_host(target).await {
             return true;
         }
     }
-    
+
     false
 }
 
@@ -79,10 +79,7 @@ async fn ping_host(host: &str) -> bool {
     }
 }
 
-#[cfg(all(
-    unix,
-    not(any(target_os = "macos", target_os = "linux"))
-))]
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "linux"))))]
 async fn ping_host(host: &str) -> bool {
     // Fallback for other Unix-like OSes – keep the original behavior.
     let output = timeout(
@@ -121,13 +118,13 @@ async fn ping_host(host: &str) -> bool {
 /// Tries to resolve google.com.
 async fn check_dns() -> bool {
     let dns_targets = ["google.com", "cloudflare.com"];
-    
+
     for target in &dns_targets {
         if resolve_dns(target).await {
             return true;
         }
     }
-    
+
     false
 }
 
@@ -142,9 +139,7 @@ async fn resolve_dns(hostname: &str) -> bool {
     let result = timeout(
         Duration::from_secs(2),
         tokio::task::spawn_blocking(move || {
-            format!("{}:80", hostname_owned)
-                .to_socket_addrs()
-                .is_ok()
+            format!("{}:80", hostname_owned).to_socket_addrs().is_ok()
         }),
     )
     .await;
@@ -165,9 +160,7 @@ async fn resolve_dns(hostname: &str) -> bool {
     let result = timeout(
         Duration::from_secs(2),
         tokio::task::spawn_blocking(move || {
-            format!("{}:80", hostname_owned)
-                .to_socket_addrs()
-                .is_ok()
+            format!("{}:80", hostname_owned).to_socket_addrs().is_ok()
         }),
     )
     .await;
@@ -177,4 +170,3 @@ async fn resolve_dns(hostname: &str) -> bool {
         _ => false,
     }
 }
-

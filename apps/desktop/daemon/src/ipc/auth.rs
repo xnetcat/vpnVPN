@@ -143,11 +143,9 @@ fn verify_code_signature_macos(pid: i32, _expected_bundle_id: &str) -> Result<bo
 
 /// Get peer credentials from a Unix socket.
 #[cfg(target_os = "linux")]
-pub fn get_peer_credentials(
-    fd: std::os::unix::io::RawFd,
-) -> Result<(u32, u32, i32)> {
-    use std::os::fd::BorrowedFd;
+pub fn get_peer_credentials(fd: std::os::unix::io::RawFd) -> Result<(u32, u32, i32)> {
     use nix::sys::socket::{getsockopt, sockopt::PeerCredentials};
+    use std::os::fd::BorrowedFd;
 
     // Safety: fd is a valid file descriptor from an accepted socket
     let borrowed_fd = unsafe { BorrowedFd::borrow_raw(fd) };
@@ -157,9 +155,7 @@ pub fn get_peer_credentials(
 
 /// Get peer credentials from a Unix socket (macOS stub).
 #[cfg(target_os = "macos")]
-pub fn get_peer_credentials(
-    _fd: std::os::unix::io::RawFd,
-) -> Result<(u32, u32, i32)> {
+pub fn get_peer_credentials(_fd: std::os::unix::io::RawFd) -> Result<(u32, u32, i32)> {
     // macOS doesn't have SO_PEERCRED, use LOCAL_PEERCRED instead
     // For now, return placeholder values and rely on code signing
     let pid = std::process::id() as i32;
@@ -214,7 +210,8 @@ impl NonceStore {
     /// Clean up expired nonces.
     fn cleanup(&mut self) {
         let max_age = self.max_age;
-        self.nonces.retain(|_, created_at| created_at.elapsed() <= max_age);
+        self.nonces
+            .retain(|_, created_at| created_at.elapsed() <= max_age);
 
         // If still too many, remove oldest
         while self.nonces.len() >= self.max_nonces {
@@ -257,4 +254,3 @@ mod tests {
         assert!(!challenge.is_expired());
     }
 }
-

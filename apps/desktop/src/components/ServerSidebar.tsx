@@ -24,7 +24,7 @@ function groupByCountry(servers: MapServer[]): Map<string, MapServer[]> {
   }
   // Sort countries alphabetically
   return new Map(
-    [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0])),
   );
 }
 
@@ -40,7 +40,7 @@ export function ServerSidebar({
 }: ServerSidebarProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
 
   // Group servers by country
@@ -61,7 +61,7 @@ export function ServerSidebar({
       }
       // Check if any server region matches
       const matchingServers = countryServers.filter((s) =>
-        s.region.toLowerCase().includes(lowerTerm)
+        s.region.toLowerCase().includes(lowerTerm),
       );
       if (matchingServers.length > 0) {
         filtered.set(country, matchingServers);
@@ -82,7 +82,7 @@ export function ServerSidebar({
   useMemo(() => {
     if (selectedServer?.country) {
       setExpandedCountries(
-        (prev) => new Set([...prev, selectedServer.country!])
+        (prev) => new Set([...prev, selectedServer.country!]),
       );
     }
   }, [selectedServer?.country]);
@@ -169,10 +169,10 @@ export function ServerSidebar({
             {[...filteredGroups.entries()].map(([country, countryServers]) => {
               const isExpanded = expandedCountries.has(country);
               const onlineCount = countryServers.filter(
-                (s) => s.status === "online"
+                (s) => s.status === "online",
               ).length;
               const hasSelectedServer = countryServers.some(
-                (s) => s.id === selectedServer?.id
+                (s) => s.id === selectedServer?.id,
               );
 
               return (

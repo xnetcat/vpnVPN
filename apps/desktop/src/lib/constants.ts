@@ -95,4 +95,3 @@ export const TIMEZONE_TO_COUNTRY: Record<string, string> = {
   "Europe/Stockholm": "SE",
   "Europe/Warsaw": "PL",
 };
-

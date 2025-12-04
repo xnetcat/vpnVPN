@@ -12,7 +12,7 @@ import { buildServer } from "./server";
  */
 export async function handler(
   event: APIGatewayProxyEventV2,
-  _context: Context
+  _context: Context,
 ): Promise<APIGatewayProxyResultV2> {
   const fastify = await buildServer();
 
@@ -73,7 +73,3 @@ export async function handler(
 }
 
 export default handler;
-
-
-
-

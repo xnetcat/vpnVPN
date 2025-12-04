@@ -37,10 +37,10 @@ pub async fn handle_request(
 
         DaemonRequest::UpdateSettings { settings } => {
             let mut state = state.write().await;
-            
+
             // Check if binary paths changed, so we need to refresh tools
             let paths_changed = state.settings.binary_paths != settings.binary_paths;
-            
+
             state.settings = settings.clone();
 
             // Save settings to disk
@@ -108,23 +108,23 @@ pub async fn handle_request(
         DaemonRequest::Connect { config } => {
             info!("Connect request received");
             info!("  Protocol: {:?}", config.protocol);
-            info!("  Endpoint: {}:{}", config.server_endpoint, config.server_port);
+            info!(
+                "  Endpoint: {}:{}",
+                config.server_endpoint, config.server_port
+            );
             info!("  Server ID: {}", config.server_id);
             info!("  Assigned IP: {:?}", config.assigned_ip);
             info!("  Has WG private key: {}", config.wg_private_key.is_some());
-            info!("  Has WG server public key: {}", config.wg_server_public_key.is_some());
+            info!(
+                "  Has WG server public key: {}",
+                config.wg_server_public_key.is_some()
+            );
             info!("  DNS: {:?}", config.dns_servers);
 
             let result = match config.protocol {
-                vpnvpn_shared::Protocol::WireGuard => {
-                    crate::vpn::wireguard::connect(&config).await
-                }
-                vpnvpn_shared::Protocol::OpenVPN => {
-                    crate::vpn::openvpn::connect(&config).await
-                }
-                vpnvpn_shared::Protocol::IKEv2 => {
-                    crate::vpn::ikev2::connect(&config).await
-                }
+                vpnvpn_shared::Protocol::WireGuard => crate::vpn::wireguard::connect(&config).await,
+                vpnvpn_shared::Protocol::OpenVPN => crate::vpn::openvpn::connect(&config).await,
+                vpnvpn_shared::Protocol::IKEv2 => crate::vpn::ikev2::connect(&config).await,
             };
 
             match result {
@@ -169,15 +169,9 @@ pub async fn handle_request(
             // Disconnect based on current protocol
             let result = if let Some(protocol) = state.connection.protocol {
                 match protocol {
-                    vpnvpn_shared::Protocol::WireGuard => {
-                        crate::vpn::wireguard::disconnect().await
-                    }
-                    vpnvpn_shared::Protocol::OpenVPN => {
-                        crate::vpn::openvpn::disconnect().await
-                    }
-                    vpnvpn_shared::Protocol::IKEv2 => {
-                        crate::vpn::ikev2::disconnect().await
-                    }
+                    vpnvpn_shared::Protocol::WireGuard => crate::vpn::wireguard::disconnect().await,
+                    vpnvpn_shared::Protocol::OpenVPN => crate::vpn::openvpn::disconnect().await,
+                    vpnvpn_shared::Protocol::IKEv2 => crate::vpn::ikev2::disconnect().await,
                 }
             } else {
                 Ok(())
@@ -236,10 +230,7 @@ pub async fn handle_request(
                 }
                 Err(e) => {
                     error!("Disable kill-switch failed: {}", e);
-                    DaemonResponse::error(
-                        ErrorCode::KillSwitchDisableFailed as i32,
-                        e.to_string(),
-                    )
+                    DaemonResponse::error(ErrorCode::KillSwitchDisableFailed as i32, e.to_string())
                 }
             }
         }
@@ -379,10 +370,7 @@ pub async fn handle_request(
             // Simple nonce validation for now
             // TODO: Implement full code-signing verification
             if nonce.len() < 16 {
-                return DaemonResponse::error(
-                    ErrorCode::InvalidNonce as i32,
-                    "Invalid nonce",
-                );
+                return DaemonResponse::error(ErrorCode::InvalidNonce as i32, "Invalid nonce");
             }
 
             let token = super::server::generate_session_token();
@@ -460,7 +448,10 @@ pub async fn auto_disconnect_vpn(state: Arc<RwLock<DaemonState>>) -> Result<()> 
     // Disable kill-switch first if active
     if state_guard.kill_switch_active {
         if let Err(e) = disable_kill_switch().await {
-            warn!("Failed to disable kill-switch during auto-disconnect: {}", e);
+            warn!(
+                "Failed to disable kill-switch during auto-disconnect: {}",
+                e
+            );
         }
         state_guard.kill_switch_active = false;
     }
@@ -471,15 +462,9 @@ pub async fn auto_disconnect_vpn(state: Arc<RwLock<DaemonState>>) -> Result<()> 
 
     let result = if let Some(protocol) = protocol {
         match protocol {
-            vpnvpn_shared::Protocol::WireGuard => {
-                crate::vpn::wireguard::disconnect().await
-            }
-            vpnvpn_shared::Protocol::OpenVPN => {
-                crate::vpn::openvpn::disconnect().await
-            }
-            vpnvpn_shared::Protocol::IKEv2 => {
-                crate::vpn::ikev2::disconnect().await
-            }
+            vpnvpn_shared::Protocol::WireGuard => crate::vpn::wireguard::disconnect().await,
+            vpnvpn_shared::Protocol::OpenVPN => crate::vpn::openvpn::disconnect().await,
+            vpnvpn_shared::Protocol::IKEv2 => crate::vpn::ikev2::disconnect().await,
         }
     } else {
         Ok(())
@@ -501,4 +486,3 @@ pub async fn auto_disconnect_vpn(state: Arc<RwLock<DaemonState>>) -> Result<()> 
         }
     }
 }
-

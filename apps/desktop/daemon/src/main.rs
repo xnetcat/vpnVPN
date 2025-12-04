@@ -163,14 +163,15 @@ fn init_logging(level: &str) {
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
     // Use RUST_LOG env var if set, otherwise use CLI argument
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(level));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level));
 
     tracing_subscriber::registry()
-        .with(fmt::layer()
-            .with_target(true)
-            .with_thread_ids(true)
-            .with_ansi(true))  // Enable colors in terminal
+        .with(
+            fmt::layer()
+                .with_target(true)
+                .with_thread_ids(true)
+                .with_ansi(true),
+        ) // Enable colors in terminal
         .with(filter)
         .init();
 }
@@ -270,11 +271,10 @@ async fn monitor_connectivity(state: Arc<RwLock<DaemonState>>) {
                 "VPN connected (interface: {:?}) but internet connection lost - auto-disconnecting",
                 interface_name
             );
-            
+
             if let Err(e) = crate::ipc::handler::auto_disconnect_vpn(state.clone()).await {
                 error!("Failed to auto-disconnect VPN: {}", e);
             }
         }
     }
 }
-

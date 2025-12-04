@@ -159,9 +159,7 @@ export const analyticsRouter = router({
     for (const server of servers) {
       const metadata = (server.metadata as Record<string, unknown>) || {};
       const region =
-        (metadata.region as string) ||
-        server.metrics[0]?.region ||
-        "Unknown";
+        (metadata.region as string) || server.metrics[0]?.region || "Unknown";
       const sessions = server.metrics[0]?.activePeers ?? 0;
 
       const existing = byRegion.get(region);
@@ -205,7 +203,10 @@ export const analyticsRouter = router({
 
       if (now - lastSeen > fiveMinutes) {
         health.offline += 1;
-      } else if (metric && ((metric.cpu ?? 0) > 90 || (metric.memory ?? 0) > 0.9)) {
+      } else if (
+        metric &&
+        ((metric.cpu ?? 0) > 90 || (metric.memory ?? 0) > 0.9)
+      ) {
         health.degraded += 1;
       } else {
         health.online += 1;
@@ -262,7 +263,3 @@ export const analyticsRouter = router({
     };
   }),
 });
-
-
-
-

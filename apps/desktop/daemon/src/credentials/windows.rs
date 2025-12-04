@@ -78,4 +78,3 @@ pub fn delete(service: &str, key: &str) -> Result<()> {
     // Ignore errors (credential might not exist)
     Ok(())
 }
-

@@ -68,15 +68,22 @@ impl VpnNode {
             listen_port = listen_port,
             "vpn_node_initializing"
         );
-        
+
         let mut backends: Vec<Arc<dyn VpnBackend>> = Vec::new();
         for proto in enabled {
             match proto {
                 VpnProtocol::WireGuard => {
-                    info!(protocol = "wireguard", port = listen_port, "creating_wireguard_backend");
+                    info!(
+                        protocol = "wireguard",
+                        port = listen_port,
+                        "creating_wireguard_backend"
+                    );
                     match wireguard::WireGuardBackend::new(listen_port) {
                         Ok(backend) => {
-                            info!(protocol = "wireguard", "wireguard_backend_created_successfully");
+                            info!(
+                                protocol = "wireguard",
+                                "wireguard_backend_created_successfully"
+                            );
                             backends.push(Arc::new(backend));
                         }
                         Err(e) => {
@@ -113,12 +120,9 @@ impl VpnNode {
                 }
             }
         }
-        
-        info!(
-            backend_count = backends.len(),
-            "vpn_node_initialized"
-        );
-        
+
+        info!(backend_count = backends.len(), "vpn_node_initialized");
+
         Ok(Self {
             backends,
             last_egress_by_proto: Arc::new(RwLock::new(Default::default())),
@@ -126,7 +130,10 @@ impl VpnNode {
     }
 
     pub fn start_all(&self) {
-        info!(backend_count = self.backends.len(), "starting_all_vpn_backends");
+        info!(
+            backend_count = self.backends.len(),
+            "starting_all_vpn_backends"
+        );
         for b in &self.backends {
             let protocol = b.protocol().as_str();
             info!(protocol = protocol, "starting_backend");
@@ -139,7 +146,10 @@ impl VpnNode {
     }
 
     pub fn stop_all(&self) {
-        info!(backend_count = self.backends.len(), "stopping_all_vpn_backends");
+        info!(
+            backend_count = self.backends.len(),
+            "stopping_all_vpn_backends"
+        );
         for b in &self.backends {
             let protocol = b.protocol().as_str();
             info!(protocol = protocol, "stopping_backend");
@@ -152,7 +162,10 @@ impl VpnNode {
     }
 
     pub fn collect_status(&self) -> Vec<BackendStatus> {
-        debug!(backend_count = self.backends.len(), "collecting_backend_status");
+        debug!(
+            backend_count = self.backends.len(),
+            "collecting_backend_status"
+        );
         let statuses: Vec<BackendStatus> = self.backends
             .iter()
             .filter_map(|b| {
@@ -189,10 +202,14 @@ impl VpnNode {
                 "peer_spec"
             );
         }
-        
+
         for b in &self.backends {
             let protocol = b.protocol().as_str();
-            debug!(protocol = protocol, peer_count = peers.len(), "applying_peers_to_backend");
+            debug!(
+                protocol = protocol,
+                peer_count = peers.len(),
+                "applying_peers_to_backend"
+            );
             match b.apply_peers(peers) {
                 Ok(_) => info!(protocol = protocol, "peers_applied_successfully"),
                 Err(e) => {

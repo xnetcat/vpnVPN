@@ -23,7 +23,7 @@ export function useToasts() {
     type: ToastType,
     message: string,
     duration: number = 5000,
-    action?: ToastAction
+    action?: ToastAction,
   ) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     setToasts((prev) => [...prev, { id, type, message, duration, action }]);
@@ -53,6 +53,3 @@ export function useToasts() {
       addToast("info", message, duration ?? 5000, action),
   };
 }
-
-
-

@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   if (!sig || !webhookSecret) {
     return NextResponse.json(
       { error: "Missing signature/secret" },
-      { status: 400 }
+      { status: 400 },
     );
   }
   const body = await req.text();
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     const error = err as Error;
     return NextResponse.json(
       { error: `Webhook Error: ${error.message}` },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -159,7 +159,7 @@ export async function POST(req: Request) {
                 {
                   userId: user.id,
                   error: e,
-                }
+                },
               );
             }
 

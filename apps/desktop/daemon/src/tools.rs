@@ -115,7 +115,11 @@ fn detect_openvpn(custom_paths: &VpnBinaryPaths) -> VpnToolInfo {
     #[cfg(not(target_os = "windows"))]
     let binary_name = "openvpn";
 
-    detect_tool(binary_name, custom_paths.openvpn_path.as_deref(), &OPENVPN_SEARCH_PATHS)
+    detect_tool(
+        binary_name,
+        custom_paths.openvpn_path.as_deref(),
+        &OPENVPN_SEARCH_PATHS,
+    )
 }
 
 #[cfg(target_os = "macos")]
@@ -151,16 +155,28 @@ fn detect_ikev2(custom_paths: &VpnBinaryPaths) -> VpnToolInfo {
     #[cfg(target_os = "macos")]
     {
         // macOS uses networksetup (built-in)
-        detect_tool("networksetup", custom_paths.ikev2_path.as_deref(), &IKEV2_SEARCH_PATHS_MACOS)
+        detect_tool(
+            "networksetup",
+            custom_paths.ikev2_path.as_deref(),
+            &IKEV2_SEARCH_PATHS_MACOS,
+        )
     }
 
     #[cfg(target_os = "linux")]
     {
         // Linux typically uses strongSwan (ipsec command) or NetworkManager (nmcli)
-        let mut info = detect_tool("ipsec", custom_paths.ikev2_path.as_deref(), &IKEV2_SEARCH_PATHS_LINUX);
+        let mut info = detect_tool(
+            "ipsec",
+            custom_paths.ikev2_path.as_deref(),
+            &IKEV2_SEARCH_PATHS_LINUX,
+        );
         if !info.available {
             // Try strongswan directly
-            info = detect_tool("strongswan", None, &["/usr/sbin/strongswan", "/usr/local/sbin/strongswan"]);
+            info = detect_tool(
+                "strongswan",
+                None,
+                &["/usr/sbin/strongswan", "/usr/local/sbin/strongswan"],
+            );
         }
         if !info.available {
             // Try nmcli as fallback
@@ -175,32 +191,31 @@ fn detect_ikev2(custom_paths: &VpnBinaryPaths) -> VpnToolInfo {
     #[cfg(target_os = "windows")]
     {
         // Windows has built-in IKEv2 support via rasdial/PowerShell
-        detect_tool("rasdial.exe", custom_paths.ikev2_path.as_deref(), &IKEV2_SEARCH_PATHS_WINDOWS)
+        detect_tool(
+            "rasdial.exe",
+            custom_paths.ikev2_path.as_deref(),
+            &IKEV2_SEARCH_PATHS_WINDOWS,
+        )
     }
 }
 
 #[cfg(target_os = "macos")]
-const IKEV2_SEARCH_PATHS_MACOS: &[&str] = &[
-    "/usr/sbin/networksetup",
-    "/usr/bin/networksetup",
-];
+const IKEV2_SEARCH_PATHS_MACOS: &[&str] = &["/usr/sbin/networksetup", "/usr/bin/networksetup"];
 
 #[cfg(target_os = "linux")]
-const IKEV2_SEARCH_PATHS_LINUX: &[&str] = &[
-    "/usr/sbin/ipsec",
-    "/usr/local/sbin/ipsec",
-    "/sbin/ipsec",
-];
+const IKEV2_SEARCH_PATHS_LINUX: &[&str] =
+    &["/usr/sbin/ipsec", "/usr/local/sbin/ipsec", "/sbin/ipsec"];
 
 #[cfg(target_os = "windows")]
-const IKEV2_SEARCH_PATHS_WINDOWS: &[&str] = &[
-    r"C:\Windows\System32\rasdial.exe",
-];
+const IKEV2_SEARCH_PATHS_WINDOWS: &[&str] = &[r"C:\Windows\System32\rasdial.exe"];
 
 // ============ Generic Tool Detection ============
 
 fn detect_tool(binary_name: &str, custom_path: Option<&str>, search_paths: &[&str]) -> VpnToolInfo {
-    debug!("Detecting tool: {} (custom_path: {:?})", binary_name, custom_path);
+    debug!(
+        "Detecting tool: {} (custom_path: {:?})",
+        binary_name, custom_path
+    );
 
     // 1. Check custom path first
     if let Some(path) = custom_path {
@@ -257,7 +272,10 @@ fn detect_tool(binary_name: &str, custom_path: Option<&str>, search_paths: &[&st
         path: None,
         version: None,
         custom_path: custom_path.map(|s| s.to_string()),
-        error: Some(format!("{} not found. Install it or set a custom path.", binary_name)),
+        error: Some(format!(
+            "{} not found. Install it or set a custom path.",
+            binary_name
+        )),
     }
 }
 
@@ -306,9 +324,18 @@ fn extract_version(text: &str) -> Option<String> {
     // Try to find version-like pattern
     for word in text.split_whitespace() {
         let word = word.trim_start_matches('v').trim_start_matches('V');
-        if word.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+        if word
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_digit())
+            .unwrap_or(false)
+        {
             // Check if it looks like a version (contains dots and numbers)
-            if word.contains('.') && word.chars().all(|c| c.is_ascii_digit() || c == '.' || c == '-' || c == '_') {
+            if word.contains('.')
+                && word
+                    .chars()
+                    .all(|c| c.is_ascii_digit() || c == '.' || c == '-' || c == '_')
+            {
                 return Some(word.to_string());
             }
         }
@@ -339,9 +366,14 @@ mod tests {
 
     #[test]
     fn test_extract_version() {
-        assert_eq!(extract_version("WireGuard v1.0.20210914"), Some("1.0.20210914".to_string()));
+        assert_eq!(
+            extract_version("WireGuard v1.0.20210914"),
+            Some("1.0.20210914".to_string())
+        );
         assert_eq!(extract_version("OpenVPN 2.5.5"), Some("2.5.5".to_string()));
-        assert_eq!(extract_version("networksetup version 1.0"), Some("1.0".to_string()));
+        assert_eq!(
+            extract_version("networksetup version 1.0"),
+            Some("1.0".to_string())
+        );
     }
 }
-

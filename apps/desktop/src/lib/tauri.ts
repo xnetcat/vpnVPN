@@ -45,7 +45,7 @@ export const logError = (...args: unknown[]) => {
 // VPN config operations
 export async function applyVpnConfig(
   protocol: Protocol,
-  config: string
+  config: string,
 ): Promise<void> {
   await invoke("apply_vpn_config", { protocol, config });
 }
@@ -143,7 +143,7 @@ export async function refreshVpnTools(): Promise<VpnToolsStatus | null> {
 
 // Update VPN binary paths in daemon and return refreshed tools status
 export async function updateVpnBinaryPaths(
-  paths: VpnBinaryPaths
+  paths: VpnBinaryPaths,
 ): Promise<VpnToolsStatus | null> {
   try {
     log("Updating VPN binary paths:", paths);
@@ -155,7 +155,7 @@ export async function updateVpnBinaryPaths(
         wireguardCliPath: paths.wireguard_cli_path ?? null,
         openvpnPath: paths.openvpn_path ?? null,
         ikev2Path: paths.ikev2_path ?? null,
-      }
+      },
     );
 
     if (legacy) {
@@ -340,7 +340,7 @@ export async function getOnboardingState(): Promise<OnboardingState | null> {
 
 // Save onboarding state
 export async function saveOnboardingState(
-  state: OnboardingState
+  state: OnboardingState,
 ): Promise<void> {
   await invoke("save_onboarding_state", { state });
 }

@@ -40,4 +40,3 @@ pub fn generate_nonce() -> String {
     rand::thread_rng().fill(&mut bytes);
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
-

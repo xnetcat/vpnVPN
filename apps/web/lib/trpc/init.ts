@@ -11,15 +11,17 @@ export type Context = {
 };
 
 // Create context with optional request for Authorization header support
-export const createContext = async (opts?: { req?: Request }): Promise<Context> => {
+export const createContext = async (opts?: {
+  req?: Request;
+}): Promise<Context> => {
   const req = opts?.req;
-  
+
   // Check for Authorization header first (desktop app)
   if (req) {
     const authHeader = req.headers.get("Authorization");
     if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.slice(7);
-      
+
       // Look up the session in the database
       const dbSession = await prisma.session.findUnique({
         where: { sessionToken: token },
@@ -37,7 +39,7 @@ export const createContext = async (opts?: { req?: Request }): Promise<Context> 
           } as any,
           expires: dbSession.expires.toISOString(),
         };
-        
+
         return {
           session,
           prisma,

@@ -85,4 +85,3 @@ pub fn uninstall_daemon_script() -> &'static str {
         rm -f /var/run/vpnvpn-daemon.sock
     '"#
 }
-

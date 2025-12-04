@@ -228,7 +228,9 @@ fn enable_iptables(vpn_interface: &str, allow_lan: bool) -> Result<()> {
     ];
 
     for rule in output_rules {
-        std::process::Command::new("iptables").args(&rule).output()?;
+        std::process::Command::new("iptables")
+            .args(&rule)
+            .output()?;
     }
 
     if allow_lan {
@@ -302,4 +304,3 @@ fn disable_iptables() -> Result<()> {
 
     Ok(())
 }
-

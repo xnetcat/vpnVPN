@@ -26,7 +26,7 @@ type ServerMapProps = {
 // Get coordinates for a server
 function getServerCoords(
   server: MapServer,
-  userCountry: string | null
+  userCountry: string | null,
 ): [number, number] | null {
   // Try direct country code
   if (server.country && COUNTRY_COORDS[server.country]) {

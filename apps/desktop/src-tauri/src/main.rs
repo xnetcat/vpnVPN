@@ -47,22 +47,24 @@ fn get_machine_id() -> String {
 #[tauri::command]
 fn generate_wireguard_keys() -> Result<(String, String), String> {
     use std::process::Command;
-    
+
     // Generate private key using wg genkey
-    let private_key_output = Command::new("wg")
-        .arg("genkey")
-        .output()
-        .map_err(|e| format!("Failed to run wg genkey: {}. Make sure WireGuard is installed.", e))?;
-    
+    let private_key_output = Command::new("wg").arg("genkey").output().map_err(|e| {
+        format!(
+            "Failed to run wg genkey: {}. Make sure WireGuard is installed.",
+            e
+        )
+    })?;
+
     if !private_key_output.status.success() {
         let stderr = String::from_utf8_lossy(&private_key_output.stderr);
         return Err(format!("wg genkey failed: {}", stderr));
     }
-    
+
     let private_key = String::from_utf8_lossy(&private_key_output.stdout)
         .trim()
         .to_string();
-    
+
     // Derive public key from private key
     let mut public_key_process = Command::new("wg")
         .arg("pubkey")
@@ -70,26 +72,27 @@ fn generate_wireguard_keys() -> Result<(String, String), String> {
         .stdout(std::process::Stdio::piped())
         .spawn()
         .map_err(|e| format!("Failed to run wg pubkey: {}", e))?;
-    
+
     use std::io::Write;
     if let Some(mut stdin) = public_key_process.stdin.take() {
-        stdin.write_all(private_key.as_bytes())
+        stdin
+            .write_all(private_key.as_bytes())
             .map_err(|e| format!("Failed to write to wg pubkey stdin: {}", e))?;
     }
-    
+
     let public_key_output = public_key_process
         .wait_with_output()
         .map_err(|e| format!("Failed to get wg pubkey output: {}", e))?;
-    
+
     if !public_key_output.status.success() {
         let stderr = String::from_utf8_lossy(&public_key_output.stderr);
         return Err(format!("wg pubkey failed: {}", stderr));
     }
-    
+
     let public_key = String::from_utf8_lossy(&public_key_output.stdout)
         .trim()
         .to_string();
-    
+
     Ok((private_key, public_key))
 }
 
@@ -108,11 +111,11 @@ struct VpnToolsStatus {
 #[tauri::command]
 fn detect_vpn_tools() -> VpnToolsStatus {
     eprintln!("[tauri] detect_vpn_tools called");
-    
+
     // Try to get tools from daemon first
     if daemon_client::is_daemon_available() {
         eprintln!("[tauri] Daemon available, getting tools from daemon");
-        
+
         match daemon_client::get_vpn_tools() {
             Ok(tools) => {
                 eprintln!("[tauri] Got tools from daemon: {:?}", tools);
@@ -126,13 +129,16 @@ fn detect_vpn_tools() -> VpnToolsStatus {
                 };
             }
             Err(e) => {
-                eprintln!("[tauri] Failed to get tools from daemon: {}, using fallback", e);
+                eprintln!(
+                    "[tauri] Failed to get tools from daemon: {}, using fallback",
+                    e
+                );
             }
         }
     } else {
         eprintln!("[tauri] Daemon not available, using fallback detection");
     }
-    
+
     // Fallback: basic detection when daemon is not available
     detect_vpn_tools_fallback()
 }
@@ -163,13 +169,13 @@ fn find_command_basic(cmd: &str) -> Option<String> {
         format!("/bin/{}", cmd),
         format!("/sbin/{}", cmd),
     ];
-    
+
     for path in common_paths {
         if std::path::Path::new(&path).exists() {
             return Some(path);
         }
     }
-    
+
     // Try which command
     #[cfg(not(target_os = "windows"))]
     {
@@ -182,7 +188,7 @@ fn find_command_basic(cmd: &str) -> Option<String> {
             }
         }
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         if let Ok(output) = std::process::Command::new("where").arg(cmd).output() {
@@ -196,7 +202,7 @@ fn find_command_basic(cmd: &str) -> Option<String> {
             }
         }
     }
-    
+
     None
 }
 
@@ -236,13 +242,13 @@ fn get_ikev2_path_basic() -> Option<String> {
 #[tauri::command]
 fn refresh_vpn_tools() -> Result<VpnToolsStatus, String> {
     eprintln!("[tauri] refresh_vpn_tools called");
-    
+
     if !daemon_client::is_daemon_available() {
         return Err("Daemon not available. Start the daemon to refresh tools.".to_string());
     }
-    
+
     let tools = daemon_client::refresh_vpn_tools()?;
-    
+
     Ok(VpnToolsStatus {
         wireguard_available: tools.wireguard.available,
         wireguard_path: tools.wireguard.path,
@@ -264,20 +270,20 @@ fn update_vpn_binary_paths(
     eprintln!("[tauri] update_vpn_binary_paths called");
     eprintln!("[tauri] wg_quick_path: {:?}", wg_quick_path);
     eprintln!("[tauri] openvpn_path: {:?}", openvpn_path);
-    
+
     if !daemon_client::is_daemon_available() {
         return Err("Daemon not available. Start the daemon to update binary paths.".to_string());
     }
-    
+
     let paths = daemon_client::VpnBinaryPaths {
         wg_quick_path,
         wireguard_cli_path,
         openvpn_path,
         ikev2_path,
     };
-    
+
     let tools = daemon_client::update_binary_paths(paths)?;
-    
+
     Ok(VpnToolsStatus {
         wireguard_available: tools.wireguard.available,
         wireguard_path: tools.wireguard.path,
@@ -292,11 +298,11 @@ fn update_vpn_binary_paths(
 #[tauri::command]
 fn get_vpn_tools_detailed() -> Result<daemon_client::VpnToolsStatus, String> {
     eprintln!("[tauri] get_vpn_tools_detailed called");
-    
+
     if !daemon_client::is_daemon_available() {
         return Err("Daemon not available".to_string());
     }
-    
+
     daemon_client::get_vpn_tools()
 }
 
@@ -556,16 +562,18 @@ fn disconnect_ikev2() -> Result<(), String> {
 fn apply_vpn_config(protocol: String, config: String) -> Result<(), String> {
     eprintln!("[apply_vpn_config] Called with protocol: {}", protocol);
     eprintln!("[apply_vpn_config] Config:\n{}", config);
-    
+
     // Parse the config string to extract VPN parameters
     let vpn_config = parse_vpn_config(&protocol, &config)?;
-    
-    eprintln!("[apply_vpn_config] Parsed config: endpoint={}:{}", 
-        vpn_config.server_endpoint, vpn_config.server_port);
-    
+
+    eprintln!(
+        "[apply_vpn_config] Parsed config: endpoint={}:{}",
+        vpn_config.server_endpoint, vpn_config.server_port
+    );
+
     // Connect via daemon
     daemon_client::connect_vpn(vpn_config)?;
-    
+
     eprintln!("[apply_vpn_config] Connection request sent successfully");
     Ok(())
 }
@@ -609,9 +617,13 @@ fn parse_wireguard_config(config: &str) -> Result<daemon_client::VpnConfig, Stri
         if line.starts_with("PrivateKey") {
             private_key = line.split('=').nth(1).map(|s| s.trim().to_string());
         } else if line.starts_with("Address") {
-            address = line.split('=').nth(1).map(|s| s.trim().split('/').next().unwrap_or("").to_string());
+            address = line
+                .split('=')
+                .nth(1)
+                .map(|s| s.trim().split('/').next().unwrap_or("").to_string());
         } else if line.starts_with("DNS") {
-            dns = line.split('=')
+            dns = line
+                .split('=')
                 .nth(1)
                 .map(|s| s.split(',').map(|d| d.trim().to_string()).collect())
                 .unwrap_or_default();
@@ -661,7 +673,11 @@ fn parse_wireguard_config(config: &str) -> Result<daemon_client::VpnConfig, Stri
         ovpn_config: None,
         ikev2_identity: None,
         ikev2_remote_id: None,
-        dns_servers: if dns.is_empty() { vec!["1.1.1.1".to_string()] } else { dns },
+        dns_servers: if dns.is_empty() {
+            vec!["1.1.1.1".to_string()]
+        } else {
+            dns
+        },
     })
 }
 
@@ -866,12 +882,12 @@ fn is_daemon_available() -> bool {
 #[tauri::command]
 fn get_daemon_status() -> Result<daemon_client::DaemonStatus, String> {
     eprintln!("[get_daemon_status] Called");
-    
+
     if !daemon_client::is_daemon_available() {
         eprintln!("[get_daemon_status] Daemon not available, returning default status");
         return Ok(daemon_client::DaemonStatus::default());
     }
-    
+
     eprintln!("[get_daemon_status] Daemon available, getting status");
     let result = daemon_client::get_status();
     eprintln!("[get_daemon_status] Result: {:?}", result);
@@ -882,17 +898,21 @@ fn get_daemon_status() -> Result<daemon_client::DaemonStatus, String> {
 #[tauri::command]
 fn get_daemon_logs() -> Result<String, String> {
     eprintln!("[get_daemon_logs] Called");
-    
+
     #[cfg(target_os = "macos")]
     {
         let mut logs = String::new();
-        
+
         // Read stdout log
         if let Ok(stdout) = std::fs::read_to_string("/var/log/vpnvpn-daemon.log") {
             logs.push_str("=== STDOUT LOG ===\n");
             // Get last 100 lines
             let lines: Vec<&str> = stdout.lines().collect();
-            let start = if lines.len() > 100 { lines.len() - 100 } else { 0 };
+            let start = if lines.len() > 100 {
+                lines.len() - 100
+            } else {
+                0
+            };
             for line in &lines[start..] {
                 logs.push_str(line);
                 logs.push('\n');
@@ -900,12 +920,16 @@ fn get_daemon_logs() -> Result<String, String> {
         } else {
             logs.push_str("=== STDOUT LOG ===\n(not found)\n");
         }
-        
+
         // Read stderr log
         if let Ok(stderr) = std::fs::read_to_string("/var/log/vpnvpn-daemon.error.log") {
             logs.push_str("\n=== STDERR LOG ===\n");
             let lines: Vec<&str> = stderr.lines().collect();
-            let start = if lines.len() > 100 { lines.len() - 100 } else { 0 };
+            let start = if lines.len() > 100 {
+                lines.len() - 100
+            } else {
+                0
+            };
             for line in &lines[start..] {
                 logs.push_str(line);
                 logs.push('\n');
@@ -913,7 +937,7 @@ fn get_daemon_logs() -> Result<String, String> {
         } else {
             logs.push_str("\n=== STDERR LOG ===\n(not found)\n");
         }
-        
+
         // Get launchctl info
         if let Ok(output) = std::process::Command::new("launchctl")
             .args(["list", "com.vpnvpn.daemon"])
@@ -925,20 +949,20 @@ fn get_daemon_logs() -> Result<String, String> {
                 logs.push_str(&String::from_utf8_lossy(&output.stderr));
             }
         }
-        
+
         Ok(logs)
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         let output = std::process::Command::new("journalctl")
             .args(["-u", "vpnvpn-daemon", "-n", "100", "--no-pager"])
             .output()
             .map_err(|e| format!("Failed to get logs: {}", e))?;
-        
+
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         Ok("Windows log viewing not yet implemented".to_string())
@@ -966,7 +990,7 @@ fn is_using_dev_socket() -> bool {
 #[tauri::command]
 fn restart_daemon() -> Result<(), String> {
     eprintln!("[restart_daemon] Starting daemon restart...");
-    
+
     // Check if we're in dev mode (using /tmp socket)
     if is_using_dev_socket() {
         eprintln!("[restart_daemon] Dev mode detected - sending restart signal to daemon");
@@ -981,7 +1005,10 @@ fn restart_daemon() -> Result<(), String> {
             }
             Err(e) => {
                 eprintln!("[restart_daemon] Failed to send restart request: {}", e);
-                Err(format!("Failed to restart daemon: {}. Try running: sudo bun run dev:daemon:watch", e))
+                Err(format!(
+                    "Failed to restart daemon: {}. Try running: sudo bun run dev:daemon:watch",
+                    e
+                ))
             }
         }
     } else {
@@ -995,12 +1022,12 @@ fn restart_daemon() -> Result<(), String> {
 #[tauri::command]
 fn stop_daemon() -> Result<(), String> {
     eprintln!("[stop_daemon] Stopping daemon...");
-    
+
     if is_using_dev_socket() {
         eprintln!("[stop_daemon] Dev mode - daemon must be stopped manually (Ctrl+C in terminal)");
         return Err("In development mode, stop the daemon manually by pressing Ctrl+C in the terminal where it's running.".to_string());
     }
-    
+
     // Production mode
     #[cfg(target_os = "macos")]
     {
@@ -1008,36 +1035,36 @@ fn stop_daemon() -> Result<(), String> {
             .args(["unload", "/Library/LaunchDaemons/com.vpnvpn.daemon.plist"])
             .status()
             .map_err(|e| format!("Failed to stop daemon: {}", e))?;
-        
+
         if !status.success() {
             return Err("Failed to stop daemon service".to_string());
         }
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         let status = std::process::Command::new("systemctl")
             .args(["stop", "vpnvpn-daemon"])
             .status()
             .map_err(|e| format!("Failed to stop daemon: {}", e))?;
-        
+
         if !status.success() {
             return Err("Failed to stop daemon service".to_string());
         }
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         let status = std::process::Command::new("net")
             .args(["stop", "vpnvpn-daemon"])
             .status()
             .map_err(|e| format!("Failed to stop daemon: {}", e))?;
-        
+
         if !status.success() {
             return Err("Failed to stop daemon service".to_string());
         }
     }
-    
+
     Ok(())
 }
 
@@ -1045,7 +1072,7 @@ fn stop_daemon() -> Result<(), String> {
 fn sidecar_binary_name() -> String {
     let target = std::env::consts::ARCH;
     let os = std::env::consts::OS;
-    
+
     let triple = match (os, target) {
         ("macos", "x86_64") => "x86_64-apple-darwin",
         ("macos", "aarch64") => "aarch64-apple-darwin",
@@ -1055,7 +1082,7 @@ fn sidecar_binary_name() -> String {
         ("windows", "aarch64") => "aarch64-pc-windows-msvc",
         _ => "unknown",
     };
-    
+
     let ext = if os == "windows" { ".exe" } else { "" };
     format!("vpnvpn-daemon-{}{}", triple, ext)
 }
@@ -1064,12 +1091,11 @@ fn sidecar_binary_name() -> String {
 /// In production builds, it's bundled as a Tauri sidecar.
 /// In development, we look for it in the cargo build output.
 fn find_daemon_binary() -> Result<PathBuf, String> {
-    let app_path = std::env::current_exe()
-        .map_err(|e| format!("Failed to get exe path: {e}"))?;
+    let app_path = std::env::current_exe().map_err(|e| format!("Failed to get exe path: {e}"))?;
 
     // List of possible daemon binary locations (in order of priority)
     let mut candidates: Vec<PathBuf> = Vec::new();
-    
+
     // Get sidecar name for current platform
     let sidecar_name = sidecar_binary_name();
 
@@ -1081,14 +1107,19 @@ fn find_daemon_binary() -> Result<PathBuf, String> {
             candidates.push(exe_dir.join("vpnvpn-daemon"));
         }
         // Production: bundled in app Contents/Library/LaunchServices/
-        if let Some(bundle_path) = app_path.parent().and_then(|p| p.parent()).and_then(|p| p.parent()) {
+        if let Some(bundle_path) = app_path
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+        {
             candidates.push(bundle_path.join("Contents/Library/LaunchServices/com.vpnvpn.daemon"));
             candidates.push(bundle_path.join("Contents/Resources/vpnvpn-daemon"));
             candidates.push(bundle_path.join(format!("Contents/MacOS/{}", sidecar_name)));
         }
         // Development: cargo build output (release)
         if let Some(workspace_root) = find_workspace_root(&app_path) {
-            candidates.push(workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"));
+            candidates
+                .push(workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"));
             candidates.push(workspace_root.join("apps/desktop/daemon/target/debug/vpnvpn-daemon"));
             candidates.push(workspace_root.join("target/release/vpnvpn-daemon"));
             candidates.push(workspace_root.join("target/debug/vpnvpn-daemon"));
@@ -1104,7 +1135,8 @@ fn find_daemon_binary() -> Result<PathBuf, String> {
         }
         // Development: cargo build output
         if let Some(workspace_root) = find_workspace_root(&app_path) {
-            candidates.push(workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"));
+            candidates
+                .push(workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"));
             candidates.push(workspace_root.join("apps/desktop/daemon/target/debug/vpnvpn-daemon"));
             candidates.push(workspace_root.join("target/release/vpnvpn-daemon"));
             candidates.push(workspace_root.join("target/debug/vpnvpn-daemon"));
@@ -1123,8 +1155,10 @@ fn find_daemon_binary() -> Result<PathBuf, String> {
         }
         // Development: cargo build output
         if let Some(workspace_root) = find_workspace_root(&app_path) {
-            candidates.push(workspace_root.join(r"apps\desktop\daemon\target\release\vpnvpn-daemon.exe"));
-            candidates.push(workspace_root.join(r"apps\desktop\daemon\target\debug\vpnvpn-daemon.exe"));
+            candidates
+                .push(workspace_root.join(r"apps\desktop\daemon\target\release\vpnvpn-daemon.exe"));
+            candidates
+                .push(workspace_root.join(r"apps\desktop\daemon\target\debug\vpnvpn-daemon.exe"));
             candidates.push(workspace_root.join(r"target\release\vpnvpn-daemon.exe"));
             candidates.push(workspace_root.join(r"target\debug\vpnvpn-daemon.exe"));
         }
@@ -1143,7 +1177,7 @@ fn find_daemon_binary() -> Result<PathBuf, String> {
         .map(|p| format!("  - {}", p.display()))
         .collect::<Vec<_>>()
         .join("\n");
-    
+
     Err(format!(
         "Daemon binary not found. Searched locations:\n{}\n\nHint: In development, build the daemon first with:\n  cd apps/desktop/daemon && cargo build --release",
         searched
@@ -1153,12 +1187,12 @@ fn find_daemon_binary() -> Result<PathBuf, String> {
 /// Try to find the workspace root by looking for Cargo.toml or package.json
 fn find_workspace_root(start_path: &PathBuf) -> Option<PathBuf> {
     let mut current = start_path.clone();
-    
+
     // Go up the directory tree looking for workspace markers
     for _ in 0..10 {
         if let Some(parent) = current.parent() {
             // Check for monorepo markers
-            if parent.join("turbo.json").exists() 
+            if parent.join("turbo.json").exists()
                 || parent.join("package.json").exists() && parent.join("apps").exists()
                 || parent.join("Cargo.toml").exists() && parent.join("apps").exists()
             {
@@ -1199,9 +1233,12 @@ fn install_daemon() -> Result<(), String> {
 #[cfg(target_os = "macos")]
 fn install_daemon_macos() -> Result<(), String> {
     eprintln!("[install_daemon_macos] Starting daemon installation...");
-    
+
     let daemon_src = find_daemon_binary()?;
-    eprintln!("[install_daemon_macos] Found daemon binary at: {}", daemon_src.display());
+    eprintln!(
+        "[install_daemon_macos] Found daemon binary at: {}",
+        daemon_src.display()
+    );
 
     // Check if we're in dev mode
     let is_dev = cfg!(debug_assertions);
@@ -1209,9 +1246,11 @@ fn install_daemon_macos() -> Result<(), String> {
 
     // In dev mode, don't install as LaunchDaemon - user should run dev script
     if is_dev {
-        eprintln!("[install_daemon_macos] Development mode detected - skipping LaunchDaemon installation");
+        eprintln!(
+            "[install_daemon_macos] Development mode detected - skipping LaunchDaemon installation"
+        );
         eprintln!("[install_daemon_macos] In dev mode, run the daemon manually with:");
-        
+
         // Try to find the dev script path
         let dev_script_path = if let Some(workspace_root) = find_workspace_root(&daemon_src) {
             workspace_root.join("apps/desktop/scripts/dev-daemon.sh")
@@ -1220,19 +1259,26 @@ fn install_daemon_macos() -> Result<(), String> {
         } else {
             std::path::PathBuf::from("./scripts/dev-daemon.sh")
         };
-        
-        eprintln!("[install_daemon_macos]   sudo {}", dev_script_path.display());
+
+        eprintln!(
+            "[install_daemon_macos]   sudo {}",
+            dev_script_path.display()
+        );
         eprintln!("[install_daemon_macos] Or from the daemon directory:");
         eprintln!("[install_daemon_macos]   sudo cd apps/desktop/daemon && cargo run -- --dev");
-        eprintln!("[install_daemon_macos] The daemon will create a socket at /tmp/vpnvpn-daemon.sock");
-        
+        eprintln!(
+            "[install_daemon_macos] The daemon will create a socket at /tmp/vpnvpn-daemon.sock"
+        );
+
         // Check if dev socket already exists
         if std::path::Path::new("/tmp/vpnvpn-daemon.sock").exists() {
-            eprintln!("[install_daemon_macos] Dev socket already exists - daemon may already be running");
+            eprintln!(
+                "[install_daemon_macos] Dev socket already exists - daemon may already be running"
+            );
         } else {
             eprintln!("[install_daemon_macos] Dev socket not found - start the daemon manually");
         }
-        
+
         return Ok(());
     }
 
@@ -1292,19 +1338,28 @@ PLIST
     );
 
     eprintln!("[install_daemon_macos] Running osascript for privilege elevation...");
-    
+
     let output = std::process::Command::new("osascript")
         .arg("-e")
         .arg(&script)
         .output()
         .map_err(|e| format!("Failed to run osascript: {e}"))?;
 
-    eprintln!("[install_daemon_macos] osascript exit code: {:?}", output.status.code());
+    eprintln!(
+        "[install_daemon_macos] osascript exit code: {:?}",
+        output.status.code()
+    );
     if !output.stdout.is_empty() {
-        eprintln!("[install_daemon_macos] stdout: {}", String::from_utf8_lossy(&output.stdout));
+        eprintln!(
+            "[install_daemon_macos] stdout: {}",
+            String::from_utf8_lossy(&output.stdout)
+        );
     }
     if !output.stderr.is_empty() {
-        eprintln!("[install_daemon_macos] stderr: {}", String::from_utf8_lossy(&output.stderr));
+        eprintln!(
+            "[install_daemon_macos] stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     if !output.status.success() {
@@ -1318,44 +1373,59 @@ PLIST
     // Verify the daemon is running
     eprintln!("[install_daemon_macos] Verifying daemon is running...");
     std::thread::sleep(std::time::Duration::from_secs(2));
-    
+
     let check = std::process::Command::new("launchctl")
         .args(["list", "com.vpnvpn.daemon"])
         .output();
-    
+
     match check {
         Ok(out) => {
-            eprintln!("[install_daemon_macos] launchctl list output: {}", String::from_utf8_lossy(&out.stdout));
+            eprintln!(
+                "[install_daemon_macos] launchctl list output: {}",
+                String::from_utf8_lossy(&out.stdout)
+            );
             if out.status.success() {
                 eprintln!("[install_daemon_macos] Daemon appears to be loaded");
             } else {
-                eprintln!("[install_daemon_macos] WARNING: Daemon may not be loaded: {}", String::from_utf8_lossy(&out.stderr));
+                eprintln!(
+                    "[install_daemon_macos] WARNING: Daemon may not be loaded: {}",
+                    String::from_utf8_lossy(&out.stderr)
+                );
             }
         }
         Err(e) => {
             eprintln!("[install_daemon_macos] WARNING: Could not check daemon status: {e}");
         }
     }
-    
+
     // Check if socket exists (production mode only)
     let socket_path = "/var/run/vpnvpn-daemon.sock";
-    eprintln!("[install_daemon_macos] Checking for socket at: {}", socket_path);
-    
+    eprintln!(
+        "[install_daemon_macos] Checking for socket at: {}",
+        socket_path
+    );
+
     for i in 0..10 {
         if std::path::Path::new(socket_path).exists() {
-            eprintln!("[install_daemon_macos] Socket file found at {}", socket_path);
+            eprintln!(
+                "[install_daemon_macos] Socket file found at {}",
+                socket_path
+            );
             // Try to connect to verify it's working
             if let Ok(_) = std::os::unix::net::UnixStream::connect(socket_path) {
                 eprintln!("[install_daemon_macos] Successfully connected to socket - daemon is running correctly");
-            break;
+                break;
             } else {
                 eprintln!("[install_daemon_macos] Socket exists but connection failed, waiting...");
+            }
         }
-        }
-        eprintln!("[install_daemon_macos] Waiting for socket file... attempt {}/10", i + 1);
+        eprintln!(
+            "[install_daemon_macos] Waiting for socket file... attempt {}/10",
+            i + 1
+        );
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
-    
+
     if !std::path::Path::new(socket_path).exists() {
         eprintln!("[install_daemon_macos] WARNING: Socket file not found at {}. Check /var/log/vpnvpn-daemon.error.log for errors.", socket_path);
     }
@@ -1435,7 +1505,15 @@ fn install_daemon_windows() -> Result<(), String> {
 
     // Run PowerShell elevated
     let status = std::process::Command::new("powershell")
-        .args(["-Command", "Start-Process", "powershell", "-Verb", "RunAs", "-ArgumentList", &format!("'-Command {}'", ps_script.replace("'", "''"))])
+        .args([
+            "-Command",
+            "Start-Process",
+            "powershell",
+            "-Verb",
+            "RunAs",
+            "-ArgumentList",
+            &format!("'-Command {}'", ps_script.replace("'", "''")),
+        ])
         .status()
         .map_err(|e| format!("Failed to run PowerShell: {e}"))?;
 
@@ -1450,7 +1528,7 @@ fn install_daemon_windows() -> Result<(), String> {
 #[tauri::command]
 fn uninstall_daemon() -> Result<(), String> {
     eprintln!("[uninstall_daemon] Starting daemon uninstallation...");
-    
+
     // Check if we're in dev mode
     if is_using_dev_socket() {
         eprintln!("[uninstall_daemon] Dev mode detected - cleaning up dev socket");
@@ -1527,7 +1605,15 @@ fn uninstall_daemon() -> Result<(), String> {
         "#;
 
         let status = std::process::Command::new("powershell")
-            .args(["-Command", "Start-Process", "powershell", "-Verb", "RunAs", "-ArgumentList", &format!("'-Command {}'", ps_script.replace("'", "''"))])
+            .args([
+                "-Command",
+                "Start-Process",
+                "powershell",
+                "-Verb",
+                "RunAs",
+                "-ArgumentList",
+                &format!("'-Command {}'", ps_script.replace("'", "''")),
+            ])
             .status()
             .map_err(|e| format!("Failed to run PowerShell: {e}"))?;
 
@@ -1544,7 +1630,7 @@ fn uninstall_daemon() -> Result<(), String> {
 async fn update_daemon_dev() -> Result<(), String> {
     // Find the daemon source directory
     let daemon_dir = find_daemon_source_dir()?;
-    
+
     // Build the daemon
     let build_output = std::process::Command::new("cargo")
         .arg("build")
@@ -1552,12 +1638,12 @@ async fn update_daemon_dev() -> Result<(), String> {
         .current_dir(&daemon_dir)
         .output()
         .map_err(|e| format!("Failed to run cargo build: {e}"))?;
-    
+
     if !build_output.status.success() {
         let stderr = String::from_utf8_lossy(&build_output.stderr);
         return Err(format!("Daemon build failed:\n{stderr}"));
     }
-    
+
     // Reinstall the daemon
     install_daemon()
 }
@@ -1571,14 +1657,17 @@ fn find_daemon_source_dir() -> Result<PathBuf, String> {
         // Absolute path from workspace root
         PathBuf::from("/Users/xnetcat/Projects/xnetcat/vpnVPN/apps/desktop/daemon"),
     ];
-    
+
     for path in &possible_paths {
         if path.exists() && path.join("Cargo.toml").exists() {
             return Ok(path.canonicalize().unwrap_or_else(|_| path.clone()));
         }
     }
-    
-    Err("Daemon source directory not found. This feature is only available in development.".to_string())
+
+    Err(
+        "Daemon source directory not found. This feature is only available in development."
+            .to_string(),
+    )
 }
 
 /// Check if running in development mode.
@@ -1620,16 +1709,14 @@ fn load_onboarding_state() -> Result<OnboardingState, String> {
     }
     let data = std::fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read onboarding state: {e}"))?;
-    serde_json::from_str(&data)
-        .map_err(|e| format!("Failed to parse onboarding state: {e}"))
+    serde_json::from_str(&data).map_err(|e| format!("Failed to parse onboarding state: {e}"))
 }
 
 fn save_onboarding_state_internal(state: &OnboardingState) -> Result<(), String> {
     let path = onboarding_config_path()?;
     let data = serde_json::to_string_pretty(state)
         .map_err(|e| format!("Failed to serialize onboarding state: {e}"))?;
-    std::fs::write(&path, data)
-        .map_err(|e| format!("Failed to write onboarding state: {e}"))?;
+    std::fs::write(&path, data).map_err(|e| format!("Failed to write onboarding state: {e}"))?;
     Ok(())
 }
 

@@ -148,9 +148,11 @@ fn os_version() -> String {
         std::fs::read_to_string("/etc/os-release")
             .ok()
             .and_then(|s| {
-                s.lines()
-                    .find(|l| l.starts_with("VERSION_ID="))
-                    .map(|l| l.trim_start_matches("VERSION_ID=").trim_matches('"').to_string())
+                s.lines().find(|l| l.starts_with("VERSION_ID=")).map(|l| {
+                    l.trim_start_matches("VERSION_ID=")
+                        .trim_matches('"')
+                        .to_string()
+                })
             })
             .unwrap_or_else(|| "unknown".to_string())
     }
@@ -231,4 +233,3 @@ fn service_config_path() -> Option<String> {
         None
     }
 }
-

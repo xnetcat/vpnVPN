@@ -39,7 +39,9 @@ export default async function DesktopPage({ searchParams }: DesktopPageProps) {
     redirect("/dashboard");
   }
 
-  console.log("[desktop-page] Checking user authentication and subscription...");
+  console.log(
+    "[desktop-page] Checking user authentication and subscription...",
+  );
   const gate = await requirePaidUser();
   console.log("[desktop-page] Gate result:", {
     ok: gate.ok,

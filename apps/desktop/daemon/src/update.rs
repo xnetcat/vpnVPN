@@ -160,7 +160,9 @@ impl UpdateManager {
 fn get_daemon_path() -> Result<PathBuf> {
     #[cfg(target_os = "macos")]
     {
-        Ok(PathBuf::from("/Library/PrivilegedHelperTools/com.vpnvpn.daemon"))
+        Ok(PathBuf::from(
+            "/Library/PrivilegedHelperTools/com.vpnvpn.daemon",
+        ))
     }
 
     #[cfg(target_os = "linux")]
@@ -183,7 +185,9 @@ fn get_daemon_path() -> Result<PathBuf> {
 fn get_staging_path() -> Result<PathBuf> {
     #[cfg(target_os = "macos")]
     {
-        Ok(PathBuf::from("/Library/PrivilegedHelperTools/com.vpnvpn.daemon.new"))
+        Ok(PathBuf::from(
+            "/Library/PrivilegedHelperTools/com.vpnvpn.daemon.new",
+        ))
     }
 
     #[cfg(target_os = "linux")]
@@ -193,7 +197,9 @@ fn get_staging_path() -> Result<PathBuf> {
 
     #[cfg(target_os = "windows")]
     {
-        Ok(PathBuf::from(r"C:\Program Files\vpnVPN\vpnvpn-daemon.new.exe"))
+        Ok(PathBuf::from(
+            r"C:\Program Files\vpnVPN\vpnvpn-daemon.new.exe",
+        ))
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
@@ -206,7 +212,9 @@ fn get_staging_path() -> Result<PathBuf> {
 fn get_backup_path() -> Result<PathBuf> {
     #[cfg(target_os = "macos")]
     {
-        Ok(PathBuf::from("/Library/PrivilegedHelperTools/com.vpnvpn.daemon.bak"))
+        Ok(PathBuf::from(
+            "/Library/PrivilegedHelperTools/com.vpnvpn.daemon.bak",
+        ))
     }
 
     #[cfg(target_os = "linux")]
@@ -216,7 +224,9 @@ fn get_backup_path() -> Result<PathBuf> {
 
     #[cfg(target_os = "windows")]
     {
-        Ok(PathBuf::from(r"C:\Program Files\vpnVPN\vpnvpn-daemon.bak.exe"))
+        Ok(PathBuf::from(
+            r"C:\Program Files\vpnVPN\vpnvpn-daemon.bak.exe",
+        ))
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
@@ -236,7 +246,10 @@ fn verify_signature_macos(path: &Path) -> Result<()> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(anyhow::anyhow!("Code signature verification failed: {}", stderr));
+        return Err(anyhow::anyhow!(
+            "Code signature verification failed: {}",
+            stderr
+        ));
     }
 
     info!("Code signature verified for {:?}", path);
@@ -302,4 +315,3 @@ pub fn trigger_restart() -> Result<()> {
 
     Ok(())
 }
-

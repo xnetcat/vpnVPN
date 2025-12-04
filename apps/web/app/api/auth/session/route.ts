@@ -54,14 +54,14 @@ export async function GET(req: Request) {
             },
             expires: session.expires.toISOString(),
           },
-          { headers: corsHeaders }
+          { headers: corsHeaders },
         );
       }
 
       // Invalid or expired token
       return NextResponse.json(
         { user: null },
-        { status: 401, headers: corsHeaders }
+        { status: 401, headers: corsHeaders },
       );
     }
 
@@ -79,7 +79,7 @@ export async function GET(req: Request) {
           },
           expires: (session as any).expires,
         },
-        { headers: corsHeaders }
+        { headers: corsHeaders },
       );
     }
 
@@ -88,7 +88,7 @@ export async function GET(req: Request) {
     console.error("[session] Error:", error);
     return NextResponse.json(
       { user: null, error: "Failed to check session" },
-      { status: 500, headers: corsHeaders }
+      { status: 500, headers: corsHeaders },
     );
   }
 }

@@ -58,4 +58,3 @@ pub fn delete(service: &str, key: &str) -> Result<()> {
 
     Ok(())
 }
-

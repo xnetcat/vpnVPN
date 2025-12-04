@@ -32,14 +32,19 @@ export default async function AnalyticsPage({
   const resolvedParams = (await searchParams) || {};
   const period = (resolvedParams.period as "24h" | "7d" | "30d") || "24h";
 
-  const [summary, historicalMetrics, geoDistribution, serverHealth, recentActivity] =
-    await Promise.all([
-      caller.analytics.summary(),
-      caller.analytics.historicalMetrics({ period }),
-      caller.analytics.geoDistribution(),
-      caller.analytics.serverHealth(),
-      caller.analytics.recentActivity(),
-    ]);
+  const [
+    summary,
+    historicalMetrics,
+    geoDistribution,
+    serverHealth,
+    recentActivity,
+  ] = await Promise.all([
+    caller.analytics.summary(),
+    caller.analytics.historicalMetrics({ period }),
+    caller.analytics.geoDistribution(),
+    caller.analytics.serverHealth(),
+    caller.analytics.recentActivity(),
+  ]);
 
   const peakSessions =
     historicalMetrics.length > 0
@@ -96,7 +101,9 @@ export default async function AnalyticsPage({
       <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-slate-800 bg-slate-900/80 p-6 shadow-sm">
           <div className="mb-2 flex items-center justify-between">
-            <div className="text-sm font-medium text-slate-400">Total Users</div>
+            <div className="text-sm font-medium text-slate-400">
+              Total Users
+            </div>
             <Users className="h-5 w-5 text-emerald-400" />
           </div>
           <div className="text-3xl font-bold text-slate-50">
@@ -119,9 +126,10 @@ export default async function AnalyticsPage({
           </div>
           <p className="mt-1 text-xs text-slate-400">
             {summary.totalUsers > 0
-              ? ((summary.activeSubscriptions / summary.totalUsers) * 100).toFixed(
-                  1,
-                )
+              ? (
+                  (summary.activeSubscriptions / summary.totalUsers) *
+                  100
+                ).toFixed(1)
               : 0}
             % conversion
           </p>
@@ -147,7 +155,9 @@ export default async function AnalyticsPage({
 
         <div className="rounded-lg border border-slate-800 bg-slate-900/80 p-6 shadow-sm">
           <div className="mb-2 flex items-center justify-between">
-            <div className="text-sm font-medium text-slate-400">Peak Sessions</div>
+            <div className="text-sm font-medium text-slate-400">
+              Peak Sessions
+            </div>
             <TrendingUp className="h-5 w-5 text-orange-400" />
           </div>
           <div className="text-3xl font-bold text-slate-50">{peakSessions}</div>
@@ -438,7 +448,3 @@ export default async function AnalyticsPage({
     </main>
   );
 }
-
-
-
-

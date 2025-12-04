@@ -23,7 +23,10 @@ impl WireGuardBackend {
         } else {
             "/etc/wireguard".to_string()
         };
-        info!(config_dir = config_dir.as_str(), "wireguard_config_directory");
+        info!(
+            config_dir = config_dir.as_str(),
+            "wireguard_config_directory"
+        );
         Ok(Self {
             listen_port,
             config_dir,
@@ -39,16 +42,25 @@ impl WireGuardBackend {
     }
 
     fn ensure_keys_and_config(&self) -> Result<()> {
-        debug!(config_dir = self.config_dir.as_str(), "ensuring_keys_and_config");
-        
+        debug!(
+            config_dir = self.config_dir.as_str(),
+            "ensuring_keys_and_config"
+        );
+
         if !Path::new(&self.config_dir).exists() {
-            info!(config_dir = self.config_dir.as_str(), "creating_config_directory");
+            info!(
+                config_dir = self.config_dir.as_str(),
+                "creating_config_directory"
+            );
             fs::create_dir_all(&self.config_dir).context("create config dir")?;
         }
 
         let key_path = self.key_path();
         if !Path::new(&key_path).exists() {
-            info!(key_path = key_path.as_str(), "generating_wireguard_private_key");
+            info!(
+                key_path = key_path.as_str(),
+                "generating_wireguard_private_key"
+            );
             let output = Command::new("wg")
                 .arg("genkey")
                 .output()
@@ -137,20 +149,28 @@ impl VpnBackend for WireGuardBackend {
     }
 
     fn start(&self) -> Result<()> {
-        info!(interface = WG_IFACE, port = self.listen_port, "starting_wireguard_backend");
-        
+        info!(
+            interface = WG_IFACE,
+            port = self.listen_port,
+            "starting_wireguard_backend"
+        );
+
         self.ensure_keys_and_config()?;
-        
+
         let nm = get_network_manager();
-        info!(interface = WG_IFACE, address = "10.8.0.1/24", "configuring_wireguard_interface");
-        
+        info!(
+            interface = WG_IFACE,
+            address = "10.8.0.1/24",
+            "configuring_wireguard_interface"
+        );
+
         // Ensure configuration is applied and interface is up
         nm.configure_wireguard(WG_IFACE, "10.8.0.1/24", self.listen_port, &self.conf_path())?;
         info!(interface = WG_IFACE, "wireguard_interface_configured");
-        
+
         nm.bring_up_interface(WG_IFACE)?;
         info!(interface = WG_IFACE, "wireguard_interface_up");
-        
+
         Ok(())
     }
 
@@ -214,7 +234,7 @@ impl VpnBackend for WireGuardBackend {
 
     fn apply_peers(&self, peers: &[PeerSpec]) -> Result<()> {
         info!(peer_count = peers.len(), "applying_wireguard_peers");
-        
+
         let privkey = fs::read_to_string(self.key_path())?.trim().to_string();
 
         let mut conf = format!(

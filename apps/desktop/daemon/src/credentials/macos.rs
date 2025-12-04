@@ -1,7 +1,9 @@
 //! macOS Keychain credential storage.
 
 use anyhow::Result;
-use security_framework::passwords::{delete_generic_password, get_generic_password, set_generic_password};
+use security_framework::passwords::{
+    delete_generic_password, get_generic_password, set_generic_password,
+};
 
 /// Store a credential in the macOS Keychain.
 pub fn store(service: &str, key: &str, value: &str) -> Result<()> {
@@ -75,4 +77,3 @@ mod tests {
         assert_eq!(after_delete, None);
     }
 }
-

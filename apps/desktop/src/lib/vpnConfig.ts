@@ -28,11 +28,11 @@ export function buildWireGuardConfig(params: {
   console.log("[vpnConfig]   Final endpoint:", endpoint);
   console.log(
     "[vpnConfig]   serverPublicKeyOverride:",
-    params.serverPublicKeyOverride
+    params.serverPublicKeyOverride,
   );
   console.log(
     "[vpnConfig]   WG_SERVER_PUBLIC_KEY from env:",
-    WG_SERVER_PUBLIC_KEY
+    WG_SERVER_PUBLIC_KEY,
   );
   console.log("[vpnConfig]   Final serverPublicKey:", serverPublicKey);
 

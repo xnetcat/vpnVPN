@@ -53,7 +53,7 @@ async function fetchFleetMetrics(): Promise<FleetMetrics | null> {
 
     const totalServers = data.length;
     const onlineServers = data.filter(
-      (s) => (s.status ?? "unknown").toLowerCase() === "online"
+      (s) => (s.status ?? "unknown").toLowerCase() === "online",
     ).length;
 
     let totalSessions = 0;

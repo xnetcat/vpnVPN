@@ -14,7 +14,10 @@ export const WG_SERVER_PUBLIC_KEY =
 console.log("[config] Environment loaded:");
 console.log("[config]   API_BASE_URL:", API_BASE_URL);
 console.log("[config]   WG_ENDPOINT:", WG_ENDPOINT || "(empty)");
-console.log("[config]   WG_SERVER_PUBLIC_KEY:", WG_SERVER_PUBLIC_KEY ? "(set)" : "(empty)");
+console.log(
+  "[config]   WG_SERVER_PUBLIC_KEY:",
+  WG_SERVER_PUBLIC_KEY ? "(set)" : "(empty)",
+);
 
 // OpenVPN configuration
 export const OVPN_REMOTE = import.meta.env.VITE_OVPN_REMOTE ?? "<vpn-hostname>";
@@ -26,4 +29,3 @@ export const IKEV2_REMOTE =
 
 // Check if we're in production
 export const IS_PRODUCTION = import.meta.env.PROD;
-
