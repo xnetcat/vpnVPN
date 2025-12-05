@@ -1,14 +1,6 @@
 name: Deploy Backend
 
 on:
-  push:
-    branches: ["main", "staging"]
-    paths:
-      - "apps/vpn-server/**"
-      - "services/**"
-      - "packages/db/**"
-      - "infra/pulumi/**"
-      - ".github/workflows/deploy-backend.yml"
   workflow_dispatch:
     inputs:
       environment:
