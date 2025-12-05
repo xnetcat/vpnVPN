@@ -415,25 +415,57 @@ build_desktop_apps() {
   # Note: Tauri v2 puts target in src-tauri/target by default when running from project root
   case "$(uname -s)" in
     Darwin)
-      if ls src-tauri/target/release/bundle/dmg/*.dmg 1> /dev/null 2>&1; then
-        # Sign DMG files as well
-        log_info "Applying ad-hoc signatures to DMG files..."
-        for dmg in src-tauri/target/release/bundle/dmg/*.dmg; do
-          log_info "Signing $(basename "$dmg")..."
-          codesign --force --sign - "$dmg"
-        done
-        cp -v src-tauri/target/release/bundle/dmg/*.dmg "${ARTIFACTS_DIR}/"
-        log_success "macOS DMG built and signed"
-      fi
+      # IMPORTANT: Sign .app FIRST, then create DMG from signed .app
+      # Tauri creates DMG before we can sign, so we must recreate it
+      
       if ls src-tauri/target/release/bundle/macos/*.app 1> /dev/null 2>&1; then
         # Apply ad-hoc signing to prevent "damaged" error on macOS
         log_info "Applying ad-hoc signatures to macOS app bundles..."
         for app in src-tauri/target/release/bundle/macos/*.app; do
           log_info "Signing $(basename "$app")..."
+          
+          # Remove quarantine attributes first
           xattr -cr "$app" 2>/dev/null || true
-          codesign --force --deep --sign - "$app"
+          
+          # Sign nested binaries first (daemon, etc.)
+          if [ -d "$app/Contents/MacOS" ]; then
+            for binary in "$app/Contents/MacOS"/*; do
+              if [ -f "$binary" ] && [ -x "$binary" ]; then
+                codesign --force --sign - "$binary" 2>/dev/null || true
+              fi
+            done
+          fi
+          
+          # Sign the main app bundle (without --deep to preserve resources)
+          codesign --force --sign - "$app"
         done
         log_success "Ad-hoc signatures applied"
+        
+        # Verify signature
+        for app in src-tauri/target/release/bundle/macos/*.app; do
+          if codesign --verify --verbose "$app" 2>&1 | grep -q "valid on disk"; then
+            log_success "Verified signature for $(basename "$app")"
+          else
+            log_warn "Signature verification failed for $(basename "$app")"
+          fi
+        done
+        
+        # Recreate DMGs from signed apps
+        log_info "Creating DMGs from signed app bundles..."
+        for app in src-tauri/target/release/bundle/macos/*.app; do
+          APP_BASENAME=$(basename "$app" .app)
+          DMG_PATH="src-tauri/target/release/bundle/dmg/${APP_BASENAME}_0.1.0_aarch64.dmg"
+          
+          log_info "Recreating $(basename "$DMG_PATH")..."
+          rm -f "$DMG_PATH"
+          hdiutil create -volname "$APP_BASENAME" -srcfolder "$app" -ov -format UDZO "$DMG_PATH"
+        done
+        
+        # Copy DMGs to artifacts
+        if ls src-tauri/target/release/bundle/dmg/*.dmg 1> /dev/null 2>&1; then
+          cp -v src-tauri/target/release/bundle/dmg/*.dmg "${ARTIFACTS_DIR}/"
+          log_success "macOS DMGs created from signed apps"
+        fi
         
         # Zip the .app for easier distribution
         for app in src-tauri/target/release/bundle/macos/*.app; do

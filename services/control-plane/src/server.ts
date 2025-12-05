@@ -137,17 +137,22 @@ export async function buildServer(): Promise<FastifyInstance> {
       });
 
       const now = new Date();
+      const metadata = (body.metadata as Record<string, unknown>) || {};
+      const publicIp = metadata.publicIp as string | undefined;
+
       const server = await prisma.vpnServer.upsert({
         where: { id: body.id },
         update: {
           status: "online",
           lastSeen: now,
+          publicIp: publicIp || undefined,
           metadata: body.metadata as object,
         },
         create: {
           id: body.id,
           status: "online",
           lastSeen: now,
+          publicIp: publicIp || undefined,
           metadata: body.metadata as object,
         },
       });

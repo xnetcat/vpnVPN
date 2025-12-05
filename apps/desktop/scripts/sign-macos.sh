@@ -28,11 +28,21 @@ echo "🔐 Applying ad-hoc signature to $(basename "$APP_PATH")..."
 # Remove existing quarantine attributes (if any from development)
 xattr -cr "$APP_PATH" 2>/dev/null || true
 
-# Apply ad-hoc signature recursively
-# The "-" means "ad-hoc" (no identity required)
-# --force replaces any existing signature
-# --deep signs all nested code (frameworks, plugins, etc.)
-codesign --force --deep --sign - "$APP_PATH"
+# Sign nested binaries first (daemon, helpers, etc.)
+echo "🔐 Signing nested binaries..."
+if [ -d "$APP_PATH/Contents/MacOS" ]; then
+  for binary in "$APP_PATH/Contents/MacOS"/*; do
+    if [ -f "$binary" ] && [ -x "$binary" ]; then
+      echo "  → Signing $(basename "$binary")..."
+      codesign --force --sign - "$binary" 2>/dev/null || true
+    fi
+  done
+fi
+
+# Apply ad-hoc signature to the main app bundle
+# Note: NOT using --deep because it breaks resource sealing
+echo "🔐 Signing main app bundle..."
+codesign --force --sign - "$APP_PATH"
 
 echo "✅ Ad-hoc signature applied successfully"
 echo ""

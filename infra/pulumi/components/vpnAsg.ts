@@ -281,6 +281,10 @@ runcmd:
     aws ecr get-login-password --region ${regionName} | docker login --username AWS --password-stdin ${accountId}.dkr.ecr.${regionName}.amazonaws.com
     INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
     ASG_NAME=$(aws autoscaling describe-auto-scaling-instances --instance-ids $INSTANCE_ID --query 'AutoScalingInstances[0].AutoScalingGroupName' --output text || echo "unknown")
+    # Install and load WireGuard kernel module
+    amazon-linux-extras install -y epel
+    yum install -y wireguard-tools
+    modprobe wireguard || echo "WireGuard module load failed, container will use userspace"
     # Enable IP forwarding and NAT on host for VPN traffic
     sysctl -w net.ipv4.ip_forward=1
     iptables -t nat -C POSTROUTING -o eth0 -j MASQUERADE || iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
@@ -293,6 +297,7 @@ runcmd:
       --network host \
       --cap-add=NET_ADMIN \
       --device /dev/net/tun:/dev/net/tun \
+      -v /lib/modules:/lib/modules:ro \
       -e LISTEN_UDP_PORT=51820 -e LISTEN_TCP_PORT=51820 -e ADMIN_PORT=8080 \
       -e OPENVPN_PORT=1194 -e VPN_PROTOCOLS="wireguard,openvpn,ikev2" \
       -e INSTANCE_ID="$INSTANCE_ID" -e ASG_NAME="$ASG_NAME" -e AWS_REGION="${regionName}" \

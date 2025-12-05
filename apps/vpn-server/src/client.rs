@@ -106,6 +106,105 @@ impl ControlPlaneClient {
             .context("failed to parse peers response")?;
         Ok(payload.peers)
     }
+
+    /// Send heartbeat to control plane to stay marked as online
+    /// This re-uses the /server/register endpoint which updates lastSeen
+    pub async fn heartbeat(&self, public_key: &str, listen_port: u16, public_ip: Option<String>) -> Result<()> {
+        let url = format!("{}/server/register", self.base_url);
+
+        let mut meta = serde_json::Map::new();
+        if let Ok(region) = std::env::var("VPN_REGION") {
+            meta.insert("region".to_string(), serde_json::Value::String(region));
+        }
+        if let Ok(country) = std::env::var("VPN_COUNTRY") {
+            meta.insert("country".to_string(), serde_json::Value::String(country));
+        }
+        if let Some(ip) = public_ip {
+            meta.insert("publicIp".to_string(), serde_json::Value::String(ip));
+        }
+
+        let req = RegisterRequest {
+            id: self.server_id.clone(),
+            public_key: public_key.to_string(),
+            listen_port,
+            metadata: if meta.is_empty() {
+                None
+            } else {
+                Some(serde_json::Value::Object(meta))
+            },
+        };
+
+        debug!(%url, "sending_heartbeat");
+
+        let resp = self
+            .client
+            .post(&url)
+            .bearer_auth(&self.auth_token)
+            .json(&req)
+            .send()
+            .await
+            .context("failed to send heartbeat request")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            anyhow::bail!("heartbeat request failed: {} - {}", status, text);
+        }
+
+        debug!("heartbeat_sent_successfully");
+        Ok(())
+    }
+
+    /// Detect public IP address by querying external service
+    pub async fn detect_public_ip(&self) -> Option<String> {
+        // Try multiple services for reliability
+        let services = vec![
+            "https://api.ipify.org",
+            "https://ifconfig.me/ip",
+            "https://icanhazip.com",
+        ];
+
+        for service in services {
+            if let Ok(resp) = self.client.get(service).send().await {
+                if let Ok(ip) = resp.text().await {
+                    let ip = ip.trim();
+                    if !ip.is_empty() && ip.len() < 50 {
+                        debug!(ip, "detected_public_ip");
+                        return Some(ip.to_string());
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Detect geolocation (country, region) from public IP
+    pub async fn detect_geolocation(&self, ip: &str) -> Option<(String, String)> {
+        #[derive(serde::Deserialize)]
+        struct GeoResponse {
+            country_code: Option<String>,
+            region: Option<String>,
+            city: Option<String>,
+        }
+
+        // Try ipapi.co (free, no API key required)
+        let url = format!("https://ipapi.co/{}/json/", ip);
+        if let Ok(resp) = self.client.get(&url).send().await {
+            if let Ok(geo) = resp.json::<GeoResponse>().await {
+                if let (Some(country), Some(region)) = (geo.country_code, geo.region) {
+                    debug!(
+                        country = country.as_str(),
+                        region = region.as_str(),
+                        "detected_geolocation"
+                    );
+                    return Some((country, region));
+                }
+            }
+        }
+
+        None
+    }
 }
 
 #[cfg(test)]

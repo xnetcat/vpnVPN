@@ -419,6 +419,50 @@ async fn run_server(args: RunArgs, log_buffer: std::sync::Arc<logging::LogBuffer
         }
     });
 
+    // Heartbeat Loop - send periodic status updates to stay marked as online
+    let heartbeat_node = node_arc.clone();
+    let heartbeat_client = cp_client.clone();
+    tokio::spawn(async move {
+        // Detect public IP once at startup
+        let public_ip = heartbeat_client.detect_public_ip().await;
+        if let Some(ref ip) = public_ip {
+            info!(ip = ip.as_str(), "detected_public_ip");
+            
+            // Detect geolocation from IP if VPN_REGION/VPN_COUNTRY not set
+            if env::var("VPN_REGION").is_err() || env::var("VPN_COUNTRY").is_err() {
+                if let Some((country, region)) = heartbeat_client.detect_geolocation(ip).await {
+                    info!(
+                        country = country.as_str(),
+                        region = region.as_str(),
+                        "detected_geolocation_from_ip"
+                    );
+                    // Set environment variables for other parts of the code to use
+                    env::set_var("VPN_COUNTRY", &country);
+                    env::set_var("VPN_REGION", &region);
+                } else {
+                    warn!("failed_to_detect_geolocation");
+                }
+            }
+        } else {
+            warn!("failed_to_detect_public_ip");
+        }
+
+        loop {
+            // Send heartbeat every 2 minutes (well under the 5 minute offline threshold)
+            tokio::time::sleep(std::time::Duration::from_secs(120)).await;
+
+            if let Some(pubkey) = heartbeat_node.get_public_key() {
+                match heartbeat_client
+                    .heartbeat(&pubkey, args.listen_port, public_ip.clone())
+                    .await
+                {
+                    Ok(_) => info!("heartbeat_sent"),
+                    Err(e) => error!(error = ?e, "heartbeat_failed"),
+                }
+            }
+        }
+    });
+
     // Periodic sampler to update in-process Prometheus metrics
     tokio::spawn(async move {
         use metrics::*;

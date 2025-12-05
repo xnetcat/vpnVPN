@@ -1796,6 +1796,11 @@ fn log_from_frontend(level: String, message: String) {
 
 #[cfg(not(test))]
 fn main() {
+    // Fix PATH environment variable for GUI app
+    // This ensures we can find VPN tools installed via package managers (Homebrew, etc)
+    // and fixes Windows PATH inheritance issues
+    let _ = fix_path_env::fix();
+
     tauri::Builder::default()
         // Deep link plugin registers the `vpnvpn://` scheme on all desktop OSes.
         .plugin(tauri_plugin_deep_link::init())
