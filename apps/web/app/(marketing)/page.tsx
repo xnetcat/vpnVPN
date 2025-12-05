@@ -391,34 +391,24 @@ export default async function HomePage() {
               📦 macOS Installation
             </h3>
             <p className="mt-2 text-xs text-amber-800 leading-relaxed">
-              After downloading, if you see{" "}
-              <strong>&quot;damaged and can&apos;t be opened&quot;</strong>:
+              After downloading, you must remove the quarantine attribute (macOS
+              adds this to all downloaded apps):
             </p>
-            <ol className="mt-2 space-y-1 text-xs text-amber-800 pl-4 list-decimal">
-              <li>
-                <strong>Quick fix:</strong> Right-click the app → select{" "}
-                <strong>Open</strong> (instead of double-clicking)
-              </li>
-              <li>
-                <strong>Or use Terminal:</strong>{" "}
-                <code className="rounded bg-amber-100 px-1 py-0.5 text-[11px]">
-                  xattr -cr &quot;/Applications/vpnVPN Desktop.app&quot;
-                </code>
-              </li>
-              <li>
-                <strong>Helper script:</strong>{" "}
-                <a
-                  href={`${DESKTOP_BASE}/macos-install-helper.sh`}
-                  className="font-medium underline hover:text-amber-900"
-                  download
-                >
-                  Download installer helper
-                </a>{" "}
-                (automated fix)
-              </li>
-            </ol>
-            <p className="mt-2 text-xs text-amber-700">
-              This is normal for apps distributed outside the Mac App Store.
+            <div className="mt-3 rounded bg-amber-100 p-3">
+              <p className="text-xs font-medium text-amber-900 mb-2">
+                Quick fix (paste in Terminal):
+              </p>
+              <code className="block rounded bg-white px-2 py-1.5 text-[11px] text-slate-800 font-mono">
+                xattr -cr &quot;/Applications/vpnVPN Desktop (Staging).app&quot;
+                && open &quot;/Applications/vpnVPN Desktop (Staging).app&quot;
+              </code>
+            </div>
+            <p className="mt-3 text-xs text-amber-700">
+              <strong>Alternative:</strong> Right-click the app → select{" "}
+              <strong>Open</strong> instead of double-clicking.
+            </p>
+            <p className="mt-2 text-xs text-amber-600">
+              This is normal for all apps distributed outside the Mac App Store.
             </p>
           </div>
 

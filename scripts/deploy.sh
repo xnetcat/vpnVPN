@@ -370,11 +370,12 @@ build_desktop_apps() {
   bun install
   
   # Set environment variables for build - these get hardcoded into the bundle
-  export VITE_VPNVPN_DESKTOP_URL="${DESKTOP_URL}"
-  export VITE_VPNVPN_API_URL="${WEB_URL}"
+  # Note: Desktop app uses VITE_API_BASE_URL (see src/lib/config.ts)
+  export VITE_API_BASE_URL="${WEB_URL}"
+  export VITE_DASHBOARD_URL="${DESKTOP_URL}"
   
-  log_info "Desktop URL: ${DESKTOP_URL}"
-  log_info "API URL: ${WEB_URL}"
+  log_info "API Base URL: ${WEB_URL}"
+  log_info "Dashboard URL: ${DESKTOP_URL}"
   
   # Build frontend (this bundles into dist/ which Tauri embeds)
   log_info "Building desktop frontend with Vite..."
@@ -508,6 +509,15 @@ upload_desktop_to_s3() {
     log_info "Uploading macOS installation helper..."
     aws s3 cp "${ROOT_DIR}/scripts/macos-install-helper.sh" \
       "s3://${S3_BUCKET}/${S3_PREFIX}/macos-install-helper.sh" \
+      --cache-control "max-age=3600" \
+      --content-type "text/x-shellscript"
+  fi
+  
+  # Upload quick-fix quarantine script
+  if [[ -f "${ROOT_DIR}/scripts/fix-macos-quarantine.sh" ]]; then
+    log_info "Uploading macOS quarantine fix script..."
+    aws s3 cp "${ROOT_DIR}/scripts/fix-macos-quarantine.sh" \
+      "s3://${S3_BUCKET}/${S3_PREFIX}/fix-macos-quarantine.sh" \
       --cache-control "max-age=3600" \
       --content-type "text/x-shellscript"
   fi
