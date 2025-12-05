@@ -419,12 +419,21 @@ build_desktop_apps() {
         log_success "macOS DMG built"
       fi
       if ls src-tauri/target/release/bundle/macos/*.app 1> /dev/null 2>&1; then
+        # Apply ad-hoc signing to prevent "damaged" error on macOS
+        log_info "Applying ad-hoc signatures to macOS app bundles..."
+        for app in src-tauri/target/release/bundle/macos/*.app; do
+          log_info "Signing $(basename "$app")..."
+          xattr -cr "$app" 2>/dev/null || true
+          codesign --force --deep --sign - "$app"
+        done
+        log_success "Ad-hoc signatures applied"
+        
         # Zip the .app for easier distribution
         for app in src-tauri/target/release/bundle/macos/*.app; do
           APP_BASENAME=$(basename "$app" .app)
           (cd src-tauri/target/release/bundle/macos && zip -r "${ARTIFACTS_DIR}/${APP_BASENAME}.app.zip" "$(basename "$app")")
         done
-        log_success "macOS App bundle built"
+        log_success "macOS App bundle built and signed"
       fi
       ;;
     Linux)
@@ -487,6 +496,15 @@ upload_desktop_to_s3() {
   # Upload artifacts
   aws s3 sync "${ARTIFACTS_DIR}/" "s3://${S3_BUCKET}/${S3_PREFIX}/" \
     --cache-control "max-age=3600"
+  
+  # Upload macOS installation helper script
+  if [[ -f "${ROOT_DIR}/scripts/macos-install-helper.sh" ]]; then
+    log_info "Uploading macOS installation helper..."
+    aws s3 cp "${ROOT_DIR}/scripts/macos-install-helper.sh" \
+      "s3://${S3_BUCKET}/${S3_PREFIX}/macos-install-helper.sh" \
+      --cache-control "max-age=3600" \
+      --content-type "text/x-shellscript"
+  fi
   
   # Create latest symlinks
   shopt -s nullglob

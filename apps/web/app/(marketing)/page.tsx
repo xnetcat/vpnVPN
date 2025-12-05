@@ -386,6 +386,42 @@ export default async function HomePage() {
             )}
           </div>
 
+          <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <h3 className="text-sm font-semibold text-amber-900">
+              📦 macOS Installation
+            </h3>
+            <p className="mt-2 text-xs text-amber-800 leading-relaxed">
+              After downloading, if you see{" "}
+              <strong>&quot;damaged and can&apos;t be opened&quot;</strong>:
+            </p>
+            <ol className="mt-2 space-y-1 text-xs text-amber-800 pl-4 list-decimal">
+              <li>
+                <strong>Quick fix:</strong> Right-click the app → select{" "}
+                <strong>Open</strong> (instead of double-clicking)
+              </li>
+              <li>
+                <strong>Or use Terminal:</strong>{" "}
+                <code className="rounded bg-amber-100 px-1 py-0.5 text-[11px]">
+                  xattr -cr &quot;/Applications/vpnVPN Desktop.app&quot;
+                </code>
+              </li>
+              <li>
+                <strong>Helper script:</strong>{" "}
+                <a
+                  href={`${DESKTOP_BASE}/macos-install-helper.sh`}
+                  className="font-medium underline hover:text-amber-900"
+                  download
+                >
+                  Download installer helper
+                </a>{" "}
+                (automated fix)
+              </li>
+            </ol>
+            <p className="mt-2 text-xs text-amber-700">
+              This is normal for apps distributed outside the Mac App Store.
+            </p>
+          </div>
+
           <p className="mt-6 text-center text-xs text-slate-500">
             Requires macOS 10.15+, Windows 10+, or Linux (glibc 2.31+)
           </p>
