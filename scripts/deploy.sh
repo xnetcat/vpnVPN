@@ -415,8 +415,14 @@ build_desktop_apps() {
   case "$(uname -s)" in
     Darwin)
       if ls src-tauri/target/release/bundle/dmg/*.dmg 1> /dev/null 2>&1; then
+        # Sign DMG files as well
+        log_info "Applying ad-hoc signatures to DMG files..."
+        for dmg in src-tauri/target/release/bundle/dmg/*.dmg; do
+          log_info "Signing $(basename "$dmg")..."
+          codesign --force --sign - "$dmg"
+        done
         cp -v src-tauri/target/release/bundle/dmg/*.dmg "${ARTIFACTS_DIR}/"
-        log_success "macOS DMG built"
+        log_success "macOS DMG built and signed"
       fi
       if ls src-tauri/target/release/bundle/macos/*.app 1> /dev/null 2>&1; then
         # Apply ad-hoc signing to prevent "damaged" error on macOS
