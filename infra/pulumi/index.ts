@@ -280,7 +280,6 @@ if (stack.startsWith("global")) {
   // Observability (AMP/Grafana)
   const obs = new Observability("observability");
   ampWorkspaceId = obs.ampWorkspaceId;
-  ampWorkspaceId = obs.ampWorkspaceId;
 } else if (stack.startsWith("region-")) {
   // ==========================================================================
   // Regional Stack (e.g., region-us-east-1, region-eu-west-1)
@@ -327,7 +326,20 @@ if (stack.startsWith("global")) {
   throw new Error(`Unknown stack name: ${stack}`);
 }
 
-// Exports
+// Exports - only export defined values to avoid warnings
+export const outputs = {
+  ...(ecrUri && { ecrUri }),
+  ...(controlPlaneApiUrl && { controlPlaneApiUrl }),
+  ...(metricsApiUrl && { metricsApiUrl }),
+  ...(ampWorkspaceId && { ampWorkspaceId }),
+  ...(nlbDnsName && { nlbDnsName }),
+  ...(desktopBucketUrl && { desktopBucketUrl }),
+  ...(lambdaCodeBucket && { lambdaCodeBucket }),
+  ...(controlPlaneDomainTarget && { controlPlaneDomainTarget }),
+  ...(metricsDomainTarget && { metricsDomainTarget }),
+};
+
+// Re-export individually for backward compatibility
 export {
   ecrUri,
   controlPlaneApiUrl,

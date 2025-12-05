@@ -244,7 +244,7 @@ build_vpn_server() {
   FULL_IMAGE="${ECR_URI}:${IMAGE_TAG}"
   
   log_info "Building image: ${FULL_IMAGE}"
-  docker build -t "${FULL_IMAGE}" .
+  docker build --platform linux/amd64 -t "${FULL_IMAGE}" .
   
   # Login to ECR
   log_info "Logging into ECR..."
