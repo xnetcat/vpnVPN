@@ -182,16 +182,20 @@ impl ControlPlaneClient {
     /// Detect geolocation (country, region) from public IP
     pub async fn detect_geolocation(&self, ip: &str) -> Option<(String, String)> {
         #[derive(serde::Deserialize)]
+        #[allow(dead_code)]
         struct GeoResponse {
+            status: String,
+            #[serde(rename = "countryCode")]
             country_code: Option<String>,
-            region: Option<String>,
+            #[serde(rename = "regionName")]
+            region_name: Option<String>,
             city: Option<String>,
         }
 
-        // Try ipapi.co (free, no API key required) with timeout
-        let url = format!("https://ipapi.co/{}/json/", ip);
+        // Use ip-api.com (free, no rate limits for reasonable usage)
+        let url = format!("http://ip-api.com/json/{}?fields=status,countryCode,regionName,city", ip);
         
-        let timeout_duration = std::time::Duration::from_secs(10);
+        let timeout_duration = std::time::Duration::from_secs(5);
         let result = tokio::time::timeout(timeout_duration, async {
             self.client.get(&url).send().await
         }).await;
@@ -199,13 +203,15 @@ impl ControlPlaneClient {
         match result {
             Ok(Ok(resp)) => {
                 if let Ok(geo) = resp.json::<GeoResponse>().await {
-                    if let (Some(country), Some(region)) = (geo.country_code, geo.region) {
-                        debug!(
-                            country = country.as_str(),
-                            region = region.as_str(),
-                            "detected_geolocation"
-                        );
-                        return Some((country, region));
+                    if geo.status == "success" {
+                        if let (Some(country), Some(region)) = (geo.country_code, geo.region_name) {
+                            debug!(
+                                country = country.as_str(),
+                                region = region.as_str(),
+                                "detected_geolocation"
+                            );
+                            return Some((country, region));
+                        }
                     }
                 }
             }
