@@ -72,18 +72,6 @@ destroy_stacks() {
     log_info "No regional stacks found for ${ENVIRONMENT}"
   fi
   
-  # Destroy global stack
-  GLOBAL_STACK="global-${ENVIRONMENT}"
-  if echo "$STACKS" | grep -q "^${GLOBAL_STACK}$"; then
-    log_info "Destroying global stack: ${GLOBAL_STACK}"
-    pulumi stack select "${GLOBAL_STACK}"
-    pulumi destroy -y --skip-preview
-    pulumi stack rm -y "${GLOBAL_STACK}"
-    log_success "Destroyed and removed stack: ${GLOBAL_STACK}"
-  else
-    log_info "Global stack ${GLOBAL_STACK} not found"
-  fi
-  
   cd "${ROOT_DIR}"
 }
 
