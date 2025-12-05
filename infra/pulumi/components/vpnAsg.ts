@@ -263,11 +263,11 @@ export class VpnAsg extends pulumi.ComponentResource {
     const accountId = aws.getCallerIdentityOutput().accountId;
     const regionName = aws.getRegionOutput().name;
 
-    // Amazon Linux 2 AMI
+    // Amazon Linux 2023 AMI (has native WireGuard support)
     const ami = aws.ec2.getAmiOutput({
       owners: ["137112412989"],
       mostRecent: true,
-      filters: [{ name: "name", values: ["amzn2-ami-hvm-*-x86_64-gp2"] }],
+      filters: [{ name: "name", values: ["al2023-ami-2023.*-x86_64"] }],
     });
 
     const userData = pulumi.interpolate`#cloud-config
@@ -275,15 +275,14 @@ package_update: true
 runcmd:
   - |
     set -euxo pipefail
-    yum install -y docker awscli
+    dnf install -y docker awscli
     systemctl enable docker
     systemctl start docker
     aws ecr get-login-password --region ${regionName} | docker login --username AWS --password-stdin ${accountId}.dkr.ecr.${regionName}.amazonaws.com
     INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
     ASG_NAME=$(aws autoscaling describe-auto-scaling-instances --instance-ids $INSTANCE_ID --query 'AutoScalingInstances[0].AutoScalingGroupName' --output text || echo "unknown")
-    # Install and load WireGuard kernel module
-    amazon-linux-extras install -y epel
-    yum install -y wireguard-tools
+    # Install and load WireGuard kernel module (AL2023 has native support)
+    dnf install -y wireguard-tools
     modprobe wireguard || echo "WireGuard module load failed, container will use userspace"
     # Enable IP forwarding and NAT on host for VPN traffic
     sysctl -w net.ipv4.ip_forward=1

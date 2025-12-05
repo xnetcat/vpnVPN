@@ -188,18 +188,32 @@ impl ControlPlaneClient {
             city: Option<String>,
         }
 
-        // Try ipapi.co (free, no API key required)
+        // Try ipapi.co (free, no API key required) with timeout
         let url = format!("https://ipapi.co/{}/json/", ip);
-        if let Ok(resp) = self.client.get(&url).send().await {
-            if let Ok(geo) = resp.json::<GeoResponse>().await {
-                if let (Some(country), Some(region)) = (geo.country_code, geo.region) {
-                    debug!(
-                        country = country.as_str(),
-                        region = region.as_str(),
-                        "detected_geolocation"
-                    );
-                    return Some((country, region));
+        
+        let timeout_duration = std::time::Duration::from_secs(10);
+        let result = tokio::time::timeout(timeout_duration, async {
+            self.client.get(&url).send().await
+        }).await;
+
+        match result {
+            Ok(Ok(resp)) => {
+                if let Ok(geo) = resp.json::<GeoResponse>().await {
+                    if let (Some(country), Some(region)) = (geo.country_code, geo.region) {
+                        debug!(
+                            country = country.as_str(),
+                            region = region.as_str(),
+                            "detected_geolocation"
+                        );
+                        return Some((country, region));
+                    }
                 }
+            }
+            Ok(Err(e)) => {
+                debug!(error = ?e, "geolocation_api_request_failed");
+            }
+            Err(_) => {
+                debug!("geolocation_api_timeout");
             }
         }
 
