@@ -10,3 +10,4 @@ CREATE INDEX "Device_userId_machineId_idx" ON "Device"("userId", "machineId");
 
 
 
+
