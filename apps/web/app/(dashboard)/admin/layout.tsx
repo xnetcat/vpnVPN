@@ -35,12 +35,12 @@ function navItemClasses(active: boolean) {
   return `${base} ${active ? activeClasses : inactiveClasses}`;
 }
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const pathname = (headers().get("x-pathname") || "").toLowerCase();
+  const pathname = ((await headers()).get("x-pathname") || "").toLowerCase();
 
   return (
     <div className="flex min-h-[calc(100vh-64px)] bg-slate-950">
@@ -59,7 +59,11 @@ export default function AdminLayout({
             const active =
               pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
-              <Link key={item.href} href={item.href} className={navItemClasses(active)}>
+              <Link
+                key={item.href}
+                href={item.href}
+                className={navItemClasses(active)}
+              >
                 <Icon className="h-4 w-4 text-amber-300" />
                 {item.label}
               </Link>
@@ -94,4 +98,3 @@ export default function AdminLayout({
     </div>
   );
 }
-
