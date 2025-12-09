@@ -30,9 +30,9 @@
     "docker:build": "turbo run docker:build"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.8.0",
-    "concurrently": "^9.1.0",
-    "turbo": "^2.1.2",
-    "typescript": "^5.6.3"
+    "@biomejs/biome": "^1.9.4",
+    "concurrently": "^9.2.1",
+    "turbo": "^2.6.3",
+    "typescript": "^5.9.3"
   }
 }
