@@ -35,7 +35,8 @@ Environment variables (see `env.local.example` for local dev)
 - Resend (Email):
   - `RESEND_API_KEY`
 - Control plane (browser + server):
-  - `NEXT_PUBLIC_API_BASE_URL` (base URL of the AWS control-plane HTTP API)
+  - `NEXT_PUBLIC_API_URL` (base URL of the AWS control-plane HTTP API)
+  - `NEXT_PUBLIC_API_BASE_URL` (legacy fallback; prefer `NEXT_PUBLIC_API_URL`)
   - `CONTROL_PLANE_API_URL` (server-side base URL for control-plane calls)
   - `CONTROL_PLANE_API_KEY` (shared web→control-plane API key)
 - WireGuard client defaults (used when generating configs in the dashboard):

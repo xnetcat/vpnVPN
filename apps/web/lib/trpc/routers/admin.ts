@@ -3,7 +3,9 @@ import { router, adminProcedure } from "../init";
 import { TRPCError } from "@trpc/server";
 
 const base =
-  process.env.CONTROL_PLANE_API_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
+  process.env.CONTROL_PLANE_API_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  process.env.NEXT_PUBLIC_API_BASE_URL;
 const apiKey = process.env.CONTROL_PLANE_API_KEY;
 
 function getControlPlaneConfig() {
