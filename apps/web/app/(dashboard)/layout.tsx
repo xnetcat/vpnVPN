@@ -39,7 +39,8 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const pathname = (headers().get("x-pathname") || "").toLowerCase();
+  const headerList = await headers();
+  const pathname = (headerList.get("x-pathname") || "").toLowerCase();
 
   // Admin routes have their own layout; keep the wrapper minimal here so the
   // nested admin layout can render its own chrome.
@@ -65,7 +66,11 @@ export default async function DashboardLayout({
             const active =
               pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
-              <Link key={item.href} href={item.href} className={navItemClasses(active)}>
+              <Link
+                key={item.href}
+                href={item.href}
+                className={navItemClasses(active)}
+              >
                 <Icon className="h-4 w-4 text-emerald-300" />
                 {item.label}
               </Link>
@@ -80,9 +85,7 @@ export default async function DashboardLayout({
               <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">
                 Control center
               </p>
-              <h1 className="text-xl font-semibold text-slate-50">
-                Dashboard
-              </h1>
+              <h1 className="text-xl font-semibold text-slate-50">Dashboard</h1>
               <p className="text-sm text-slate-400">
                 Manage devices, servers, proxies, and billing.
               </p>
