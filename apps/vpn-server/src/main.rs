@@ -250,7 +250,10 @@ fn find_default_interface() -> Option<String> {
     None
 }
 
-async fn run_server(args: RunArgs, log_buffer: std::sync::Arc<logging::LogBuffer>) -> Result<(), i32> {
+async fn run_server(
+    args: RunArgs,
+    log_buffer: std::sync::Arc<logging::LogBuffer>,
+) -> Result<(), i32> {
     info!(
         api_url = %args.api_url,
         listen_port = args.listen_port,
@@ -427,7 +430,7 @@ async fn run_server(args: RunArgs, log_buffer: std::sync::Arc<logging::LogBuffer
         let public_ip = heartbeat_client.detect_public_ip().await;
         if let Some(ref ip) = public_ip {
             info!(ip = ip.as_str(), "detected_public_ip");
-            
+
             // Detect geolocation from IP if VPN_REGION/VPN_COUNTRY not set
             if env::var("VPN_REGION").is_err() || env::var("VPN_COUNTRY").is_err() {
                 if let Some((country, region)) = heartbeat_client.detect_geolocation(ip).await {

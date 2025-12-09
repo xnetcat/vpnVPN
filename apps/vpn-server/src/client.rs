@@ -109,7 +109,12 @@ impl ControlPlaneClient {
 
     /// Send heartbeat to control plane to stay marked as online
     /// This re-uses the /server/register endpoint which updates lastSeen
-    pub async fn heartbeat(&self, public_key: &str, listen_port: u16, public_ip: Option<String>) -> Result<()> {
+    pub async fn heartbeat(
+        &self,
+        public_key: &str,
+        listen_port: u16,
+        public_ip: Option<String>,
+    ) -> Result<()> {
         let url = format!("{}/server/register", self.base_url);
 
         let mut meta = serde_json::Map::new();
@@ -193,12 +198,16 @@ impl ControlPlaneClient {
         }
 
         // Use ip-api.com (free, no rate limits for reasonable usage)
-        let url = format!("http://ip-api.com/json/{}?fields=status,countryCode,regionName,city", ip);
-        
+        let url = format!(
+            "http://ip-api.com/json/{}?fields=status,countryCode,regionName,city",
+            ip
+        );
+
         let timeout_duration = std::time::Duration::from_secs(5);
         let result = tokio::time::timeout(timeout_duration, async {
             self.client.get(&url).send().await
-        }).await;
+        })
+        .await;
 
         match result {
             Ok(Ok(resp)) => {

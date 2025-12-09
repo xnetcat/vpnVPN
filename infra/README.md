@@ -219,51 +219,13 @@ pulumi up -y --stack region-eu-west-1-staging
 
 ---
 
-## Lambda Deployment Options
+## Service Build/Deploy
 
-### Option 1: ZIP Deployment (Recommended)
+- Pulumi builds and pushes vpn-server, control-plane, and metrics Docker images automatically via `command.local` in `infra/pulumi/index.ts` (no manual `bun run build:lambda` or S3 uploads).
+- The image tag defaults to `SERVICE_BUILD_ID` (env) or `GITHUB_SHA`; set `SERVICE_BUILD_ID` before `pulumi up` to keep tags deterministic when deploying outside CI.
+- Ensure Docker is available wherever Pulumi runs so the local build step can push to ECR.
 
-Build and upload Lambda packages to S3:
-
-```bash
-# Build Lambda packages
-cd services/control-plane && bun run build:lambda
-cd ../metrics && bun run build:lambda
-
-# Upload to S3
-aws s3 cp services/control-plane/dist/lambda/lambda.js s3://vpnvpn-lambda-deployments/control-plane/latest/
-aws s3 cp services/metrics/dist/lambda/lambda.js s3://vpnvpn-lambda-deployments/metrics/latest/
-
-# Configure Pulumi
-cd infra/pulumi
-pulumi config set global:controlPlaneCodeKey control-plane/latest/lambda.js
-pulumi config set global:metricsCodeKey metrics/latest/lambda.js
-pulumi up -y
-```
-
-### Option 2: Docker Image Deployment
-
-Build and push Docker images to ECR:
-
-```bash
-# Build images
-docker build -t <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/vpnvpn/control-plane:latest \
-  -f services/control-plane/Dockerfile .
-docker build -t <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/vpnvpn/metrics:latest \
-  -f services/metrics/Dockerfile .
-
-# Push to ECR
-docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/vpnvpn/control-plane:latest
-docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/vpnvpn/metrics:latest
-
-# Configure Pulumi
-cd infra/pulumi
-pulumi config set global:controlPlaneImageUri <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/vpnvpn/control-plane:latest
-pulumi config set global:metricsImageUri <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/vpnvpn/metrics:latest
-pulumi up -y
-```
-
-### Option 3: Self-Hosted (Docker Compose)
+### Self-Hosted (Docker Compose)
 
 Run services as containers without Lambda:
 
