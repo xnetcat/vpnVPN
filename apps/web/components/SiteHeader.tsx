@@ -3,16 +3,20 @@ import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 
 export default async function SiteHeader() {
-  // Hide the header on desktop routes - DesktopShell provides its own header
   const headersList = await headers();
-  const pathname = headersList.get("x-pathname") || "";
-  const search = headersList.get("x-search") || "";
+  const pathname = (headersList.get("x-pathname") || "").toLowerCase();
 
-  // Check if this is a desktop route or desktop auth flow
-  const isDesktopRoute =
-    pathname.startsWith("/desktop") || search.includes("desktop=1");
+  // Hide the marketing header on app shells (dashboard/admin).
+  const isAppShellRoute = [
+    "/dashboard",
+    "/devices",
+    "/servers",
+    "/proxies",
+    "/account",
+    "/admin",
+  ].some((prefix) => pathname.startsWith(prefix));
 
-  if (isDesktopRoute) {
+  if (isAppShellRoute) {
     return null;
   }
 

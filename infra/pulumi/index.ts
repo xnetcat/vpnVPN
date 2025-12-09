@@ -23,7 +23,6 @@ let desktopBucketUrl: pulumi.Output<string> | undefined;
 let lambdaCodeBucket: pulumi.Output<string> | undefined;
 let controlPlaneDomainTarget: pulumi.Output<string> | undefined;
 let metricsDomainTarget: pulumi.Output<string> | undefined;
-let vpnServerImageTag: pulumi.Output<string> | undefined;
 
 if (stack.startsWith("global")) {
   // ==========================================================================
@@ -31,6 +30,11 @@ if (stack.startsWith("global")) {
   // ==========================================================================
 
   const ecrRepoName = globalConfig.get("ecrRepoName") ?? "vpnvpn/rust-server";
+  const envName =
+    stack.includes("prod") || stack.includes("production")
+      ? "production"
+      : "staging";
+  const envTag = `${envName}-latest`;
 
   // ECR repository for vpn-server images
   const repo = new aws.ecr.Repository("rust-server-repo", {
@@ -210,6 +214,7 @@ if (stack.startsWith("global")) {
     new Date().getTime().toString();
   const awsRegion = process.env.AWS_REGION ?? "us-east-1";
   const controlPlaneImageTag = `build-${buildId}`;
+  const controlPlaneEnvTag = `${envTag}`;
   const controlPlaneImageUri = pulumi.interpolate`${controlPlaneRepo.repositoryUrl}:${controlPlaneImageTag}`;
 
   const controlPlaneBuild = new command.local.Command("control-plane-build", {
@@ -217,6 +222,8 @@ if (stack.startsWith("global")) {
       aws ecr get-login-password --region ${awsRegion} | docker login --username AWS --password-stdin ${controlPlaneRepo.repositoryUrl}
       docker build --no-cache --platform linux/amd64 --provenance=false -t ${controlPlaneImageUri} -f ../../services/control-plane/Dockerfile ../../
       docker push ${controlPlaneImageUri}
+      docker tag ${controlPlaneImageUri} ${controlPlaneRepo.repositoryUrl}:${controlPlaneEnvTag}
+      docker push ${controlPlaneRepo.repositoryUrl}:${controlPlaneEnvTag}
     `,
     // Triggers: run on every update for now to ensure latest code.
     triggers: [buildId],
@@ -250,6 +257,7 @@ if (stack.startsWith("global")) {
 
   // Build and push Docker image using local command
   const metricsImageTag = `build-${buildId}`;
+  const metricsEnvTag = `${envTag}`;
   const metricsImageUri = pulumi.interpolate`${metricsRepo.repositoryUrl}:${metricsImageTag}`;
 
   const metricsBuild = new command.local.Command(
@@ -259,6 +267,8 @@ if (stack.startsWith("global")) {
         aws ecr get-login-password --region ${awsRegion} | docker login --username AWS --password-stdin ${metricsRepo.repositoryUrl}
         docker build --no-cache --platform linux/amd64 --provenance=false -t ${metricsImageUri} -f ../../services/metrics/Dockerfile ../../
         docker push ${metricsImageUri}
+        docker tag ${metricsImageUri} ${metricsRepo.repositoryUrl}:${metricsEnvTag}
+        docker push ${metricsRepo.repositoryUrl}:${metricsEnvTag}
       `,
       triggers: [buildId],
     },
@@ -284,6 +294,7 @@ if (stack.startsWith("global")) {
 
   // vpn-server image (for regional ASGs)
   const vpnServerImageTagValue = `build-${buildId}`;
+  const vpnServerEnvTag = `${envTag}`;
   const vpnServerImageUri = pulumi.interpolate`${repo.repositoryUrl}:${vpnServerImageTagValue}`;
 
   const vpnServerBuild = new command.local.Command("vpn-server-build", {
@@ -291,11 +302,11 @@ if (stack.startsWith("global")) {
       aws ecr get-login-password --region ${awsRegion} | docker login --username AWS --password-stdin ${repo.repositoryUrl}
       docker build --no-cache --platform linux/amd64 --provenance=false -t ${vpnServerImageUri} -f ../../apps/vpn-server/Dockerfile ../../apps/vpn-server
       docker push ${vpnServerImageUri}
+      docker tag ${vpnServerImageUri} ${repo.repositoryUrl}:${vpnServerEnvTag}
+      docker push ${repo.repositoryUrl}:${vpnServerEnvTag}
     `,
     triggers: [buildId],
   });
-
-  vpnServerImageTag = pulumi.output(vpnServerImageTagValue);
 
   // Observability (AMP/Grafana)
   const obs = new Observability("observability");
@@ -314,9 +325,9 @@ if (stack.startsWith("global")) {
   const globalStackName = `${org}/${project}/global-${env}`;
   const globalStack = new pulumi.StackReference(globalStackName);
 
-  const defaultImageTag = globalStack.getOutput("vpnServerImageTag");
+  const envTag = `${env}-latest`;
   const imageTag =
-    (regionConfig.get("imageTag") as string | undefined) ?? defaultImageTag;
+    (regionConfig.get("imageTag") as string | undefined) ?? envTag;
   const minInstances = regionConfig.getNumber("minInstances") ?? 1;
   const maxInstances = regionConfig.getNumber("maxInstances") ?? 10;
   const desiredInstances = regionConfig.getNumber("desiredInstances");
@@ -361,7 +372,6 @@ export const outputs = {
   ...(lambdaCodeBucket && { lambdaCodeBucket }),
   ...(controlPlaneDomainTarget && { controlPlaneDomainTarget }),
   ...(metricsDomainTarget && { metricsDomainTarget }),
-  ...(vpnServerImageTag && { vpnServerImageTag }),
 };
 
 // Re-export individually for backward compatibility
@@ -375,5 +385,4 @@ export {
   lambdaCodeBucket,
   controlPlaneDomainTarget,
   metricsDomainTarget,
-  vpnServerImageTag,
 };

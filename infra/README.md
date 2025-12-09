@@ -222,7 +222,7 @@ pulumi up -y --stack region-eu-west-1-staging
 ## Service Build/Deploy
 
 - Pulumi builds and pushes vpn-server, control-plane, and metrics Docker images automatically via `command.local` in `infra/pulumi/index.ts` (no manual `bun run build:lambda` or S3 uploads).
-- The image tag defaults to `SERVICE_BUILD_ID` (env) or `GITHUB_SHA`; set `SERVICE_BUILD_ID` before `pulumi up` to keep tags deterministic when deploying outside CI.
+- Images are pushed with both a build tag (`build-${SERVICE_BUILD_ID || GITHUB_SHA || timestamp}`) and an env tag (`staging-latest`/`production-latest`). Regional stacks default to `*-latest` unless `region:imageTag` is overridden.
 - Ensure Docker is available wherever Pulumi runs so the local build step can push to ECR.
 
 ### Self-Hosted (Docker Compose)

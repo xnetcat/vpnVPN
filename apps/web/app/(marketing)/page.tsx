@@ -308,8 +308,8 @@ export default async function HomePage() {
               Desktop app
             </h3>
             <p className="mt-2 text-xs text-slate-600">
-              Tauri desktop shell that wraps the `/desktop` experience and can
-              launch native WireGuard/OpenVPN clients on macOS, Windows, Linux.
+              Native Tauri desktop app with OTP login that can launch
+              WireGuard/OpenVPN/IKEv2 clients on macOS, Windows, and Linux.
             </p>
           </div>
         </div>

@@ -1,119 +1,101 @@
+import type { ComponentType } from "react";
 import Link from "next/link";
+import { headers } from "next/headers";
 import {
   LayoutDashboard,
   Server,
   Shield,
-  User,
-  ShieldCheck,
   Smartphone,
-  Key,
-  Users,
-  BarChart3,
-  Activity,
-  Plus,
+  User,
 } from "lucide-react";
 import { getSession } from "@/lib/auth";
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+};
+
+const userNav: NavItem[] = [
+  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/devices", label: "Devices", icon: Smartphone },
+  { href: "/servers", label: "Servers", icon: Server },
+  { href: "/proxies", label: "Proxies", icon: Shield },
+  { href: "/account", label: "Account", icon: User },
+];
+
+function navItemClasses(active: boolean) {
+  const base =
+    "group flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors";
+  const activeClasses =
+    "border border-emerald-500/40 bg-emerald-500/10 text-slate-50 shadow-[0_0_0_1px_rgba(16,185,129,0.15)]";
+  const inactiveClasses =
+    "text-slate-300 hover:bg-slate-800 hover:text-slate-50";
+  return `${base} ${active ? activeClasses : inactiveClasses}`;
+}
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = (headers().get("x-pathname") || "").toLowerCase();
+
+  // Admin routes have their own layout; keep the wrapper minimal here so the
+  // nested admin layout can render its own chrome.
+  if (pathname.startsWith("/admin")) {
+    return <div className="bg-slate-950">{children}</div>;
+  }
+
   const session = await getSession();
-  const isAdmin = Boolean((session?.user as any)?.role === "admin");
+  const email = (session?.user as any)?.email as string | undefined;
 
   return (
-    <div className="flex min-h-[calc(100vh-65px)] bg-slate-950">
-      <aside className="hidden w-64 border-r border-slate-800 bg-slate-900/80 md:block">
-        <nav className="space-y-1 p-4 text-sm text-slate-300">
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-2 rounded-md px-3 py-2 font-medium hover:bg-slate-800 hover:text-slate-50"
-          >
-            <LayoutDashboard className="h-4 w-4" />
-            Overview
-          </Link>
-          <Link
-            href="/devices"
-            className="flex items-center gap-2 rounded-md px-3 py-2 font-medium hover:bg-slate-800 hover:text-slate-50"
-          >
-            <Smartphone className="h-4 w-4" />
-            Devices
-          </Link>
-          <Link
-            href="/servers"
-            className="flex items-center gap-2 rounded-md px-3 py-2 font-medium hover:bg-slate-800 hover:text-slate-50"
-          >
-            <Server className="h-4 w-4" />
-            Servers
-          </Link>
-          <Link
-            href="/proxies"
-            className="flex items-center gap-2 rounded-md px-3 py-2 font-medium hover:bg-slate-800 hover:text-slate-50"
-          >
-            <Shield className="h-4 w-4" />
-            Proxies
-          </Link>
-          <Link
-            href="/account"
-            className="flex items-center gap-2 rounded-md px-3 py-2 font-medium hover:bg-slate-800 hover:text-slate-50"
-          >
-            <User className="h-4 w-4" />
-            Account
-          </Link>
-          {isAdmin && (
-            <>
-              <div className="my-3 border-t border-slate-800" />
-              <p className="px-3 py-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Admin
-              </p>
-              <Link
-                href="/admin"
-                className="flex items-center gap-2 rounded-md px-3 py-2 font-medium hover:bg-slate-800 hover:text-slate-50"
-              >
-                <ShieldCheck className="h-4 w-4" />
-                Overview
+    <div className="flex min-h-[calc(100vh-64px)] bg-slate-950">
+      <aside className="hidden w-64 border-r border-slate-800 bg-slate-900/70 md:flex md:flex-col">
+        <div className="px-4 pb-2 pt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">
+            Dashboard
+          </p>
+          <p className="text-sm font-semibold text-slate-100">vpnVPN</p>
+        </div>
+        <nav className="flex-1 space-y-1 px-2 pb-4">
+          {userNav.map((item) => {
+            const Icon = item.icon;
+            const active =
+              pathname === item.href || pathname.startsWith(`${item.href}/`);
+            return (
+              <Link key={item.href} href={item.href} className={navItemClasses(active)}>
+                <Icon className="h-4 w-4 text-emerald-300" />
+                {item.label}
               </Link>
-              <Link
-                href="/admin/tokens"
-                className="flex items-center gap-2 rounded-md px-3 py-2 font-medium hover:bg-slate-800 hover:text-slate-50"
-              >
-                <Key className="h-4 w-4" />
-                Server Tokens
-              </Link>
-              <Link
-                href="/admin/provision"
-                className="flex items-center gap-2 rounded-md px-3 py-2 font-medium hover:bg-slate-800 hover:text-slate-50"
-              >
-                <Plus className="h-4 w-4" />
-                Provision Server
-              </Link>
-              <Link
-                href="/admin/users"
-                className="flex items-center gap-2 rounded-md px-3 py-2 font-medium hover:bg-slate-800 hover:text-slate-50"
-              >
-                <Users className="h-4 w-4" />
-                Users
-              </Link>
-              <Link
-                href="/admin/analytics"
-                className="flex items-center gap-2 rounded-md px-3 py-2 font-medium hover:bg-slate-800 hover:text-slate-50"
-              >
-                <BarChart3 className="h-4 w-4" />
-                Analytics
-              </Link>
-              <Link
-                href="/admin/vpn-metrics"
-                className="flex items-center gap-2 rounded-md px-3 py-2 font-medium hover:bg-slate-800 hover:text-slate-50"
-              >
-                <Activity className="h-4 w-4" />
-                VPN Metrics
-              </Link>
-            </>
-          )}
+            );
+          })}
         </nav>
       </aside>
-      <main className="flex-1 bg-slate-950">{children}</main>
+      <main className="flex-1">
+        <header className="sticky top-0 z-20 border-b border-slate-800/80 bg-slate-900/80 backdrop-blur">
+          <div className="flex flex-col gap-2 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">
+                Control center
+              </p>
+              <h1 className="text-xl font-semibold text-slate-50">
+                Dashboard
+              </h1>
+              <p className="text-sm text-slate-400">
+                Manage devices, servers, proxies, and billing.
+              </p>
+            </div>
+            {email ? (
+              <span className="inline-flex items-center rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-200">
+                {email}
+              </span>
+            ) : null}
+          </div>
+        </header>
+        <div className="px-4 pb-10 pt-6 sm:px-6 lg:px-8">{children}</div>
+      </main>
     </div>
   );
 }

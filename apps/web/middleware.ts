@@ -45,9 +45,9 @@ function rewriteForSubdomains(req: NextRequest): NextResponse | null {
     return NextResponse.rewrite(url);
   }
 
-  // app.vpnvpn.dev / app.staging.vpnvpn.dev -> /desktop (desktop client UI)
+  // app.vpnvpn.dev / app.staging.vpnvpn.dev -> /dashboard (legacy desktop host)
   if (host.startsWith("app.") && pathname === "/") {
-    url.pathname = "/desktop";
+    url.pathname = "/dashboard";
     return NextResponse.rewrite(url);
   }
 

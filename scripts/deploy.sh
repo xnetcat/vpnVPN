@@ -122,10 +122,12 @@ fi
 
 log_info "Using ECR Repository: ${REPO_NAME}"
 
-# Pulumi builds control-plane/metrics images itself; share a deterministic tag
+# Pulumi builds control-plane/metrics/vpn-server images; set deterministic build id + env tag
 SERVICE_BUILD_ID="${SERVICE_BUILD_ID:-$(git rev-parse --short HEAD)}"
-log_info "Service build id: ${SERVICE_BUILD_ID} (used by Pulumi to build/push control-plane & metrics)"
+IMAGE_TAG="${IMAGE_TAG:-${ENVIRONMENT}-latest}"
+log_info "Service build id: ${SERVICE_BUILD_ID} (Pulumi build tag), image tag: ${IMAGE_TAG}"
 export SERVICE_BUILD_ID
+export IMAGE_TAG
 
 # Parse VPN regions configuration from regions.json or environment
 REGIONS_FILE="${SCRIPT_DIR}/regions.json"
@@ -218,8 +220,6 @@ deploy_global_stack() {
   ECR_URI=$(pulumi stack output ecrUri --stack "${STACK_NAME}" 2>/dev/null || echo "")
   CP_TARGET=$(pulumi stack output controlPlaneDomainTarget --stack "${STACK_NAME}" 2>/dev/null || echo "")
   METRICS_TARGET=$(pulumi stack output metricsDomainTarget --stack "${STACK_NAME}" 2>/dev/null || echo "")
-  IMAGE_TAG=$(pulumi stack output vpnServerImageTag --stack "${STACK_NAME}" 2>/dev/null || echo "")
-  export IMAGE_TAG
   
   log_success "Global stack configured"
   cd "${ROOT_DIR}"
