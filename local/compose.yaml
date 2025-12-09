@@ -121,7 +121,7 @@ services:
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/vpnvpn
       - NEXTAUTH_SECRET=supersecret
       - NEXTAUTH_URL=http://localhost:3000
-      - NEXT_PUBLIC_API_BASE_URL=http://control-plane:4000
+      - NEXT_PUBLIC_API_URL=http://control-plane:4000
       - CONTROL_PLANE_API_URL=http://control-plane:4000
       - CONTROL_PLANE_API_KEY=${CONTROL_PLANE_API_KEY:-dev-control-plane-key}
       - NEXT_PUBLIC_WG_ENDPOINT=localhost:51820
