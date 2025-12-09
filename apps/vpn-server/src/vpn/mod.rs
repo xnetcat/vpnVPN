@@ -38,6 +38,7 @@ pub struct BackendStatus {
 pub trait VpnBackend: Send + Sync {
     fn protocol(&self) -> VpnProtocol;
     fn start(&self) -> Result<()>;
+    #[allow(dead_code)]
     fn stop(&self) -> Result<()>;
     fn status(&self) -> Result<BackendStatus>;
     fn apply_peers(&self, _peers: &[PeerSpec]) -> Result<()> {
@@ -58,6 +59,7 @@ pub struct PeerSpec {
 
 pub struct VpnNode {
     backends: Vec<Arc<dyn VpnBackend>>, // wireguard/openvpn/ipsec
+    #[allow(dead_code)]
     last_egress_by_proto: Arc<RwLock<std::collections::HashMap<String, u64>>>,
 }
 
@@ -145,6 +147,7 @@ impl VpnNode {
         info!("all_backends_start_attempted");
     }
 
+    #[allow(dead_code)]
     pub fn stop_all(&self) {
         info!(
             backend_count = self.backends.len(),

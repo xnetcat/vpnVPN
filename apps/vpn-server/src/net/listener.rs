@@ -1,6 +1,7 @@
 use tokio::io::AsyncReadExt;
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 
+#[allow(dead_code)]
 pub async fn run_udp(port: u16) {
     let addr = format!("0.0.0.0:{}", port);
     let socket = UdpSocket::bind(&addr).await.expect("bind udp");
@@ -12,11 +13,13 @@ pub async fn run_udp(port: u16) {
     }
 }
 
+#[allow(dead_code)]
 async fn handle_tcp(mut stream: TcpStream) {
     let mut buf = [0u8; 1024];
     let _ = stream.read(&mut buf).await; // discard
 }
 
+#[allow(dead_code)]
 pub async fn run_tcp(port: u16) {
     let addr = format!("0.0.0.0:{}", port);
     let listener = TcpListener::bind(&addr).await.expect("bind tcp");

@@ -10,15 +10,15 @@ const SWANCTL_CONF: &str = "/etc/swanctl/swanctl.conf";
 const SWANCTL_SECRETS: &str = "/etc/swanctl/psks.secrets";
 
 pub struct IpsecBackend {
-    ike_port_main: u16,
-    ike_port_nat: u16,
+    _ike_port_main: u16,
+    _ike_port_nat: u16,
 }
 
 impl IpsecBackend {
     pub fn new() -> Result<Self> {
         Ok(Self {
-            ike_port_main: 500,
-            ike_port_nat: 4500,
+            _ike_port_main: 500,
+            _ike_port_nat: 4500,
         })
     }
 
