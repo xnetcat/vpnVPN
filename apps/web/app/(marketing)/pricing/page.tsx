@@ -9,11 +9,10 @@ export default function PricingPage() {
     <main className="mx-auto max-w-7xl p-6 text-slate-50">
       <div className="mb-12 text-center">
         <h1 className="mb-4 text-4xl font-bold tracking-tight text-slate-50">
-          Simple, Transparent Pricing
+          Pricing that fits your rollout
         </h1>
         <p className="text-lg text-slate-400">
-          Choose the plan that fits your needs. All plans include unlimited
-          bandwidth.
+          Pick the plan you need. Unlimited bandwidth. Cancel anytime.
         </p>
       </div>
 
@@ -48,7 +47,7 @@ export default function PricingPage() {
               <ul className="mb-8 space-y-4">
                 {tier.features.map((feature) => (
                   <li key={feature} className="flex items-start gap-3">
-                    <Check className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-400" />
+                    <Check className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
                     <span className="text-slate-300">{feature}</span>
                   </li>
                 ))}
@@ -65,7 +64,7 @@ export default function PricingPage() {
       </div>
 
       <div className="mt-12 text-center text-sm text-slate-500">
-        <p>All plans can be cancelled anytime. No hidden fees.</p>
+        <p>Cancel anytime. No add-on surprises.</p>
       </div>
     </main>
   );

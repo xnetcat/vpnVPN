@@ -18,6 +18,9 @@ import {
   updateTrayState,
   log,
   logError,
+  enableKillSwitch,
+  disableKillSwitch,
+  generateWireguardKeys,
 } from "./lib/tauri";
 import { setStoredSessionToken, setStoredUser } from "./lib/auth";
 import {
@@ -496,10 +499,7 @@ export default function App() {
       let publicKey: string | undefined;
       if (protocol === "wireguard") {
         try {
-          const { invoke } = await import("@tauri-apps/api/core");
-          const [privateKey, pubKey] = await invoke<[string, string]>(
-            "generate_wireguard_keys",
-          );
+          const [privateKey, pubKey] = await generateWireguardKeys();
           localPrivateKey = privateKey;
           publicKey = pubKey;
           console.log(
@@ -761,9 +761,6 @@ export default function App() {
           async () => {
             log("Tray: Toggle kill switch");
             try {
-              const { enableKillSwitch, disableKillSwitch } = await import(
-                "./lib/tauri"
-              );
               if (daemonStatus?.kill_switch_active) {
                 await disableKillSwitch();
               } else {

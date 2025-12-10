@@ -13,7 +13,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import type { Protocol } from "../lib/types";
-import { isDaemonAvailable, getDaemonStatus } from "../lib/tauri";
+import { isDaemonAvailable, getDaemonStatus, installDaemon } from "../lib/tauri";
 
 export type OnboardingStep =
   | "welcome"
@@ -157,9 +157,7 @@ export function OnboardingView({
     setVerificationFailed(false);
 
     try {
-      // Call Tauri command to install daemon
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("install_daemon");
+      await installDaemon();
 
       // Verify daemon is actually running
       const isRunning = await verifyDaemonConnection();

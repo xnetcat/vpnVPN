@@ -57,6 +57,11 @@ export async function disconnectVpn(protocol: Protocol): Promise<void> {
   await invoke("disconnect_vpn", { protocol });
 }
 
+// Generate WireGuard keypair via Tauri (private key stays local)
+export async function generateWireguardKeys(): Promise<[string, string]> {
+  return await invoke<[string, string]>("generate_wireguard_keys");
+}
+
 // VPN tools detection - uses daemon when available, falls back to basic detection
 export async function detectVpnTools(): Promise<VpnToolsStatus | null> {
   try {

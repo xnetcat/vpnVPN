@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Server,
   Shield,
+  ShieldCheck,
   Smartphone,
   User,
 } from "lucide-react";
@@ -50,18 +51,23 @@ export default async function DashboardLayout({
 
   const session = await getSession();
   const email = (session?.user as any)?.email as string | undefined;
+  const role = (session?.user as any)?.role as string | undefined;
+  const isAdmin = role === "admin";
+  const navItems: NavItem[] = isAdmin
+    ? [...userNav, { href: "/admin", label: "Admin", icon: ShieldCheck }]
+    : userNav;
 
   return (
-    <div className="flex min-h-[calc(100vh-64px)] bg-slate-950">
-      <aside className="hidden w-64 border-r border-slate-800 bg-slate-900/70 md:flex md:flex-col">
-        <div className="px-4 pb-2 pt-4">
+    <div className="flex min-h-screen bg-slate-950">
+      <aside className="hidden w-64 border-r border-slate-800 bg-slate-900/70 md:sticky md:top-0 md:flex md:h-screen md:flex-col">
+        <div className="px-4 pb-2 pt-6">
           <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">
             Dashboard
           </p>
           <p className="text-sm font-semibold text-slate-100">vpnVPN</p>
         </div>
-        <nav className="flex-1 space-y-1 px-2 pb-4">
-          {userNav.map((item) => {
+        <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-6">
+          {navItems.map((item) => {
             const Icon = item.icon;
             const active =
               pathname === item.href || pathname.startsWith(`${item.href}/`);
