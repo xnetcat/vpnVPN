@@ -2,10 +2,11 @@ import { z } from "zod";
 import { router, adminProcedure } from "../init";
 import { TRPCError } from "@trpc/server";
 
-const base = process.env.CONTROL_PLANE_API_URL ?? process.env.NEXT_PUBLIC_API_URL;
-const apiKey = process.env.CONTROL_PLANE_API_KEY;
-
 function getControlPlaneConfig() {
+  const base =
+    process.env.CONTROL_PLANE_API_URL ?? process.env.NEXT_PUBLIC_API_URL;
+  const apiKey = process.env.CONTROL_PLANE_API_KEY;
+
   if (!base || !apiKey) {
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
@@ -42,6 +43,39 @@ export const adminRouter = router({
     const data = await res.json();
     return data || [];
   }),
+
+  deleteServer: adminProcedure
+    .input(z.object({ id: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      const { base, apiKey } = getControlPlaneConfig();
+      const url = `${base}/servers/${encodeURIComponent(input.id)}`;
+
+      const res = await fetch(url, {
+        method: "DELETE",
+        headers: { "x-api-key": apiKey },
+      });
+
+      if (res.status === 404) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Server not found",
+        });
+      }
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        console.error("[admin] DELETE /servers failed", {
+          status: res.status,
+          body: text,
+        });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to delete server",
+        });
+      }
+
+      return { status: "deleted" };
+    }),
 
   // Token management
   listTokens: adminProcedure.query(async () => {

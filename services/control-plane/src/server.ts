@@ -286,6 +286,39 @@ export async function buildServer(): Promise<FastifyInstance> {
     }
   });
 
+  fastify.delete("/servers/:id", async (req, reply) => {
+    try {
+      requireApiKey(req.headers as Record<string, unknown>);
+      const { id } = req.params as { id?: string };
+
+      if (!id) {
+        return reply.code(400).send({ error: "Server id required" });
+      }
+
+      const server = await prisma.vpnServer.findUnique({ where: { id } });
+      if (!server) {
+        return reply.code(404).send({ error: "Server not found" });
+      }
+
+      await prisma.vpnPeer.updateMany({
+        where: { serverId: id },
+        data: { serverId: null },
+      });
+
+      await prisma.vpnServer.delete({ where: { id } });
+
+      req.log.info({ id }, "delete_server");
+      return reply.code(204).send();
+    } catch (err: unknown) {
+      const error = err as Error & { statusCode?: number };
+      req.log.error({ err }, "deleteServer failed");
+      const status = error.statusCode ?? 500;
+      return reply
+        .code(status)
+        .send({ error: error.message ?? "Internal Error" });
+    }
+  });
+
   // ----- Peer endpoints backed by Postgres via Prisma -----
   fastify.post("/peers", async (req, reply) => {
     try {
