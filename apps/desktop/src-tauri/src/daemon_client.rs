@@ -532,19 +532,3 @@ pub fn update_binary_paths(paths: VpnBinaryPaths) -> Result<VpnToolsStatus, Stri
     }
 }
 
-/// Get VPN tools from daemon status (includes vpn_tools field).
-pub fn get_vpn_tools_from_status() -> Result<VpnToolsStatus, String> {
-    eprintln!("[daemon_client] Getting VPN tools from daemon status...");
-
-    let result = send_request("get_status", serde_json::Value::Null)?;
-
-    // Extract vpn_tools from Status response
-    if let Some(status_obj) = result.get("Status") {
-        if let Some(tools_obj) = status_obj.get("vpn_tools") {
-            return serde_json::from_value(tools_obj.clone())
-                .map_err(|e| format!("Failed to parse VPN tools from status: {}", e));
-        }
-    }
-
-    Err("VPN tools not found in daemon status".to_string())
-}

@@ -5,7 +5,7 @@ mod tray;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::Read;
 use std::path::PathBuf;
 
 #[cfg(any(windows, target_os = "linux"))]
@@ -1145,7 +1145,8 @@ fn restart_daemon() -> Result<(), String> {
     eprintln!("[restart_daemon] Starting daemon restart...");
 
     // Check if we're in dev mode (using /tmp socket)
-    if is_using_dev_socket() {
+    let channel = app_channel();
+    if is_using_dev_socket(&channel) {
         eprintln!("[restart_daemon] Dev mode detected - sending restart signal to daemon");
         // In dev mode, we can still send the restart request
         // The daemon will try to restart itself, but if it's running via cargo watch,
@@ -1176,7 +1177,8 @@ fn restart_daemon() -> Result<(), String> {
 fn stop_daemon() -> Result<(), String> {
     eprintln!("[stop_daemon] Stopping daemon...");
 
-    if is_using_dev_socket() {
+    let channel = app_channel();
+    if is_using_dev_socket(&channel) {
         eprintln!("[stop_daemon] Dev mode - daemon must be stopped manually (Ctrl+C in terminal)");
         return Err("In development mode, stop the daemon manually by pressing Ctrl+C in the terminal where it's running.".to_string());
     }
@@ -1706,7 +1708,8 @@ fn uninstall_daemon() -> Result<(), String> {
     eprintln!("[uninstall_daemon] Starting daemon uninstallation...");
 
     // Check if we're in dev mode
-    if is_using_dev_socket() {
+    let channel = app_channel();
+    if is_using_dev_socket(&channel) {
         eprintln!("[uninstall_daemon] Dev mode detected - cleaning up dev socket");
         // In dev mode, just clean up the socket
         let _ = std::fs::remove_file("/tmp/vpnvpn-daemon.sock");
