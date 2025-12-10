@@ -67,6 +67,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "missing_keys" }, { status: 400 });
   }
 
+  if (!WG_SERVER_PUBLIC_KEY) {
+    return NextResponse.json(
+      {
+        error: "server_missing_key",
+        message:
+          "VPN server public key is not configured. Please contact support.",
+      },
+      { status: 500 },
+    );
+  }
+
   const deviceCount = await prisma.device.count({
     where: { userId },
   });

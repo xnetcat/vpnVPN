@@ -89,6 +89,20 @@ export const deviceRouter = router({
       const serverRecord = serverId
         ? await prisma.vpnServer.findUnique({ where: { id: serverId } })
         : null;
+
+      if (!serverRecord) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "VPN server not found or offline",
+        });
+      }
+
+      if (!serverRecord.publicKey) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "VPN server is missing WireGuard public key",
+        });
+      }
       const serverMetadata =
         (serverRecord?.metadata as Record<string, unknown> | null) || null;
       const serverPort =
@@ -180,7 +194,7 @@ export const deviceRouter = router({
           deviceId: device.id,
           assignedIp,
           publicKey,
-          serverPublicKey: serverRecord?.publicKey ?? null,
+          serverPublicKey: serverRecord.publicKey,
           serverEndpoint: serverRecord?.publicIp ?? null,
           serverPort: serverPort ?? null,
           ...(privateKey ? { privateKey } : {}),
@@ -286,7 +300,7 @@ export const deviceRouter = router({
         deviceId: device.id,
         assignedIp,
         publicKey,
-        serverPublicKey: serverRecord?.publicKey ?? null,
+        serverPublicKey: serverRecord.publicKey,
         serverEndpoint: serverRecord?.publicIp ?? null,
         serverPort: serverPort ?? null,
         ...(privateKey ? { privateKey } : {}),
