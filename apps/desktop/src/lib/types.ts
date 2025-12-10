@@ -70,6 +70,16 @@ export type DaemonStatus = {
   has_firewall_permission: boolean;
   kill_switch_active: boolean;
   vpn_tools?: VpnToolsStatus;
+  channel?: string;
+  source?: string;
+  binary_path?: string | null;
+  using_dev_socket?: boolean;
+};
+
+export type DaemonLogChunk = {
+  cursor: number;
+  lines: string[];
+  truncated: boolean;
 };
 
 export type OnboardingState = {

@@ -64,9 +64,11 @@ jobs:
           if [ "${{ steps.env.outputs.environment }}" == "production" ]; then
             echo "web_url=https://vpnvpn.dev" >> $GITHUB_OUTPUT
             echo "desktop_url=https://vpnvpn.dev/desktop?desktop=1" >> $GITHUB_OUTPUT
+            echo "app_channel=prod" >> $GITHUB_OUTPUT
           else
             echo "web_url=https://staging.vpnvpn.dev" >> $GITHUB_OUTPUT
             echo "desktop_url=https://staging.vpnvpn.dev/desktop?desktop=1" >> $GITHUB_OUTPUT
+            echo "app_channel=staging" >> $GITHUB_OUTPUT
           fi
 
       - name: Setup Bun
@@ -118,6 +120,7 @@ jobs:
         env:
           VITE_VPNVPN_DESKTOP_URL: ${{ steps.urls.outputs.desktop_url }}
           VITE_VPNVPN_API_URL: ${{ steps.urls.outputs.web_url }}
+          VITE_APP_CHANNEL: ${{ steps.urls.outputs.app_channel }}
         run: bun run build:web
 
       - name: Ensure macOS .icns icon
@@ -146,6 +149,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}
+          APP_CHANNEL: ${{ steps.urls.outputs.app_channel }}
         with:
           projectPath: apps/desktop
           args: --target ${{ matrix.target }}

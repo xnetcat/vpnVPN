@@ -65,7 +65,7 @@ type SettingsViewProps = {
   onStartDaemon: () => Promise<void>;
   onStopDaemon: () => Promise<void>;
   onRestartDaemon: () => Promise<void>;
-  onRepairDaemon: () => Promise<void>;
+  onUninstallDaemon: () => Promise<void>;
   onRequestPermissions: () => Promise<void>;
   isDevelopment?: boolean;
   onUpdateDaemon?: () => Promise<void>;
@@ -843,7 +843,7 @@ export function SettingsView({
   onStartDaemon,
   onStopDaemon,
   onRestartDaemon,
-  onRepairDaemon,
+  onUninstallDaemon,
   onRequestPermissions,
   isDevelopment,
   onUpdateDaemon,
@@ -939,7 +939,7 @@ export function SettingsView({
               onStartDaemon={onStartDaemon}
               onStopDaemon={onStopDaemon}
               onRestartDaemon={onRestartDaemon}
-              onRepairDaemon={onRepairDaemon}
+              onUninstallDaemon={onUninstallDaemon}
               onRequestPermissions={onRequestPermissions}
               isDevelopment={isDevelopment}
               onUpdateDaemon={onUpdateDaemon}

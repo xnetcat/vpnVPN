@@ -7,6 +7,9 @@ import type {
   VpnBinaryPaths,
   DesktopSettings,
   VpnConnectionStatus,
+  DaemonStatus,
+  OnboardingState,
+  DaemonLogChunk,
 } from "./types";
 
 // Logging helpers
@@ -266,8 +269,6 @@ export async function openInBrowser(url: string): Promise<void> {
 
 // ============ Daemon operations ============
 
-import type { DaemonStatus, OnboardingState } from "./types";
-
 // Check if daemon is available
 export async function isDaemonAvailable(): Promise<boolean> {
   try {
@@ -295,6 +296,18 @@ export async function getDaemonLogs(): Promise<string> {
   } catch (e) {
     logError("Failed to get daemon logs", e);
     return `Error getting logs: ${e}`;
+  }
+}
+
+// Tail daemon logs (cursor-based)
+export async function tailDaemonLogs(
+  cursor?: number,
+): Promise<DaemonLogChunk | null> {
+  try {
+    return await invoke<DaemonLogChunk>("tail_daemon_logs", { cursor });
+  } catch (e) {
+    logError("Failed to tail daemon logs", e);
+    return null;
   }
 }
 

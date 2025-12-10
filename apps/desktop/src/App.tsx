@@ -343,6 +343,7 @@ export default function App() {
     stopDaemon,
     restartDaemon: restartDaemonFn,
     repairDaemon,
+    uninstallDaemon,
     requestPermissions,
     updateDaemon,
   } = useDaemonStatus();
@@ -867,7 +868,7 @@ export default function App() {
           onStartDaemon={startDaemon}
           onStopDaemon={stopDaemon}
           onRestartDaemon={restartDaemonFn}
-          onRepairDaemon={repairDaemon}
+          onUninstallDaemon={uninstallDaemon}
           onRequestPermissions={requestPermissions}
           isDevelopment={isDevelopment}
           onUpdateDaemon={updateDaemon}

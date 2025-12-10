@@ -165,7 +165,7 @@ exec npx concurrently \
   --names "watch,desktop,daemon,stripe,studio" \
   --prefix-colors "blue,magenta,red,cyan,yellow" \
   "cd $PROJECT_ROOT/local && docker compose watch" \
-  "cd $PROJECT_ROOT/apps/desktop && bun run dev" \
-  "cd $PROJECT_ROOT/apps/desktop && sudo bun run $DAEMON_CMD" \
+  "cd $PROJECT_ROOT/apps/desktop && APP_CHANNEL=devel VITE_APP_CHANNEL=devel bun run dev" \
+  "cd $PROJECT_ROOT/apps/desktop && APP_CHANNEL=devel VITE_APP_CHANNEL=devel sudo bun run $DAEMON_CMD" \
   "cd $PROJECT_ROOT && bun run dev:stripe" \
   "cd $PROJECT_ROOT && bun run dev:studio"

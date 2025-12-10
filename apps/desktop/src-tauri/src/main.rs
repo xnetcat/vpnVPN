@@ -5,6 +5,8 @@ mod tray;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::fs;
+use std::io::{Read, Seek, SeekFrom};
 
 #[cfg(any(windows, target_os = "linux"))]
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -38,6 +40,24 @@ fn get_machine_id() -> String {
                 .unwrap_or_else(|_| "unknown-user".to_string());
             format!("{}@{}", username, hostname)
         }
+    }
+}
+
+// ============ Channel & daemon artifact resolution ============
+
+/// Resolve the active application channel.
+/// Priority: APP_CHANNEL env -> debug builds default to devel -> prod otherwise.
+fn app_channel() -> String {
+    let raw = std::env::var("APP_CHANNEL")
+        .ok()
+        .map(|v| v.to_lowercase());
+
+    match raw.as_deref() {
+        Some("prod") | Some("production") => "prod".into(),
+        Some("staging") | Some("stage") => "staging".into(),
+        Some("devel") | Some("dev") | Some("development") => "devel".into(),
+        _ if cfg!(debug_assertions) => "devel".into(),
+        _ => "prod".into(),
     }
 }
 
@@ -105,6 +125,25 @@ struct VpnToolsStatus {
     openvpn_path: Option<String>,
     ikev2_available: bool,
     ikev2_path: Option<String>,
+}
+
+/// Daemon status returned to the frontend with additional metadata.
+#[derive(Serialize, Clone, Default)]
+struct DaemonStatusWithMeta {
+    running: bool,
+    version: String,
+    uptime_secs: u64,
+    has_network_permission: bool,
+    has_firewall_permission: bool,
+    kill_switch_active: bool,
+    /// App channel (prod/staging/devel).
+    channel: String,
+    /// Where the binary was resolved from (downloaded/bundled/system/dev-socket).
+    source: String,
+    /// Resolved daemon binary path, if any.
+    binary_path: Option<String>,
+    /// Whether using the dev socket (/tmp/...).
+    using_dev_socket: bool,
 }
 
 /// Detect VPN tools - delegates to daemon if available, otherwise uses fallback detection.
@@ -880,18 +919,52 @@ fn is_daemon_available() -> bool {
 
 /// Get daemon status.
 #[tauri::command]
-fn get_daemon_status() -> Result<daemon_client::DaemonStatus, String> {
+fn get_daemon_status() -> Result<DaemonStatusWithMeta, String> {
     eprintln!("[get_daemon_status] Called");
+
+    let channel = app_channel();
+    let using_dev_socket = is_using_dev_socket();
+
+    let (binary_path, source) = match find_daemon_binary(&channel) {
+        Ok((path, src)) => (Some(path.display().to_string()), src),
+        Err(e) => {
+            eprintln!("[get_daemon_status] Daemon binary not found: {}", e);
+            (None, "missing".to_string())
+        }
+    };
+    let source = if using_dev_socket {
+        "dev-socket".to_string()
+    } else {
+        source
+    };
 
     if !daemon_client::is_daemon_available() {
         eprintln!("[get_daemon_status] Daemon not available, returning default status");
-        return Ok(daemon_client::DaemonStatus::default());
+        return Ok(DaemonStatusWithMeta {
+            channel,
+            source,
+            binary_path,
+            using_dev_socket,
+            ..Default::default()
+        });
     }
 
     eprintln!("[get_daemon_status] Daemon available, getting status");
     let result = daemon_client::get_status();
     eprintln!("[get_daemon_status] Result: {:?}", result);
-    result
+
+    result.map(|status| DaemonStatusWithMeta {
+        channel,
+        source,
+        binary_path,
+        using_dev_socket,
+        running: status.running,
+        version: status.version,
+        uptime_secs: status.uptime_secs,
+        has_network_permission: status.has_network_permission,
+        has_firewall_permission: status.has_firewall_permission,
+        kill_switch_active: status.kill_switch_active,
+    })
 }
 
 /// Get daemon logs (macOS only).
@@ -967,6 +1040,85 @@ fn get_daemon_logs() -> Result<String, String> {
     {
         Ok("Windows log viewing not yet implemented".to_string())
     }
+}
+
+#[derive(Serialize)]
+struct LogChunk {
+    cursor: u64,
+    lines: Vec<String>,
+    truncated: bool,
+}
+
+#[tauri::command]
+fn tail_daemon_logs(cursor: Option<u64>) -> Result<LogChunk, String> {
+    const MAX_BYTES: u64 = 32 * 1024; // cap per read
+
+    #[cfg(target_os = "macos")]
+    {
+        let path = "/var/log/vpnvpn-daemon.log";
+        return tail_file(path, cursor, MAX_BYTES);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Fallback: use journalctl last 200 lines
+        let output = std::process::Command::new("journalctl")
+            .args(["-u", "vpnvpn-daemon", "-n", "200", "--no-pager"])
+            .output()
+            .map_err(|e| format!("Failed to get logs: {}", e))?;
+
+        let text = String::from_utf8_lossy(&output.stdout).to_string();
+        let lines: Vec<String> = text.lines().map(|l| l.to_string()).collect();
+        return Ok(LogChunk {
+            cursor: lines.len() as u64,
+            lines,
+            truncated: false,
+        });
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Ok(LogChunk {
+            cursor: 0,
+            lines: vec!["Windows log tail not implemented".to_string()],
+            truncated: false,
+        })
+    }
+}
+
+fn tail_file(path: &str, cursor: Option<u64>, max_bytes: u64) -> Result<LogChunk, String> {
+    let meta = fs::metadata(path).map_err(|e| format!("metadata {path}: {e}"))?;
+    let file_size = meta.len();
+    let start = cursor.unwrap_or_else(|| file_size.saturating_sub(max_bytes));
+
+    let mut file = fs::File::open(path).map_err(|e| format!("open {path}: {e}"))?;
+    let mut buf = Vec::new();
+
+    if start < file_size {
+        use std::io::{Seek, SeekFrom};
+        file.seek(SeekFrom::Start(start))
+            .map_err(|e| format!("seek {path}: {e}"))?;
+    } else {
+        // nothing new
+        return Ok(LogChunk {
+            cursor: file_size,
+            lines: vec![],
+            truncated: false,
+        });
+    }
+
+    file.take(max_bytes)
+        .read_to_end(&mut buf)
+        .map_err(|e| format!("read {path}: {e}"))?;
+
+    let text = String::from_utf8_lossy(&buf);
+    let lines: Vec<String> = text.lines().map(|l| l.to_string()).collect();
+
+    Ok(LogChunk {
+        cursor: file_size,
+        lines,
+        truncated: start > 0,
+    })
 }
 
 /// Enable kill switch via daemon.
@@ -1087,10 +1239,11 @@ fn sidecar_binary_name() -> String {
     format!("vpnvpn-daemon-{}{}", triple, ext)
 }
 
-/// Find the daemon binary from multiple possible locations.
-/// In production builds, it's bundled as a Tauri sidecar.
-/// In development, we look for it in the cargo build output.
-fn find_daemon_binary() -> Result<PathBuf, String> {
+/// Find the daemon binary from controlled locations.
+/// Priority:
+/// 1. Bundled sidecar within the installed app
+/// 2. (devel only) workspace build outputs for developer builds
+fn find_daemon_binary(channel: &str) -> Result<(PathBuf, String), String> {
     let app_path = std::env::current_exe().map_err(|e| format!("Failed to get exe path: {e}"))?;
 
     // List of possible daemon binary locations (in order of priority)
@@ -1116,13 +1269,18 @@ fn find_daemon_binary() -> Result<PathBuf, String> {
             candidates.push(bundle_path.join("Contents/Resources/vpnvpn-daemon"));
             candidates.push(bundle_path.join(format!("Contents/MacOS/{}", sidecar_name)));
         }
-        // Development: cargo build output (release)
-        if let Some(workspace_root) = find_workspace_root(&app_path) {
-            candidates
-                .push(workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"));
-            candidates.push(workspace_root.join("apps/desktop/daemon/target/debug/vpnvpn-daemon"));
-            candidates.push(workspace_root.join("target/release/vpnvpn-daemon"));
-            candidates.push(workspace_root.join("target/debug/vpnvpn-daemon"));
+        // Development: cargo build output (only for devel/debug)
+        if channel == "devel" || cfg!(debug_assertions) {
+            if let Some(workspace_root) = find_workspace_root(&app_path) {
+                candidates.push(
+                    workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"),
+                );
+                candidates.push(
+                    workspace_root.join("apps/desktop/daemon/target/debug/vpnvpn-daemon"),
+                );
+                candidates.push(workspace_root.join("target/release/vpnvpn-daemon"));
+                candidates.push(workspace_root.join("target/debug/vpnvpn-daemon"));
+            }
         }
     }
 
@@ -1133,17 +1291,19 @@ fn find_daemon_binary() -> Result<PathBuf, String> {
             candidates.push(exe_dir.join(&sidecar_name));
             candidates.push(exe_dir.join("vpnvpn-daemon"));
         }
-        // Development: cargo build output
-        if let Some(workspace_root) = find_workspace_root(&app_path) {
-            candidates
-                .push(workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"));
-            candidates.push(workspace_root.join("apps/desktop/daemon/target/debug/vpnvpn-daemon"));
-            candidates.push(workspace_root.join("target/release/vpnvpn-daemon"));
-            candidates.push(workspace_root.join("target/debug/vpnvpn-daemon"));
+        // Development: cargo build output (only for devel/debug)
+        if channel == "devel" || cfg!(debug_assertions) {
+            if let Some(workspace_root) = find_workspace_root(&app_path) {
+                candidates.push(
+                    workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"),
+                );
+                candidates.push(
+                    workspace_root.join("apps/desktop/daemon/target/debug/vpnvpn-daemon"),
+                );
+                candidates.push(workspace_root.join("target/release/vpnvpn-daemon"));
+                candidates.push(workspace_root.join("target/debug/vpnvpn-daemon"));
+            }
         }
-        // System paths (for AppImage or installed app)
-        candidates.push(PathBuf::from("/usr/lib/vpnvpn/vpnvpn-daemon"));
-        candidates.push(PathBuf::from("/opt/vpnvpn/vpnvpn-daemon"));
     }
 
     #[cfg(target_os = "windows")]
@@ -1153,21 +1313,36 @@ fn find_daemon_binary() -> Result<PathBuf, String> {
             candidates.push(exe_dir.join(&sidecar_name));
             candidates.push(exe_dir.join("vpnvpn-daemon.exe"));
         }
-        // Development: cargo build output
-        if let Some(workspace_root) = find_workspace_root(&app_path) {
-            candidates
-                .push(workspace_root.join(r"apps\desktop\daemon\target\release\vpnvpn-daemon.exe"));
-            candidates
-                .push(workspace_root.join(r"apps\desktop\daemon\target\debug\vpnvpn-daemon.exe"));
-            candidates.push(workspace_root.join(r"target\release\vpnvpn-daemon.exe"));
-            candidates.push(workspace_root.join(r"target\debug\vpnvpn-daemon.exe"));
+        // Development: cargo build output (only for devel/debug)
+        if channel == "devel" || cfg!(debug_assertions) {
+            if let Some(workspace_root) = find_workspace_root(&app_path) {
+                candidates.push(
+                    workspace_root.join(r"apps\desktop\daemon\target\release\vpnvpn-daemon.exe"),
+                );
+                candidates.push(
+                    workspace_root.join(r"apps\desktop\daemon\target\debug\vpnvpn-daemon.exe"),
+                );
+                candidates.push(workspace_root.join(r"target\release\vpnvpn-daemon.exe"));
+                candidates.push(workspace_root.join(r"target\debug\vpnvpn-daemon.exe"));
+            }
         }
     }
 
     // Find the first existing candidate
     for candidate in &candidates {
         if candidate.exists() {
-            return Ok(candidate.clone());
+            let source = if channel == "devel" || cfg!(debug_assertions) {
+                if candidate.to_string_lossy().contains("target/debug") {
+                    "dev-debug".to_string()
+                } else if candidate.to_string_lossy().contains("target/release") {
+                    "dev-release".to_string()
+                } else {
+                    "bundled".to_string()
+                }
+            } else {
+                "bundled".to_string()
+            };
+            return Ok((candidate.clone(), source));
         }
     }
 
@@ -1234,10 +1409,12 @@ fn install_daemon() -> Result<(), String> {
 fn install_daemon_macos() -> Result<(), String> {
     eprintln!("[install_daemon_macos] Starting daemon installation...");
 
-    let daemon_src = find_daemon_binary()?;
+    let channel = app_channel();
+    let (daemon_src, source) = find_daemon_binary(&channel)?;
     eprintln!(
-        "[install_daemon_macos] Found daemon binary at: {}",
-        daemon_src.display()
+        "[install_daemon_macos] Found daemon binary at: {} (source: {})",
+        daemon_src.display(),
+        source
     );
 
     // Check if we're in dev mode
@@ -1436,7 +1613,8 @@ PLIST
 
 #[cfg(target_os = "linux")]
 fn install_daemon_linux() -> Result<(), String> {
-    let daemon_src = find_daemon_binary()?;
+    let channel = app_channel();
+    let (daemon_src, source) = find_daemon_binary(&channel)?;
 
     let script = format!(
         r#"pkexec sh -c '
@@ -1479,7 +1657,8 @@ EOF
 
 #[cfg(target_os = "windows")]
 fn install_daemon_windows() -> Result<(), String> {
-    let daemon_src = find_daemon_binary()?;
+    let channel = app_channel();
+    let (daemon_src, _source) = find_daemon_binary(&channel)?;
 
     let install_dir = r"C:\Program Files\vpnVPN";
     let daemon_dst = format!(r"{}\vpnvpn-daemon.exe", install_dir);
@@ -1845,6 +2024,7 @@ fn main() {
             is_daemon_available,
             get_daemon_status,
             get_daemon_logs,
+            tail_daemon_logs,
             enable_kill_switch,
             disable_kill_switch,
             restart_daemon,

@@ -23,6 +23,7 @@ import {
   installDaemon,
   restartDaemon,
   stopDaemon,
+  uninstallDaemon,
   isDevelopmentMode,
   updateDaemonDev,
   log,
@@ -540,6 +541,16 @@ export function useDaemonStatus() {
     }
   }, [refreshStatus]);
 
+  const handleUninstallDaemon = useCallback(async () => {
+    try {
+      await uninstallDaemon();
+      await refreshStatus();
+    } catch (e) {
+      logError("Failed to uninstall daemon:", e);
+      throw e;
+    }
+  }, [refreshStatus]);
+
   return {
     status,
     isLoading,
@@ -549,6 +560,7 @@ export function useDaemonStatus() {
     stopDaemon: handleStopDaemon,
     restartDaemon: handleRestartDaemon,
     repairDaemon: handleRepairDaemon,
+    uninstallDaemon: handleUninstallDaemon,
     requestPermissions: handleRequestPermissions,
     updateDaemon: handleUpdateDaemon,
   };

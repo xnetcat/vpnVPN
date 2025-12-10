@@ -332,9 +332,17 @@ build_desktop_apps() {
   # Note: Desktop app uses VITE_API_BASE_URL (see src/lib/config.ts)
   export VITE_API_BASE_URL="${WEB_URL}"
   export VITE_DASHBOARD_URL="${DESKTOP_URL}"
+  if [[ "$ENVIRONMENT" == "production" ]]; then
+    export VITE_APP_CHANNEL="prod"
+    export APP_CHANNEL="prod"
+  else
+    export VITE_APP_CHANNEL="staging"
+    export APP_CHANNEL="staging"
+  fi
   
   log_info "API Base URL: ${WEB_URL}"
   log_info "Dashboard URL: ${DESKTOP_URL}"
+  log_info "Desktop channel: ${VITE_APP_CHANNEL}"
   
   # Build frontend (this bundles into dist/ which Tauri embeds)
   log_info "Building desktop frontend with Vite..."
