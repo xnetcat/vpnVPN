@@ -82,6 +82,9 @@ class ApiClient {
       assignedIp: string;
       publicKey: string;
       privateKey?: string; // Optional: only present if server generated keys
+      serverPublicKey?: string | null;
+      serverEndpoint?: string | null;
+      serverPort?: number | null;
     }>("/api/trpc/device.register", {
       method: "POST",
       body: JSON.stringify(params),

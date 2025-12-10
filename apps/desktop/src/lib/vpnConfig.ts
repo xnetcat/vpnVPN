@@ -61,12 +61,23 @@ export function buildWireGuardConfig(params: {
 export function buildOpenVpnConfig(params: {
   assignedIp: string;
   serverName: string;
+  endpointOverride?: string;
+  portOverride?: number;
 }) {
+  const endpoint =
+    params.endpointOverride && params.endpointOverride.trim()
+      ? params.endpointOverride.trim()
+      : OVPN_REMOTE;
+  const port =
+    typeof params.portOverride === "number" && !Number.isNaN(params.portOverride)
+      ? params.portOverride
+      : Number(OVPN_PORT) || 1194;
+
   return [
     "client",
     "dev tun",
     "proto udp",
-    `remote ${OVPN_REMOTE} ${OVPN_PORT}`,
+    endpoint ? `remote ${endpoint} ${port}` : "# remote <vpn-hostname> 1194",
     "resolv-retry infinite",
     "nobind",
     "persist-key",

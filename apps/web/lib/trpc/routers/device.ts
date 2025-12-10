@@ -11,6 +11,7 @@ import { getTierConfig } from "@/lib/tiers";
 import { sendEmail } from "@/lib/email";
 import { revalidatePath } from "next/cache";
 import nacl from "tweetnacl";
+import { prisma } from "@vpnvpn/db";
 
 /**
  * Generate a WireGuard-compatible keypair using wg genkey.
@@ -84,6 +85,15 @@ export const deviceRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { name, serverId, machineId, publicKey: clientPublicKey } = input;
+
+      const serverRecord = serverId
+        ? await prisma.vpnServer.findUnique({ where: { id: serverId } })
+        : null;
+      const serverMetadata =
+        (serverRecord?.metadata as Record<string, unknown> | null) || null;
+      const serverPort =
+        (serverMetadata?.listenPort as number | undefined) ??
+        (serverMetadata?.port as number | undefined);
 
       // Check if there's an existing device with this machineId
       let existingDevice = machineId
@@ -170,6 +180,9 @@ export const deviceRouter = router({
           deviceId: device.id,
           assignedIp,
           publicKey,
+          serverPublicKey: serverRecord?.publicKey ?? null,
+          serverEndpoint: serverRecord?.publicIp ?? null,
+          serverPort: serverPort ?? null,
           ...(privateKey ? { privateKey } : {}),
         };
       }
@@ -273,6 +286,9 @@ export const deviceRouter = router({
         deviceId: device.id,
         assignedIp,
         publicKey,
+        serverPublicKey: serverRecord?.publicKey ?? null,
+        serverEndpoint: serverRecord?.publicIp ?? null,
+        serverPort: serverPort ?? null,
         ...(privateKey ? { privateKey } : {}),
       };
     }),

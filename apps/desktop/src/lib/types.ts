@@ -7,6 +7,7 @@ export type MapServer = {
   country?: string;
   status: string;
   sessions: number;
+  publicKey?: string | null;
   publicIp?: string | null;
   metadata?: {
     port?: number;

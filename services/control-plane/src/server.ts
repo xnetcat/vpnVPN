@@ -137,7 +137,10 @@ export async function buildServer(): Promise<FastifyInstance> {
       });
 
       const now = new Date();
-      const metadata = (body.metadata as Record<string, unknown>) || {};
+      let metadata = (body.metadata as Record<string, unknown>) || {};
+      // Persist listenPort alongside any provided metadata
+      metadata = { listenPort: body.listenPort, ...metadata };
+
       const publicIp = metadata.publicIp as string | undefined;
 
       const server = await prisma.vpnServer.upsert({
@@ -146,6 +149,7 @@ export async function buildServer(): Promise<FastifyInstance> {
           status: "online",
           lastSeen: now,
           publicIp: publicIp || undefined,
+          publicKey: body.publicKey,
           metadata: body.metadata as object,
         },
         create: {
@@ -153,6 +157,7 @@ export async function buildServer(): Promise<FastifyInstance> {
           status: "online",
           lastSeen: now,
           publicIp: publicIp || undefined,
+          publicKey: body.publicKey,
           metadata: body.metadata as object,
         },
       });
@@ -259,6 +264,7 @@ export async function buildServer(): Promise<FastifyInstance> {
         return {
           id: s.id,
           publicIp: s.publicIp,
+          publicKey: s.publicKey,
           metadata,
           metrics: metric
             ? {

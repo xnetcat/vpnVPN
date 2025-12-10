@@ -41,6 +41,7 @@ export const serversRouter = router({
       country: item.country || item.metadata?.country,
       status: item.status || "unknown",
       sessions: item.metrics?.sessions || 0,
+      publicKey: item.publicKey || null,
       cpu: typeof item.metrics?.cpu === "number" ? item.metrics.cpu : undefined,
       lastSeen: item.lastSeen,
       // Include server connection details

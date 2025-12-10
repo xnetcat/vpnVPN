@@ -4,6 +4,7 @@ mod daemon_client;
 mod tray;
 
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
@@ -609,10 +610,32 @@ fn apply_vpn_config(protocol: String, config: String) -> Result<(), String> {
     );
 
     // Connect via daemon
-    daemon_client::connect_vpn(vpn_config)?;
+    if let Err(err) = daemon_client::connect_vpn(vpn_config) {
+        let logs = collect_daemon_log_tail(40);
+        let payload = json!({
+            "code": "connect_failed",
+            "message": err,
+            "logs": logs,
+        });
+        let msg = serde_json::to_string(&payload).unwrap_or_else(|_| {
+            "Failed to connect to VPN (and failed to serialize error payload)".to_string()
+        });
+        return Err(msg);
+    }
 
     eprintln!("[apply_vpn_config] Connection request sent successfully");
     Ok(())
+}
+
+fn collect_daemon_log_tail(limit: usize) -> Option<Vec<String>> {
+    match tail_daemon_logs(None) {
+        Ok(chunk) => {
+            let len = chunk.lines.len();
+            let start = len.saturating_sub(limit);
+            Some(chunk.lines[start..].to_vec())
+        }
+        Err(_) => None,
+    }
 }
 
 /// Parse VPN config string into daemon VpnConfig struct.

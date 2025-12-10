@@ -531,4 +531,3 @@ pub fn update_binary_paths(paths: VpnBinaryPaths) -> Result<VpnToolsStatus, Stri
         serde_json::from_value(result).map_err(|e| format!("Failed to parse VPN tools: {}", e))
     }
 }
-

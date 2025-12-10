@@ -353,6 +353,7 @@ export default function App() {
   const [status, setStatus] = useState<ViewState>("disconnected");
   const [config, setConfig] = useState<string | null>(null);
   const [hasAttemptedAutoConnect, setHasAttemptedAutoConnect] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
 
   // Toast notifications
   const { toasts, removeToast, warning, info, error: showError } = useToasts();
@@ -485,6 +486,7 @@ export default function App() {
 
     setStatus("connecting");
     setConfig(null);
+    setConnectError(null);
 
     let deviceId: string | null = null;
     let localPrivateKey: string | null = null;
@@ -542,18 +544,36 @@ export default function App() {
           );
         }
 
-        // Determine endpoint: use server's publicIp if available, otherwise fall back to localhost for dev
-        // In local dev, VPN node is typically on localhost:51820
-        const endpoint =
+        // Determine server connection details with fallbacks
+        const effectiveServerPublicKey =
+          result.serverPublicKey ||
+          selectedServer.publicKey ||
+          wgServerPublicKey ||
+          null;
+        if (!effectiveServerPublicKey) {
+          throw new Error("WireGuard server public key not provided");
+        }
+
+        // Use explicit endpoint/port if provided by server, otherwise fall back to server publicIp or localhost in dev
+        const portFromMetadata =
+          (selectedServer.metadata?.port as number | undefined) ??
+          ((selectedServer.metadata as any)?.listenPort as number | undefined);
+        const port =
+          (typeof result.serverPort === "number"
+            ? result.serverPort
+            : Number(result.serverPort)) || portFromMetadata || 51820;
+
+        const endpointOverride =
+          result.serverEndpoint ||
           selectedServer.publicIp ||
           (process.env.NODE_ENV === "development" ? "localhost" : undefined);
 
         cfg = buildWireGuardConfig({
           privateKey,
           assignedIp: result.assignedIp,
-          serverPublicKeyOverride: wgServerPublicKey || undefined,
-          endpointOverride: endpoint,
-          portOverride: selectedServer.metadata?.port || 51820,
+          serverPublicKeyOverride: effectiveServerPublicKey,
+          endpointOverride,
+          portOverride: port,
         });
 
         console.log("[App] Generated WireGuard config:\n", cfg);
@@ -561,6 +581,15 @@ export default function App() {
         cfg = buildOpenVpnConfig({
           assignedIp: result.assignedIp,
           serverName: selectedServer.region,
+          endpointOverride:
+            result.serverEndpoint ||
+            selectedServer.publicIp ||
+            (process.env.NODE_ENV === "development" ? "localhost" : undefined),
+          portOverride:
+            (typeof result.serverPort === "number"
+              ? result.serverPort
+              : Number(result.serverPort)) ||
+            (selectedServer.metadata?.port as number | undefined),
         });
       } else {
         cfg = buildIkev2Config({
@@ -626,11 +655,19 @@ export default function App() {
         }
       } catch (e) {
         logError("Failed to apply VPN config via Tauri", e);
-        warning(
-          "Config generated, but failed to apply VPN settings locally. You may need to import it manually.",
-        );
+        const parsed = parseConnectError(e);
+        const logSnippet = parsed.logs
+          ? parsed.logs.slice(-8).join("\n")
+          : null;
+        const formattedMessage = `${parsed.code ? `[${parsed.code}] ` : ""}${parsed.message}`;
+        const finalMessage = logSnippet
+          ? `${formattedMessage}\n${logSnippet}`
+          : formattedMessage;
+        setConnectError(finalMessage);
+        showError(finalMessage);
         // Config was generated but not applied - stay disconnected
         setStatus("disconnected");
+        setConfig(null);
         // Cancel the connection - cleans up the pending device
         if (deviceId) {
           await cancelConnection(deviceId);
@@ -639,6 +676,7 @@ export default function App() {
     } catch (e: any) {
       setStatus("disconnected");
       const errorMessage = e.message ?? "Failed to connect to VPN server";
+      setConfig(null);
 
       // Check if it's a device limit error
       if (
@@ -656,6 +694,7 @@ export default function App() {
           },
         );
       } else {
+        setConnectError(errorMessage);
         showError(errorMessage);
       }
 
@@ -668,6 +707,7 @@ export default function App() {
 
   const handleDisconnect = useCallback(() => {
     setConfig(null);
+    setConnectError(null);
     setStatus("disconnected");
     void disconnectVpn(protocol).catch((e) =>
       logError("Failed to disconnect VPN via Tauri", e),
@@ -946,9 +986,50 @@ export default function App() {
             protocol={protocol}
           />
 
-          <StatusPanel protocol={protocol} hasConfig={config !== null} />
+          <StatusPanel
+            protocol={protocol}
+            status={status}
+            hasConfig={config !== null}
+            errorMessage={connectError}
+          />
         </main>
       </div>
     </div>
   );
+}
+
+function parseConnectError(err: unknown): {
+  code?: string;
+  message: string;
+  logs?: string[];
+} {
+  const raw =
+    typeof err === "string"
+      ? err
+      : (err as any)?.message
+        ? String((err as any).message)
+        : String(err);
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return {
+        code: (parsed as any).code ?? undefined,
+        message:
+          (parsed as any).message ??
+          (typeof parsed === "string" ? parsed : "Connection failed"),
+        logs: Array.isArray((parsed as any).logs)
+          ? ((parsed as any).logs as string[])
+          : undefined,
+      };
+    }
+  } catch {
+    // not JSON
+  }
+
+  const codeMatch = raw.match(/Daemon error \(([^)]+)\)/);
+  return {
+    code: codeMatch?.[1],
+    message: raw,
+  };
 }
