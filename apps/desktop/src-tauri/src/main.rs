@@ -921,7 +921,7 @@ fn get_daemon_status() -> Result<DaemonStatusWithMeta, String> {
     eprintln!("[get_daemon_status] Called");
 
     let channel = app_channel();
-    let using_dev_socket = is_using_dev_socket();
+    let using_dev_socket = is_using_dev_socket(&channel);
 
     let (binary_path, source) = match find_daemon_binary(&channel) {
         Ok((path, src)) => (Some(path.display().to_string()), src),
@@ -1132,7 +1132,10 @@ fn disable_kill_switch() -> Result<(), String> {
 }
 
 /// Check if we're using the development socket.
-fn is_using_dev_socket() -> bool {
+fn is_using_dev_socket(channel: &str) -> bool {
+    if !(channel == "devel" || cfg!(debug_assertions)) {
+        return false;
+    }
     std::path::Path::new("/tmp/vpnvpn-daemon.sock").exists()
 }
 

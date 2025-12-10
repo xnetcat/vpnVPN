@@ -15,11 +15,22 @@ const SOCKET_PATH: &str = "/var/run/vpnvpn-daemon.sock";
 /// Development socket path (user-accessible, for hot reload)
 const DEV_SOCKET_PATH: &str = "/tmp/vpnvpn-daemon.sock";
 
+fn allow_dev_socket() -> bool {
+    cfg!(debug_assertions)
+        || matches!(
+            std::env::var("APP_CHANNEL")
+                .ok()
+                .as_deref()
+                .map(|s| s.to_lowercase()),
+            Some(ref v) if v == "devel" || v == "dev" || v == "development"
+        )
+}
+
 /// Get the active socket path, preferring dev socket if available.
 /// This allows hot reload development without touching the production daemon.
 fn get_socket_path() -> &'static str {
     // In dev, prefer the /tmp socket if it exists
-    if std::path::Path::new(DEV_SOCKET_PATH).exists() {
+    if allow_dev_socket() && std::path::Path::new(DEV_SOCKET_PATH).exists() {
         eprintln!("[daemon_client] Using dev socket: {}", DEV_SOCKET_PATH);
         return DEV_SOCKET_PATH;
     }
@@ -82,7 +93,7 @@ pub fn is_daemon_available() -> bool {
     #[cfg(unix)]
     {
         // Check dev socket first
-        if std::path::Path::new(DEV_SOCKET_PATH).exists() {
+        if allow_dev_socket() && std::path::Path::new(DEV_SOCKET_PATH).exists() {
             eprintln!(
                 "[daemon_client] Dev socket {} exists, trying to connect...",
                 DEV_SOCKET_PATH
