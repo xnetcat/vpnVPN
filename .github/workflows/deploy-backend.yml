@@ -137,6 +137,18 @@ jobs:
       - uses: oven-sh/setup-bun@v1
         with:
           bun-version: "1.1.38"
+
+      - name: Cache Bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: pulumi-bun-cache-${{ runner.os }}-${{ hashFiles('infra/pulumi/bun.lockb') }}
+
+      - name: Cache Pulumi node_modules
+        uses: actions/cache@v4
+        with:
+          path: infra/pulumi/node_modules
+          key: pulumi-node-modules-${{ runner.os }}-${{ hashFiles('infra/pulumi/bun.lockb') }}
       - uses: pulumi/actions@v5
         with:
           pulumi-version: latest

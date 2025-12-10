@@ -14,35 +14,42 @@ export default async function AdminProvisionPage() {
     "https://api.vpnvpn.dev";
 
   return (
-    <main className="mx-auto max-w-4xl p-6">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold mb-2">Server Provisioning</h1>
-        <p className="text-gray-600">
+    <main className="mx-auto max-w-4xl space-y-8 px-4 pb-10 pt-4 sm:px-6 lg:px-8">
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-amber-400">
+          Provisioning
+        </p>
+        <h1 className="text-2xl font-semibold text-slate-50">
+          Server Provisioning
+        </h1>
+        <p className="text-sm text-slate-400">
           Deploy new VPN servers using the commands below
         </p>
       </div>
 
       <div className="space-y-6">
         {/* Docker Deployment */}
-        <div className="rounded-lg border bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <Server className="h-5 w-5 text-blue-600" />
-            <h2 className="text-lg font-semibold">Docker Deployment</h2>
+        <div className="rounded-lg border border-slate-800 bg-slate-900/80 p-6 shadow-sm shadow-black/20 backdrop-blur">
+          <div className="mb-4 flex items-center gap-2">
+            <Server className="h-5 w-5 text-sky-400" />
+            <h2 className="text-lg font-semibold text-slate-50">
+              Docker Deployment
+            </h2>
           </div>
-          <p className="text-sm text-gray-600 mb-4">
+          <p className="mb-4 text-sm text-slate-400">
             Deploy a VPN server using Docker (requires NET_ADMIN capabilities)
           </p>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-500 uppercase mb-2">
+              <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-400">
                 1. Create a registration token
               </label>
-              <p className="text-sm text-gray-700 mb-2">
+              <p className="mb-2 text-sm text-slate-300">
                 Go to the{" "}
                 <a
                   href="/admin/tokens"
-                  className="text-blue-600 hover:underline"
+                  className="text-amber-200 underline-offset-4 transition hover:text-amber-100 hover:underline"
                 >
                   Tokens page
                 </a>{" "}
@@ -51,11 +58,11 @@ export default async function AdminProvisionPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 uppercase mb-2">
+              <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-400">
                 2. Run the Docker command
               </label>
               <div className="relative">
-                <pre className="bg-gray-900 text-green-100 p-4 rounded-md text-xs overflow-x-auto font-mono">
+                <pre className="overflow-x-auto rounded-md bg-slate-950 p-4 text-xs font-mono text-emerald-100 ring-1 ring-slate-800">
                   {`docker run -d \\
   --name vpnvpn-server \\
   --cap-add NET_ADMIN \\
@@ -68,9 +75,9 @@ export default async function AdminProvisionPage() {
   vpnvpn/vpn-server:latest`}
                 </pre>
               </div>
-              <p className="text-xs text-gray-500 mt-2">
+              <p className="mt-2 text-xs text-slate-400">
                 Replace{" "}
-                <code className="bg-gray-100 px-1 py-0.5 rounded">
+                <code className="rounded bg-slate-800 px-1 py-0.5 text-slate-100">
                   &lt;YOUR_TOKEN_HERE&gt;
                 </code>{" "}
                 with your actual token.
@@ -80,23 +87,25 @@ export default async function AdminProvisionPage() {
         </div>
 
         {/* Binary Deployment */}
-        <div className="rounded-lg border bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <Terminal className="h-5 w-5 text-green-600" />
-            <h2 className="text-lg font-semibold">Binary Deployment</h2>
+        <div className="rounded-lg border border-slate-800 bg-slate-900/80 p-6 shadow-sm shadow-black/20 backdrop-blur">
+          <div className="mb-4 flex items-center gap-2">
+            <Terminal className="h-5 w-5 text-emerald-400" />
+            <h2 className="text-lg font-semibold text-slate-50">
+              Binary Deployment
+            </h2>
           </div>
-          <p className="text-sm text-gray-600 mb-4">
+          <p className="mb-4 text-sm text-slate-400">
             Deploy a VPN server using the compiled binary (Linux, macOS,
             Windows)
           </p>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-500 uppercase mb-2">
+              <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-400">
                 1. Download the binary
               </label>
               <div className="relative">
-                <pre className="bg-gray-900 text-green-100 p-4 rounded-md text-xs overflow-x-auto font-mono">
+                <pre className="overflow-x-auto rounded-md bg-slate-950 p-4 text-xs font-mono text-emerald-100 ring-1 ring-slate-800">
                   {`# Linux
 curl -L -o vpn-server https://github.com/vpnvpn/vpn-server/releases/latest/download/vpn-server-linux-amd64
 chmod +x vpn-server
@@ -109,11 +118,11 @@ chmod +x vpn-server`}
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 uppercase mb-2">
+              <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-400">
                 2. Run the server
               </label>
               <div className="relative">
-                <pre className="bg-gray-900 text-green-100 p-4 rounded-md text-xs overflow-x-auto font-mono">
+                <pre className="overflow-x-auto rounded-md bg-slate-950 p-4 text-xs font-mono text-emerald-100 ring-1 ring-slate-800">
                   {`sudo ./vpn-server run \\
   --api-url "${apiUrl}" \\
   --token "<YOUR_TOKEN_HERE>" \\
@@ -121,7 +130,7 @@ chmod +x vpn-server`}
   --admin-port 8080`}
                 </pre>
               </div>
-              <p className="text-xs text-gray-500 mt-2">
+              <p className="mt-2 text-xs text-slate-400">
                 Note: Requires root/administrator privileges to create network
                 interfaces.
               </p>
@@ -130,22 +139,24 @@ chmod +x vpn-server`}
         </div>
 
         {/* Systemd Service */}
-        <div className="rounded-lg border bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <Server className="h-5 w-5 text-purple-600" />
-            <h2 className="text-lg font-semibold">Systemd Service (Linux)</h2>
+        <div className="rounded-lg border border-slate-800 bg-slate-900/80 p-6 shadow-sm shadow-black/20 backdrop-blur">
+          <div className="mb-4 flex items-center gap-2">
+            <Server className="h-5 w-5 text-purple-400" />
+            <h2 className="text-lg font-semibold text-slate-50">
+              Systemd Service (Linux)
+            </h2>
           </div>
-          <p className="text-sm text-gray-600 mb-4">
+          <p className="mb-4 text-sm text-slate-400">
             Run as a systemd service for automatic restarts and management
           </p>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-500 uppercase mb-2">
+              <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-400">
                 Create systemd service file
               </label>
               <div className="relative">
-                <pre className="bg-gray-900 text-green-100 p-4 rounded-md text-xs overflow-x-auto font-mono">
+                <pre className="overflow-x-auto rounded-md bg-slate-950 p-4 text-xs font-mono text-emerald-100 ring-1 ring-slate-800">
                   {`sudo tee /etc/systemd/system/vpnvpn.service > /dev/null <<EOF
 [Unit]
 Description=vpnVPN Server
@@ -176,11 +187,11 @@ sudo systemctl start vpnvpn`}
         </div>
 
         {/* Notes */}
-        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
-          <h3 className="text-sm font-semibold text-yellow-900 mb-2">
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 shadow-sm shadow-black/20">
+          <h3 className="mb-2 text-sm font-semibold text-amber-100">
             Important Notes
           </h3>
-          <ul className="text-sm text-yellow-800 space-y-1 list-disc list-inside">
+          <ul className="list-inside list-disc space-y-1 text-sm text-amber-50/90">
             <li>
               Ensure ports 51820 (UDP) and 8080 (TCP) are open in your firewall
             </li>

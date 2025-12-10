@@ -72,7 +72,7 @@ export default async function AdminLayout({
         </nav>
       </aside>
       <main className="flex-1">
-        <header className="sticky top-0 z-20 border-b border-amber-500/20 bg-gradient-to-r from-amber-500/5 via-slate-900 to-slate-950 backdrop-blur">
+        <header className="sticky top-0 z-20 border-b border-amber-500/20 bg-linear-to-r from-amber-500/5 via-slate-900 to-slate-950 backdrop-blur">
           <div className="flex flex-col gap-2 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-400">

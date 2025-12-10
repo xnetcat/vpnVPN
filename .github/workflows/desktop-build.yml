@@ -74,10 +74,29 @@ jobs:
         with:
           bun-version: "1.1.38"
 
+      - name: Cache Bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: desktop-bun-cache-${{ runner.os }}-${{ hashFiles('apps/desktop/bun.lockb') }}
+
+      - name: Cache desktop node_modules
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/node_modules
+          key: desktop-node-modules-${{ runner.os }}-${{ hashFiles('apps/desktop/bun.lockb') }}
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+          shared-key: desktop-${{ matrix.target }}
+          cache-on-failure: true
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'

@@ -10,12 +10,18 @@ export default async function AdminTokensPage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <main className="mx-auto max-w-6xl space-y-6 px-4 pb-10 pt-4 sm:px-6 lg:px-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Server Tokens</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Manage registration tokens for VPN servers
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-400">
+            Tokens
+          </p>
+          <h1 className="text-2xl font-semibold text-slate-50">
+            Server Tokens
+          </h1>
+          <p className="mt-1 text-sm text-slate-400">
+            Manage registration tokens across all admins and system bootstrap
+            tokens.
           </p>
         </div>
         <CreateTokenButton />

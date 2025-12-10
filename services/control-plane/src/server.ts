@@ -398,7 +398,37 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   // ----- Admin: Token Management -----
-  fastify.post("/admin/tokens", async (req, reply) => {
+  const classifyToken = (label: string | null | undefined) => {
+    const normalized = (label || "").toLowerCase();
+    if (normalized.includes("bootstrap") || normalized.startsWith("system")) {
+      return "system";
+    }
+    return "user";
+  };
+
+  fastify.get("/tokens", async (req, reply) => {
+    try {
+      requireApiKey(req.headers as Record<string, unknown>);
+
+      const tokens = await prisma.vpnToken.findMany({
+        orderBy: { createdAt: "desc" },
+      });
+
+      return reply.code(200).send(
+        tokens.map((token) => ({
+          ...token,
+          scope: classifyToken(token.label),
+        })),
+      );
+    } catch (err: unknown) {
+      const error = err as Error & { statusCode?: number };
+      req.log.error({ err }, "listTokens failed");
+      const status = error.statusCode ?? 400;
+      return reply.code(status).send({ error: error.message ?? "Bad Request" });
+    }
+  });
+
+  const createTokenHandler = async (req: any, reply: any) => {
     try {
       requireApiKey(req.headers as Record<string, unknown>);
       const body = z.object({ label: z.string() }).parse(req.body);
@@ -415,14 +445,54 @@ export async function buildServer(): Promise<FastifyInstance> {
       });
 
       req.log.info({ label: body.label }, "admin_token_created");
-      return reply.code(201).send(vpnToken);
+      return reply.code(201).send({
+        ...vpnToken,
+        scope: classifyToken(vpnToken.label),
+      });
     } catch (err: unknown) {
       const error = err as Error & { statusCode?: number };
       req.log.error({ err }, "createToken failed");
       const status = error.statusCode ?? 400;
       return reply.code(status).send({ error: error.message ?? "Bad Request" });
     }
-  });
+  };
+
+  fastify.post("/tokens", createTokenHandler);
+  fastify.post("/admin/tokens", createTokenHandler);
+
+  const revokeTokenHandler = async (req: any, reply: any) => {
+    try {
+      requireApiKey(req.headers as Record<string, unknown>);
+      const { token } = req.params as { token: string };
+
+      const existing = await prisma.vpnToken.findUnique({
+        where: { token },
+      });
+
+      if (!existing) {
+        return reply.code(404).send({ error: "Token not found" });
+      }
+
+      const revoked = await prisma.vpnToken.update({
+        where: { token },
+        data: { active: false },
+      });
+
+      req.log.info({ token }, "admin_token_revoked");
+      return reply.code(200).send({
+        ...revoked,
+        scope: classifyToken(revoked.label),
+      });
+    } catch (err: unknown) {
+      const error = err as Error & { statusCode?: number };
+      req.log.error({ err }, "revokeToken failed");
+      const status = error.statusCode ?? 400;
+      return reply.code(status).send({ error: error.message ?? "Bad Request" });
+    }
+  };
+
+  fastify.delete("/tokens/:token", revokeTokenHandler);
+  fastify.delete("/admin/tokens/:token", revokeTokenHandler);
 
   cachedServer = fastify;
   return fastify;
