@@ -70,7 +70,7 @@ export default function TokenList() {
   };
 
   const filtered = useMemo(() => {
-    return tokens.filter((t) => {
+    return tokens.filter((t: Token) => {
       const matchesSearch =
         !search ||
         t.label.toLowerCase().includes(search.toLowerCase()) ||

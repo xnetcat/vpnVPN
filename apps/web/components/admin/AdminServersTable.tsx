@@ -19,6 +19,15 @@ type Props = {
   initialServers?: AdminServer[];
 };
 
+type NormalizedServer = {
+  id: string;
+  status: string;
+  lastSeen?: string;
+  region?: string;
+  country?: string;
+  sessions: number;
+};
+
 const statusOptions = ["all", "online", "offline", "unknown"] as const;
 
 function formatRelativeTime(iso?: string) {
@@ -85,20 +94,19 @@ export default function AdminServersTable({ initialServers = [] }: Props) {
     },
   });
 
-  const normalized = useMemo(() => {
-    return (data || []).map((item) => {
+  const normalized = useMemo<NormalizedServer[]>(() => {
+    return (data || []).map((item: AdminServer) => {
       const metadata = (item as AdminServer).metadata || {};
       const region = (item as AdminServer).region ?? (metadata as any).region;
       const country =
         (item as AdminServer).country ?? (metadata as any).country ?? undefined;
 
       const rawStatus = (item as AdminServer).status ?? "unknown";
-      const sessions =
-        typeof (item as AdminServer).metrics?.sessions === "number"
-          ? (item as AdminServer).metrics?.sessions
-          : typeof (item as AdminServer).activeSessions === "number"
-            ? (item as AdminServer).activeSessions
-            : 0;
+      const sessions = Number(
+        (item as AdminServer).metrics?.sessions ??
+          (item as AdminServer).activeSessions ??
+          0,
+      );
 
       return {
         id: (item as AdminServer).id ?? "unknown",
@@ -107,7 +115,7 @@ export default function AdminServersTable({ initialServers = [] }: Props) {
         region,
         country,
         sessions,
-      };
+      } satisfies NormalizedServer;
     });
   }, [data]);
 
@@ -115,14 +123,14 @@ export default function AdminServersTable({ initialServers = [] }: Props) {
     return Array.from(
       new Set(
         normalized
-          .map((s) => s.region?.toLowerCase())
+          .map((s: NormalizedServer) => s.region?.toLowerCase())
           .filter((r): r is string => Boolean(r)),
       ),
     ).sort();
   }, [normalized]);
 
   const filtered = useMemo(() => {
-    return normalized.filter((s) => {
+    return normalized.filter((s: NormalizedServer) => {
       const matchesSearch =
         !search ||
         s.id.toLowerCase().includes(search.toLowerCase()) ||
