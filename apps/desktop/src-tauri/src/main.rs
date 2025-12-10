@@ -4,9 +4,9 @@ mod daemon_client;
 mod tray;
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
+use std::path::PathBuf;
 
 #[cfg(any(windows, target_os = "linux"))]
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -48,9 +48,7 @@ fn get_machine_id() -> String {
 /// Resolve the active application channel.
 /// Priority: APP_CHANNEL env -> debug builds default to devel -> prod otherwise.
 fn app_channel() -> String {
-    let raw = std::env::var("APP_CHANNEL")
-        .ok()
-        .map(|v| v.to_lowercase());
+    let raw = std::env::var("APP_CHANNEL").ok().map(|v| v.to_lowercase());
 
     match raw.as_deref() {
         Some("prod") | Some("production") => "prod".into(),
@@ -1272,12 +1270,10 @@ fn find_daemon_binary(channel: &str) -> Result<(PathBuf, String), String> {
         // Development: cargo build output (only for devel/debug)
         if channel == "devel" || cfg!(debug_assertions) {
             if let Some(workspace_root) = find_workspace_root(&app_path) {
-                candidates.push(
-                    workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"),
-                );
-                candidates.push(
-                    workspace_root.join("apps/desktop/daemon/target/debug/vpnvpn-daemon"),
-                );
+                candidates
+                    .push(workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"));
+                candidates
+                    .push(workspace_root.join("apps/desktop/daemon/target/debug/vpnvpn-daemon"));
                 candidates.push(workspace_root.join("target/release/vpnvpn-daemon"));
                 candidates.push(workspace_root.join("target/debug/vpnvpn-daemon"));
             }
@@ -1294,12 +1290,10 @@ fn find_daemon_binary(channel: &str) -> Result<(PathBuf, String), String> {
         // Development: cargo build output (only for devel/debug)
         if channel == "devel" || cfg!(debug_assertions) {
             if let Some(workspace_root) = find_workspace_root(&app_path) {
-                candidates.push(
-                    workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"),
-                );
-                candidates.push(
-                    workspace_root.join("apps/desktop/daemon/target/debug/vpnvpn-daemon"),
-                );
+                candidates
+                    .push(workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"));
+                candidates
+                    .push(workspace_root.join("apps/desktop/daemon/target/debug/vpnvpn-daemon"));
                 candidates.push(workspace_root.join("target/release/vpnvpn-daemon"));
                 candidates.push(workspace_root.join("target/debug/vpnvpn-daemon"));
             }

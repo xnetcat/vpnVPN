@@ -59,7 +59,10 @@ export default async function AdminUsersPage() {
             {users.map((user: (typeof users)[number]) => {
               const sub = user.subscriptions[0];
               return (
-                <tr key={user.id} className="bg-slate-950/40 hover:bg-slate-800/70">
+                <tr
+                  key={user.id}
+                  className="bg-slate-950/40 hover:bg-slate-800/70"
+                >
                   <td className="px-4 py-3 text-sm text-slate-100">
                     {user.email ?? "—"}
                   </td>

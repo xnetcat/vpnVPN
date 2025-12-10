@@ -177,7 +177,9 @@ export default async function AdminVpnMetricsPage({
         </div>
         <div className="rounded-lg border border-slate-800 bg-slate-900/80 p-6 shadow-sm shadow-black/20">
           <div className="mb-1 text-sm text-slate-400">Active sessions</div>
-          <div className="text-3xl font-bold text-slate-50">{totalSessions}</div>
+          <div className="text-3xl font-bold text-slate-50">
+            {totalSessions}
+          </div>
           <p className="mt-1 text-xs text-slate-500">
             current sessions across all protocols
           </p>
@@ -211,8 +213,13 @@ export default async function AdminVpnMetricsPage({
             </thead>
             <tbody className="divide-y divide-slate-800">
               {Object.entries(byCountry).map(([country, sessions]) => (
-                <tr key={country} className="bg-slate-950/40 hover:bg-slate-800/70">
-                  <td className="px-4 py-3 text-sm text-slate-200">{country}</td>
+                <tr
+                  key={country}
+                  className="bg-slate-950/40 hover:bg-slate-800/70"
+                >
+                  <td className="px-4 py-3 text-sm text-slate-200">
+                    {country}
+                  </td>
                   <td className="px-4 py-3 text-sm text-slate-200">
                     {sessions}
                   </td>
@@ -260,7 +267,10 @@ export default async function AdminVpnMetricsPage({
             </thead>
             <tbody className="divide-y divide-slate-800">
               {filteredServers.map((s) => (
-                <tr key={s.id} className="bg-slate-950/40 hover:bg-slate-800/70">
+                <tr
+                  key={s.id}
+                  className="bg-slate-950/40 hover:bg-slate-800/70"
+                >
                   <td className="px-4 py-3 text-sm font-mono text-slate-400">
                     {s.id}
                   </td>

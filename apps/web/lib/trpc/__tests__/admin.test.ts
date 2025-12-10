@@ -159,10 +159,13 @@ describe("Admin Router", () => {
       const caller = appRouter.createCaller(ctx);
       const result = await caller.admin.deleteServer({ id: "server-1" });
 
-      expect(fetch).toHaveBeenCalledWith("https://api.test.com/servers/server-1", {
-        method: "DELETE",
-        headers: { "x-api-key": "test-key" },
-      });
+      expect(fetch).toHaveBeenCalledWith(
+        "https://api.test.com/servers/server-1",
+        {
+          method: "DELETE",
+          headers: { "x-api-key": "test-key" },
+        },
+      );
       expect(result.status).toBe("deleted");
     });
 
@@ -186,9 +189,9 @@ describe("Admin Router", () => {
       ctx.session = mockAdminSession;
 
       const caller = appRouter.createCaller(ctx);
-      await expect(caller.admin.deleteServer({ id: "missing" })).rejects.toThrow(
-        "Server not found",
-      );
+      await expect(
+        caller.admin.deleteServer({ id: "missing" }),
+      ).rejects.toThrow("Server not found");
     });
   });
 });

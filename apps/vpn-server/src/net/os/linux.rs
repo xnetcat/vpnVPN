@@ -1,7 +1,7 @@
 use super::NetworkManager;
 use anyhow::{anyhow, Context, Result};
 use std::process::Command;
-use tracing::{info, warn};
+use tracing::info;
 
 #[derive(Default)]
 pub struct LinuxNetworkManager;

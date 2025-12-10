@@ -143,9 +143,9 @@ export function ServiceTab({
   const [logs, setLogs] = useState<string[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logCursor, setLogCursor] = useState<number | null>(null);
-  const [logTimer, setLogTimer] = useState<ReturnType<typeof setInterval> | null>(
-    null,
-  );
+  const [logTimer, setLogTimer] = useState<ReturnType<
+    typeof setInterval
+  > | null>(null);
   useEffect(() => {
     return () => {
       if (logTimer) clearInterval(logTimer);
@@ -183,8 +183,8 @@ export function ServiceTab({
     if (!chunk) return;
     setLogCursor(chunk.cursor);
     if (chunk.lines.length > 0) {
-      setLogs((prev) =>
-        [...prev, ...chunk.lines].slice(-400), // keep last 400 lines
+      setLogs(
+        (prev) => [...prev, ...chunk.lines].slice(-400), // keep last 400 lines
       );
     }
   };

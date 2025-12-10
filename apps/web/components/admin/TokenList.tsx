@@ -44,8 +44,11 @@ export default function TokenList() {
   const [scope, setScope] = useState<(typeof scopeOptions)[number]>("all");
   const utils = trpc.useUtils();
 
-  const { data: tokens = [], isLoading, isFetching } =
-    trpc.admin.listTokens.useQuery();
+  const {
+    data: tokens = [],
+    isLoading,
+    isFetching,
+  } = trpc.admin.listTokens.useQuery();
 
   const revokeMutation = trpc.admin.revokeToken.useMutation({
     onSuccess: () => {
@@ -77,18 +80,13 @@ export default function TokenList() {
         t.token.toLowerCase().includes(search.toLowerCase());
 
       const matchesStatus =
-        status === "all"
-          ? true
-          : status === "active"
-            ? t.active
-            : !t.active;
+        status === "all" ? true : status === "active" ? t.active : !t.active;
 
       const normalizedScope =
         (t.scope as Token["scope"]) ||
         (t.label?.toLowerCase().includes("bootstrap") ? "system" : "user");
 
-      const matchesScope =
-        scope === "all" ? true : normalizedScope === scope;
+      const matchesScope = scope === "all" ? true : normalizedScope === scope;
 
       return matchesSearch && matchesStatus && matchesScope;
     });

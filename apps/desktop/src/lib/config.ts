@@ -32,8 +32,7 @@ export const IS_PRODUCTION = import.meta.env.PROD;
 
 // Desktop channel (prod/staging/devel)
 export const APP_CHANNEL = (
-  import.meta.env.VITE_APP_CHANNEL ??
-  (import.meta.env.DEV ? "devel" : "prod")
+  import.meta.env.VITE_APP_CHANNEL ?? (import.meta.env.DEV ? "devel" : "prod")
 ).toLowerCase();
 
 console.log("[config]   APP_CHANNEL:", APP_CHANNEL);

@@ -151,7 +151,7 @@ function RegisterForm() {
             Already have an account?{" "}
             <a
               href={`/auth/signin?callbackUrl=${encodeURIComponent(
-                callbackUrl
+                callbackUrl,
               )}${isDesktopParam ? "&desktop=1" : ""}`}
               className="font-medium text-blue-600 hover:text-blue-800"
             >

@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CheckCircle2, Clock3, RefreshCw, Search, Trash2, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock3,
+  RefreshCw,
+  Search,
+  Trash2,
+  XCircle,
+} from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
 
 type AdminServer = {
@@ -217,7 +224,9 @@ export default function AdminServersTable({ initialServers = [] }: Props) {
           disabled={isFetching}
           className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm font-medium text-slate-100 hover:border-amber-400 hover:text-amber-100 disabled:opacity-60"
         >
-          <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}
+          />
           Refresh
         </button>
       </div>
@@ -253,7 +262,8 @@ export default function AdminServersTable({ initialServers = [] }: Props) {
             {filtered.map((s) => {
               const statusMeta = formatStatus(s.status);
               const StatusIcon = statusMeta.icon;
-              const isDeleting = deletingId === s.id && deleteMutation.isPending;
+              const isDeleting =
+                deletingId === s.id && deleteMutation.isPending;
 
               return (
                 <tr key={s.id} className="hover:bg-slate-800/80">
@@ -322,4 +332,3 @@ export default function AdminServersTable({ initialServers = [] }: Props) {
     </div>
   );
 }
-
