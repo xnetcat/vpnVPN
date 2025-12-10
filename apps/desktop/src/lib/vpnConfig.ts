@@ -28,11 +28,11 @@ export function buildWireGuardConfig(params: {
   console.log("[vpnConfig]   Final endpoint:", endpoint);
   console.log(
     "[vpnConfig]   serverPublicKeyOverride:",
-    params.serverPublicKeyOverride,
+    params.serverPublicKeyOverride
   );
   console.log(
     "[vpnConfig]   WG_SERVER_PUBLIC_KEY from env:",
-    WG_SERVER_PUBLIC_KEY,
+    WG_SERVER_PUBLIC_KEY
   );
   console.log("[vpnConfig]   Final serverPublicKey:", serverPublicKey);
 
@@ -69,7 +69,8 @@ export function buildOpenVpnConfig(params: {
       ? params.endpointOverride.trim()
       : OVPN_REMOTE;
   const port =
-    typeof params.portOverride === "number" && !Number.isNaN(params.portOverride)
+    typeof params.portOverride === "number" &&
+    !Number.isNaN(params.portOverride)
       ? params.portOverride
       : Number(OVPN_PORT) || 1194;
 

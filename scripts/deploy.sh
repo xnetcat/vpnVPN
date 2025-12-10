@@ -10,7 +10,7 @@
 # 5. (Optional, legacy) Builds desktop apps and uploads to S3
 #
 # Usage:
-#   ./scripts/deploy.sh [staging|production] [--skip-desktop] [--skip-vpn-nodes]
+#   ./scripts/deploy.sh [staging|production] [--skip-desktop] [--skip-vpn-nodes] [--only-vpn] [--only-desktop] [--add-region=REGION] [--nodes=N]
 #
 # Prerequisites:
 #   - AWS CLI configured
@@ -42,7 +42,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # =============================================================================
 
 ENVIRONMENT="${1:-staging}"
-SKIP_DESKTOP=true
+SKIP_DESKTOP=false
 SKIP_VPN_NODES=false
 ONLY_VPN=false
 ONLY_DESKTOP=false
@@ -50,6 +50,7 @@ ONLY_DESKTOP=false
 for arg in "$@"; do
   case $arg in
     --with-desktop) SKIP_DESKTOP=false ;;
+    --skip-desktop) SKIP_DESKTOP=true ;;
     --skip-vpn-nodes) SKIP_VPN_NODES=true ;;
     --only-vpn) ONLY_VPN=true ;;
     --only-desktop) ONLY_DESKTOP=true ;;
