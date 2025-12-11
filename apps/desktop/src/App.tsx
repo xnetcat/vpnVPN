@@ -468,7 +468,7 @@ export default function App() {
     if (!selectedServer) return;
     if (!isCurrentProtocolAvailable) {
       showError(
-        `${protocol === "wireguard" ? "WireGuard" : protocol === "openvpn" ? "OpenVPN" : "IKEv2"} is not installed. Check Settings → Connection for installation instructions.`,
+        `${protocol === "wireguard" ? "WireGuard" : protocol === "openvpn" ? "OpenVPN" : "IKEv2"} is not installed. Check Settings → Connection for installation instructions.`
       );
       return;
     }
@@ -476,7 +476,7 @@ export default function App() {
     // but cannot verify connection status programmatically
     if (protocol === "ikev2" && !vpnTools?.ikev2.available) {
       showError(
-        "IKEv2/IPsec is not available on this system. Please install strongSwan or use a different protocol.",
+        "IKEv2/IPsec is not available on this system. Please install strongSwan or use a different protocol."
       );
       return;
     }
@@ -523,7 +523,7 @@ export default function App() {
         // for manual import into System Settings
         if (protocol === "ikev2") {
           info(
-            "IKEv2 config file opened. Please import it into your System Settings to complete the connection.",
+            "IKEv2 config file opened. Please import it into your System Settings to complete the connection."
           );
           setStatus("disconnected");
           // Don't confirm the device since we can't verify the connection
@@ -549,7 +549,7 @@ export default function App() {
 
           if (attempt < maxRetries - 1) {
             log(
-              `VPN connection not ready yet (attempt ${attempt + 1}/${maxRetries}), waiting for peer sync...`,
+              `VPN connection not ready yet (attempt ${attempt + 1}/${maxRetries}), waiting for peer sync...`
             );
           }
         }
@@ -564,7 +564,7 @@ export default function App() {
         } else {
           warning(
             "VPN config applied but connection could not be verified after multiple attempts. " +
-              "The peer may not have synced to the VPN node yet. Please try again in a few seconds.",
+              "The peer may not have synced to the VPN node yet. Please try again in a few seconds."
           );
           setStatus("disconnected");
           log("VPN connection not verified after retries:", vpnStatus);
@@ -611,7 +611,7 @@ export default function App() {
             onClick: () => {
               void openInBrowser(`${API_BASE_URL}/devices`);
             },
-          },
+          }
         );
       } else {
         setConnectError(errorMessage);
@@ -630,7 +630,7 @@ export default function App() {
     setConnectError(null);
     setStatus("disconnected");
     void disconnectVpn(protocol).catch((e) =>
-      logError("Failed to disconnect VPN via Tauri", e),
+      logError("Failed to disconnect VPN via Tauri", e)
     );
   }, [protocol]);
 
@@ -690,7 +690,7 @@ export default function App() {
             } catch (e) {
               logError("Failed to toggle kill switch", e);
             }
-          },
+          }
         );
         unlisten.push(unlistenKillSwitch);
 
@@ -761,7 +761,7 @@ export default function App() {
       protocol,
       wgServerPublicKey,
       userCountry,
-    ],
+    ]
   );
 
   // Show loading screen while checking auth

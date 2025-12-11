@@ -34,7 +34,6 @@ type DebugInfo = {
   selectedServerId: string | null;
   selectedServerRegion: string | null;
   protocol: Protocol;
-  wgServerPublicKey: string;
   isProduction: boolean;
   tauriAvailable: boolean;
   userCountry: string | null;
@@ -645,7 +644,7 @@ function AboutTab() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-emerald-500 to-teal-600">
           <Shield className="h-8 w-8 text-white" />
         </div>
         <div>
@@ -748,9 +747,7 @@ function DebugTab({ debugInfo }: { debugInfo: DebugInfo | null }) {
     },
     {
       label: "WG Server Public Key",
-      value: debugInfo.wgServerPublicKey
-        ? `${debugInfo.wgServerPublicKey.slice(0, 20)}...`
-        : "Not set",
+      value: "Provided per-server in config",
     },
     {
       label: "Tauri Available",

@@ -8,7 +8,7 @@ import type {
   OnboardingState,
 } from "./types";
 import { TIMEZONE_TO_COUNTRY } from "./constants";
-import { API_BASE_URL, WG_SERVER_PUBLIC_KEY } from "./config";
+import { API_BASE_URL } from "./config";
 import {
   detectVpnTools,
   refreshVpnTools as refreshVpnToolsTauri,
@@ -114,7 +114,7 @@ export function useVpnTools(): {
 // Hook to check actual VPN connection status from the system
 export function useVpnConnectionStatus(
   appStatus: "disconnected" | "connecting" | "connected",
-  pollInterval = 5000,
+  pollInterval = 5000
 ): VpnConnectionStatus | null {
   const [connectionStatus, setConnectionStatus] =
     useState<VpnConnectionStatus | null>(null);
@@ -279,7 +279,7 @@ export function useDeviceRegistration() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ json: params }),
-          },
+          }
         );
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
@@ -295,7 +295,7 @@ export function useDeviceRegistration() {
         setIsLoading(false);
       }
     },
-    [],
+    []
   );
 
   // Confirm connection - call this after VPN connection is verified
@@ -307,7 +307,7 @@ export function useDeviceRegistration() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ json: { deviceId } }),
-        },
+        }
       );
       if (!res.ok) {
         logError("Failed to confirm connection:", res.status);
@@ -326,7 +326,7 @@ export function useDeviceRegistration() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ json: { deviceId } }),
-        },
+        }
       );
       if (!res.ok) {
         logError("Failed to cancel connection:", res.status);
@@ -347,7 +347,7 @@ export function useDeviceRegistration() {
 
 // Hook to get server public key
 export function useServerPubkey() {
-  const [pubkey, setPubkey] = useState<string>(WG_SERVER_PUBLIC_KEY);
+  const [pubkey, setPubkey] = useState<string>("");
 
   useEffect(() => {
     if (pubkey) return;
@@ -355,7 +355,7 @@ export function useServerPubkey() {
     (async () => {
       try {
         const res = await authFetch(
-          `${API_BASE_URL}/api/trpc/desktop.serverPubkey`,
+          `${API_BASE_URL}/api/trpc/desktop.serverPubkey`
         );
         if (!res.ok) return;
         const data = await res.json();
