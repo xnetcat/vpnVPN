@@ -63,9 +63,28 @@ impl ControlPlaneClient {
         if let Ok(country) = std::env::var("VPN_COUNTRY") {
             meta.insert("country".to_string(), serde_json::Value::String(country));
         }
+        if let Ok(fp) = std::env::var("VPN_IKEV2_FINGERPRINT") {
+            meta.insert(
+                "ikev2Fingerprint".to_string(),
+                serde_json::Value::String(fp),
+            );
+        }
+        if let Ok(ca) = std::env::var("VPN_IKEV2_CA_BUNDLE") {
+            meta.insert("ikev2CaBundle".to_string(), serde_json::Value::String(ca));
+        }
+        if let Ok(fp) = std::env::var("VPN_IKEV2_FINGERPRINT") {
+            meta.insert(
+                "ikev2Fingerprint".to_string(),
+                serde_json::Value::String(fp),
+            );
+        }
+        if let Ok(ca) = std::env::var("VPN_IKEV2_CA_BUNDLE") {
+            meta.insert("ikev2CaBundle".to_string(), serde_json::Value::String(ca));
+        }
 
+        // Prefer explicit env for endpoints, otherwise fall back to detected public IP and listen_port
         let wg_endpoint = std::env::var("VPN_WG_ENDPOINT").ok();
-        let wg_port = std::env::var("VPN_WG_PORT")
+        let mut wg_port = std::env::var("VPN_WG_PORT")
             .ok()
             .and_then(|v| v.parse::<u16>().ok());
         let ovpn_endpoint = std::env::var("VPN_OVPN_ENDPOINT").ok();
@@ -75,6 +94,10 @@ impl ControlPlaneClient {
         let ovpn_ca_bundle = std::env::var("VPN_OVPN_CA_BUNDLE").ok();
         let ovpn_peer_fingerprint = std::env::var("VPN_OVPN_PEER_FINGERPRINT").ok();
         let ikev2_remote = std::env::var("VPN_IKEV2_REMOTE").ok();
+
+        if wg_port.is_none() {
+            wg_port = Some(listen_port);
+        }
 
         let req = RegisterRequest {
             id: self.server_id.clone(),

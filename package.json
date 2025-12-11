@@ -27,12 +27,14 @@
     "lint": "dotenv -e .env -- turbo run lint",
     "test": "dotenv -e .env -- turbo run test",
     "format": "dotenv -e .env -- turbo run format",
-    "docker:build": "dotenv -e .env -- turbo run docker:build"
+    "docker:build": "dotenv -e .env -- turbo run docker:build",
+    "test:control-plane:jest": "dotenv -e .env -- npx jest local/control-plane-vpn.jest.test.js --runInBand"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "concurrently": "^9.2.1",
-    "dotenv-cli": "^7.4.3",
+    "dotenv-cli": "^11.0.0",
+    "jest": "^30.2s.0",
     "turbo": "^2.6.3",
     "typescript": "^5.9.3"
   }

@@ -7,9 +7,11 @@ use tracing::{error, info, warn};
 
 mod admin;
 mod client;
+mod ikev2;
 mod logging;
 mod metrics;
 mod net;
+mod pki;
 mod vpn;
 
 #[derive(Parser, Debug, Clone)]
@@ -373,10 +375,48 @@ async fn run_server(
         server_id.clone(),
     ));
 
+    // Detect public IP early for metadata
+    let detected_public_ip = cp_client.detect_public_ip().await;
+
+    // Fallback IKEv2 remote for metadata even if setup fails
+    if let Some(ip) = detected_public_ip.clone() {
+        let default_remote = format!("{ip}:500");
+        std::env::set_var(
+            "VPN_IKEV2_REMOTE",
+            std::env::var("VPN_IKEV2_REMOTE").unwrap_or(default_remote),
+        );
+    }
+
     // Registration (fail fast if we cannot talk to the control plane)
     if let Some(pubkey) = node_arc.get_public_key() {
         let client = cp_client.clone();
         let listen_port = args.listen_port;
+
+        // Generate self-signed PKI for OpenVPN/IKE if none provided via env
+        let pki_artifacts = match pki::ensure_pki(detected_public_ip.clone()) {
+            Ok(pki) => {
+                std::env::set_var("VPN_OVPN_CA_BUNDLE", pki.ca_pem.clone());
+                std::env::set_var("VPN_OVPN_PEER_FINGERPRINT", pki.server_fingerprint.clone());
+                pki
+            }
+            Err(err) => {
+                warn!(error = ?err, "pki_generation_failed");
+                return Err(1);
+            }
+        };
+
+        // Attempt to start IKEv2 (strongSwan) with generated PKI
+        if let Ok(meta) = crate::ikev2::setup_ikev2(
+            detected_public_ip.clone(),
+            &pki_artifacts.ca_pem,
+            &pki_artifacts.server_pem,
+            &pki_artifacts.server_fingerprint,
+        ) {
+            std::env::set_var("VPN_IKEV2_REMOTE", &meta.remote);
+            std::env::set_var("VPN_IKEV2_FINGERPRINT", &meta.server_fingerprint);
+            std::env::set_var("VPN_IKEV2_CA_BUNDLE", &meta.ca_pem);
+        }
+
         const MAX_ATTEMPTS: u32 = 12; // ~1 minute of retries
         let mut attempts: u32 = 0;
 
@@ -426,8 +466,8 @@ async fn run_server(
     let heartbeat_node = node_arc.clone();
     let heartbeat_client = cp_client.clone();
     tokio::spawn(async move {
-        // Detect public IP once at startup
-        let public_ip = heartbeat_client.detect_public_ip().await;
+        // Reuse detected public IP from startup
+        let public_ip = detected_public_ip.clone();
         if let Some(ref ip) = public_ip {
             info!(ip = ip.as_str(), "detected_public_ip");
 
