@@ -2,6 +2,7 @@
   "name": "@vpnvpn/desktop",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev:vite": "APP_CHANNEL=devel VITE_APP_CHANNEL=devel vite --port 5173 --strictPort",
     "dev:tauri": "APP_CHANNEL=devel VITE_APP_CHANNEL=devel tauri dev",

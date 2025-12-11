@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "biome lint .",
+    "dev": "dotenv -e ../../.env -- next dev",
+    "build": "dotenv -e ../../.env -- next build",
+    "start": "dotenv -e ../../.env -- next start",
+    "lint": "dotenv -e ../../.env -- biome lint .",
     "format": "biome format --write .",
-    "test": "vitest run",
+    "test": "dotenv -e ../../.env -- vitest run",
     "docker:build": "docker build -t vpnvpn/web -f Dockerfile ."
   },
   "dependencies": {
