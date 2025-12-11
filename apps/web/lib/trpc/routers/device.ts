@@ -42,7 +42,7 @@ async function generateWireGuardKeyPair(): Promise<{
     // Fallback to NaCl if wg command is not available (e.g., in Docker)
     console.warn(
       "[device] wg genkey not available, falling back to NaCl key generation",
-      error,
+      error
     );
     const keyPair = nacl.box.keyPair();
     const publicKey = Buffer.from(keyPair.publicKey).toString("base64");
@@ -81,7 +81,7 @@ export const deviceRouter = router({
         // Optional: if provided, use client-generated public key (more secure)
         // If not provided, generate keys server-side (for web clients)
         publicKey: z.string().optional(),
-      }),
+      })
     )
     .mutation(async ({ ctx, input }) => {
       const { name, serverId, machineId, publicKey: clientPublicKey } = input;
@@ -103,6 +103,15 @@ export const deviceRouter = router({
           message: "VPN server is missing WireGuard public key",
         });
       }
+
+      const openvpnPeerFingerprint =
+        process.env.OPENVPN_PEER_FINGERPRINT ||
+        process.env.VITE_OPENVPN_PEER_FINGERPRINT ||
+        null;
+      const openvpnCaBundle =
+        process.env.OPENVPN_CA_BUNDLE ||
+        process.env.VITE_OPENVPN_CA_BUNDLE ||
+        null;
       const serverMetadata =
         (serverRecord?.metadata as Record<string, unknown> | null) || null;
       const serverPort =
@@ -127,7 +136,7 @@ export const deviceRouter = router({
           {
             deviceId: existingDevice.id,
             machineId,
-          },
+          }
         );
 
         // Revoke old peer and generate new keys
@@ -180,7 +189,7 @@ export const deviceRouter = router({
               err,
               userId: ctx.userId,
               deviceId: device.id,
-            },
+            }
           );
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
@@ -197,6 +206,8 @@ export const deviceRouter = router({
           serverPublicKey: serverRecord.publicKey,
           serverEndpoint: serverRecord?.publicIp ?? null,
           serverPort: serverPort ?? null,
+          openvpnPeerFingerprint,
+          openvpnCaBundle,
           ...(privateKey ? { privateKey } : {}),
         };
       }
@@ -303,6 +314,8 @@ export const deviceRouter = router({
         serverPublicKey: serverRecord.publicKey,
         serverEndpoint: serverRecord?.publicIp ?? null,
         serverPort: serverPort ?? null,
+        openvpnPeerFingerprint,
+        openvpnCaBundle,
         ...(privateKey ? { privateKey } : {}),
       };
     }),

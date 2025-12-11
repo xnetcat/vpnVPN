@@ -63,6 +63,8 @@ export function buildOpenVpnConfig(params: {
   serverName: string;
   endpointOverride?: string;
   portOverride?: number;
+  caBundleOverride?: string | null;
+  peerFingerprintOverride?: string | null;
 }) {
   const endpoint =
     params.endpointOverride && params.endpointOverride.trim()
@@ -75,11 +77,14 @@ export function buildOpenVpnConfig(params: {
       : Number(OVPN_PORT) || 1194;
 
   const caBundle =
+    params.caBundleOverride?.trim() ??
     import.meta.env.VITE_OVPN_CA_BUNDLE?.trim() ??
     import.meta.env.VITE_OVPN_CA?.trim() ??
     "";
   const peerFingerprint =
-    import.meta.env.VITE_OVPN_PEER_FINGERPRINT?.trim() ?? "";
+    params.peerFingerprintOverride?.trim() ??
+    import.meta.env.VITE_OVPN_PEER_FINGERPRINT?.trim() ??
+    "";
 
   const lines = [
     "client",

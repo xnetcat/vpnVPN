@@ -491,16 +491,7 @@ export default function App() {
       );
       return;
     }
-    if (protocol === "openvpn") {
-      const hasCa = !!OVPN_CA_BUNDLE;
-      const hasFp = !!OVPN_PEER_FINGERPRINT;
-      if (!hasCa && !hasFp) {
-        showError(
-          "OpenVPN not configured: missing CA bundle or peer fingerprint. Configure VITE_OVPN_CA_BUNDLE or VITE_OVPN_PEER_FINGERPRINT, or use WireGuard.",
-        );
-        return;
-      }
-    }
+    // OpenVPN safety: require trust material either from server response or env
 
     setStatus("connecting");
     setConfig(null);
@@ -593,6 +584,15 @@ export default function App() {
 
         console.log("[App] Generated WireGuard config:\n", cfg);
       } else if (protocol === "openvpn") {
+        const peerFingerprint =
+          result.openvpnPeerFingerprint || OVPN_PEER_FINGERPRINT || null;
+        const caBundle = result.openvpnCaBundle || OVPN_CA_BUNDLE || null;
+        if (!peerFingerprint && !caBundle) {
+          showError(
+            "OpenVPN not configured: missing CA bundle or peer fingerprint from server. Use WireGuard or configure OpenVPN trust.",
+          );
+          throw new Error("OpenVPN missing CA or peer fingerprint");
+        }
         cfg = buildOpenVpnConfig({
           assignedIp: result.assignedIp,
           serverName: selectedServer.region,
@@ -605,6 +605,8 @@ export default function App() {
               ? result.serverPort
               : Number(result.serverPort)) ||
             (selectedServer.metadata?.port as number | undefined),
+          peerFingerprintOverride: peerFingerprint,
+          caBundleOverride: caBundle,
         });
       } else {
         cfg = buildIkev2Config({

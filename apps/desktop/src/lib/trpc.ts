@@ -85,6 +85,8 @@ class ApiClient {
       serverPublicKey?: string | null;
       serverEndpoint?: string | null;
       serverPort?: number | null;
+      openvpnPeerFingerprint?: string | null;
+      openvpnCaBundle?: string | null;
     }>("/api/trpc/device.register", {
       method: "POST",
       body: JSON.stringify(params),
