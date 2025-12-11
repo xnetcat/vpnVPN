@@ -69,7 +69,7 @@ function detectPlatform(userAgent: string | null): PlatformKey | "other" {
 }
 
 async function fetchFleetMetrics(): Promise<FleetMetrics | null> {
-  const base = WEB_ENV.CONTROL_PLANE_API_URL ?? WEB_ENV.NEXT_PUBLIC_API_URL;
+  const base = WEB_ENV.CONTROL_PLANE_API_URL;
   const apiKey = WEB_ENV.CONTROL_PLANE_API_KEY;
 
   if (!base || !apiKey) return null;

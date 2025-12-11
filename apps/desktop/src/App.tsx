@@ -29,7 +29,6 @@ import {
   useDesktopSettings,
   useServers,
   useDeviceRegistration,
-  useServerPubkey,
   useAuth,
   useMachineId,
   useDaemonStatus,
@@ -159,7 +158,7 @@ function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="mb-8 flex flex-col items-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-emerald-500 to-teal-600">
             <Shield className="h-8 w-8 text-white" />
           </div>
           <h1 className="mt-4 text-2xl font-bold text-slate-50">
@@ -204,7 +203,7 @@ function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
             <button
               type="submit"
               disabled={isLoading || !email}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 py-3 text-sm font-semibold text-white transition-all hover:from-emerald-400 hover:to-teal-400 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-linear-to-r from-emerald-500 to-teal-500 py-3 text-sm font-semibold text-white transition-all hover:from-emerald-400 hover:to-teal-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -259,7 +258,7 @@ function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
             <button
               type="submit"
               disabled={isLoading || code.length !== 6}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 py-3 text-sm font-semibold text-white transition-all hover:from-emerald-400 hover:to-teal-400 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-linear-to-r from-emerald-500 to-teal-500 py-3 text-sm font-semibold text-white transition-all hover:from-emerald-400 hover:to-teal-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -303,7 +302,7 @@ function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
 function LoadingScreen() {
   return (
     <div className="flex h-screen flex-col items-center justify-center bg-slate-950">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-emerald-500 to-teal-600">
         <Shield className="h-8 w-8 animate-pulse text-white" />
       </div>
       <h1 className="mt-4 text-xl font-semibold text-slate-50">vpnVPN</h1>
@@ -386,7 +385,6 @@ export default function App() {
   } = useServers();
   const { registerDevice, confirmConnection, cancelConnection } =
     useDeviceRegistration();
-  const wgServerPublicKey = useServerPubkey();
   const machineId = useMachineId();
 
   const selectedServer =
@@ -749,19 +747,11 @@ export default function App() {
       selectedServerId: selectedServer?.id ?? null,
       selectedServerRegion: selectedServer?.region ?? null,
       protocol,
-      wgServerPublicKey,
       isProduction: IS_PRODUCTION,
       tauriAvailable: true,
       userCountry,
     }),
-    [
-      status,
-      vpnConnectionStatus,
-      selectedServer,
-      protocol,
-      wgServerPublicKey,
-      userCountry,
-    ]
+    [status, vpnConnectionStatus, selectedServer, protocol, userCountry]
   );
 
   // Show loading screen while checking auth
@@ -935,7 +925,7 @@ function parseConnectError(err: unknown): {
     return {
       code: "openvpn_missing_ca",
       message:
-        "OpenVPN server verification is not configured (missing CA or peer fingerprint). Configure VITE_OVPN_CA_BUNDLE or VITE_OVPN_PEER_FINGERPRINT.",
+        "OpenVPN server verification is not configured (missing CA or peer fingerprint).",
     };
   }
 

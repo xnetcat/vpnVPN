@@ -215,16 +215,27 @@ export function useServers() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const trpcCall = useCallback(
+    async <T>(path: string, input?: unknown): Promise<T> => {
+      const res = await authFetch(`${API_BASE_URL}/api/trpc/${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: input ? JSON.stringify({ input }) : undefined,
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      return (data?.result?.data?.json ?? data?.result?.data ?? data) as T;
+    },
+    []
+  );
+
   const fetchServers = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await authFetch(`${API_BASE_URL}/api/trpc/servers.list`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      // Handle tRPC response format
-      const result =
-        data?.result?.data?.json ?? data?.result?.data ?? data ?? [];
+      const result = await trpcCall<MapServer[]>("servers.list");
       setServers(Array.isArray(result) ? result : []);
     } catch (e: any) {
       logError("Failed to fetch servers:", e);
@@ -263,30 +274,35 @@ export function useDeviceRegistration() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const trpcCall = useCallback(
+    async <T>(path: string, input?: unknown): Promise<T> => {
+      const res = await authFetch(`${API_BASE_URL}/api/trpc/${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: input ? JSON.stringify({ input }) : undefined,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error?.message ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      return (data?.result?.data?.json ?? data?.result?.data ?? data) as T;
+    },
+    []
+  );
+
   const registerDevice = useCallback(
-    async (params: {
-      name: string;
-      serverId?: string;
-      machineId?: string;
-      publicKey?: string; // Optional: if provided, client generated keys locally
-    }) => {
+    async (params: { name: string; serverId?: string; machineId?: string }) => {
       setIsLoading(true);
       setError(null);
       try {
-        const res = await authFetch(
-          `${API_BASE_URL}/api/trpc/device.register`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ json: params }),
-          }
-        );
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err?.error?.message ?? `HTTP ${res.status}`);
-        }
-        const data = await res.json();
-        return data?.result?.data?.json ?? data?.result?.data ?? data;
+        return await trpcCall<{
+          deviceId: string;
+          assignedIp: string;
+          wireguardConfig?: string | null;
+          openvpnConfig?: string | null;
+          ikev2Config?: string | null;
+        }>("device.register", params);
       } catch (e: any) {
         logError("Failed to register device:", e);
         setError(e.message);
@@ -299,42 +315,28 @@ export function useDeviceRegistration() {
   );
 
   // Confirm connection - call this after VPN connection is verified
-  const confirmConnection = useCallback(async (deviceId: string) => {
-    try {
-      const res = await authFetch(
-        `${API_BASE_URL}/api/trpc/device.confirmConnection`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ json: { deviceId } }),
-        }
-      );
-      if (!res.ok) {
-        logError("Failed to confirm connection:", res.status);
+  const confirmConnection = useCallback(
+    async (deviceId: string) => {
+      try {
+        await trpcCall("device.confirmConnection", { deviceId });
+      } catch (e) {
+        logError("Failed to confirm connection:", e);
       }
-    } catch (e) {
-      logError("Failed to confirm connection:", e);
-    }
-  }, []);
+    },
+    [trpcCall]
+  );
 
   // Cancel connection - call this if VPN connection fails
-  const cancelConnection = useCallback(async (deviceId: string) => {
-    try {
-      const res = await authFetch(
-        `${API_BASE_URL}/api/trpc/device.cancelConnection`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ json: { deviceId } }),
-        }
-      );
-      if (!res.ok) {
-        logError("Failed to cancel connection:", res.status);
+  const cancelConnection = useCallback(
+    async (deviceId: string) => {
+      try {
+        await trpcCall("device.cancelConnection", { deviceId });
+      } catch (e) {
+        logError("Failed to cancel connection:", e);
       }
-    } catch (e) {
-      logError("Failed to cancel connection:", e);
-    }
-  }, []);
+    },
+    [trpcCall]
+  );
 
   return {
     registerDevice,
@@ -343,32 +345,6 @@ export function useDeviceRegistration() {
     isLoading,
     error,
   };
-}
-
-// Hook to get server public key
-export function useServerPubkey() {
-  const [pubkey, setPubkey] = useState<string>("");
-
-  useEffect(() => {
-    if (pubkey) return;
-
-    (async () => {
-      try {
-        const res = await authFetch(
-          `${API_BASE_URL}/api/trpc/desktop.serverPubkey`
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        const key =
-          data?.result?.data?.json?.publicKey ?? data?.result?.data?.publicKey;
-        if (key) setPubkey(key);
-      } catch (e) {
-        logError("Failed to fetch server pubkey:", e);
-      }
-    })();
-  }, [pubkey]);
-
-  return pubkey;
 }
 
 // Hook to check authentication status

@@ -1,19 +1,8 @@
 function loadEnv() {
   const required = [
-    // Public (exposed) config
-    "NEXT_PUBLIC_WG_ENDPOINT",
-    "NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY",
-    "NEXT_PUBLIC_OVPN_REMOTE",
-    "NEXT_PUBLIC_OVPN_PORT",
-    "NEXT_PUBLIC_IKEV2_REMOTE",
-    "NEXT_PUBLIC_API_URL",
     // Control plane
     "CONTROL_PLANE_API_URL",
     "CONTROL_PLANE_API_KEY",
-    "CONTROL_PLANE_URL",
-    // OpenVPN trust (server-side)
-    "OPENVPN_PEER_FINGERPRINT",
-    "OPENVPN_CA_BUNDLE",
     // Desktop downloads
     "DESKTOP_BUCKET_URL",
     "ENVIRONMENT",
@@ -34,8 +23,6 @@ function loadEnv() {
     "STRIPE_PRICE_ID_BASIC",
     "STRIPE_PRICE_ID_PRO",
     "STRIPE_PRICE_ID_ENTERPRISE",
-    // Node admin
-    "VPN_NODE_ADMIN_URL",
   ];
 
   const missing: string[] = [];
@@ -60,21 +47,8 @@ function loadEnv() {
 
   return {
     // Public (exposed) config
-    NEXT_PUBLIC_WG_ENDPOINT: values.NEXT_PUBLIC_WG_ENDPOINT,
-    NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY: values.NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY,
-    NEXT_PUBLIC_API_URL: values.NEXT_PUBLIC_API_URL,
-    NEXT_PUBLIC_OVPN_REMOTE: values.NEXT_PUBLIC_OVPN_REMOTE,
-    NEXT_PUBLIC_OVPN_PORT: values.NEXT_PUBLIC_OVPN_PORT,
-    NEXT_PUBLIC_IKEV2_REMOTE: values.NEXT_PUBLIC_IKEV2_REMOTE,
-
-    // Control plane
     CONTROL_PLANE_API_URL: values.CONTROL_PLANE_API_URL,
     CONTROL_PLANE_API_KEY: values.CONTROL_PLANE_API_KEY,
-    CONTROL_PLANE_URL: values.CONTROL_PLANE_URL,
-
-    // OpenVPN trust (server-side)
-    OPENVPN_PEER_FINGERPRINT: values.OPENVPN_PEER_FINGERPRINT,
-    OPENVPN_CA_BUNDLE: values.OPENVPN_CA_BUNDLE,
 
     // Desktop download bucket / env
     DESKTOP_BUCKET_URL: values.DESKTOP_BUCKET_URL,
@@ -99,9 +73,6 @@ function loadEnv() {
     STRIPE_PRICE_ID_BASIC: values.STRIPE_PRICE_ID_BASIC,
     STRIPE_PRICE_ID_PRO: values.STRIPE_PRICE_ID_PRO,
     STRIPE_PRICE_ID_ENTERPRISE: values.STRIPE_PRICE_ID_ENTERPRISE,
-
-    // Node admin API
-    VPN_NODE_ADMIN_URL: values.VPN_NODE_ADMIN_URL,
   };
 }
 

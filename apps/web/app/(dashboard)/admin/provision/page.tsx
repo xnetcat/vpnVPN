@@ -9,10 +9,7 @@ export default async function AdminProvisionPage() {
     redirect(gate.reason === "unauthenticated" ? "/api/auth/signin" : "/");
   }
 
-  const apiUrl =
-    WEB_ENV.CONTROL_PLANE_API_URL ??
-    WEB_ENV.NEXT_PUBLIC_API_URL ??
-    "https://api.vpnvpn.dev";
+  const apiUrl = WEB_ENV.CONTROL_PLANE_API_URL;
 
   return (
     <main className="mx-auto max-w-4xl space-y-8 px-4 pb-10 pt-4 sm:px-6 lg:px-8">

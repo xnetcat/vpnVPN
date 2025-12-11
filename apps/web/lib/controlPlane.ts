@@ -11,8 +11,7 @@ type AddPeerPayload = {
 
 import { WEB_ENV } from "@/env";
 
-const CONTROL_PLANE_BASE =
-  WEB_ENV.CONTROL_PLANE_API_URL ?? WEB_ENV.NEXT_PUBLIC_API_URL;
+const CONTROL_PLANE_BASE = WEB_ENV.CONTROL_PLANE_API_URL;
 const CONTROL_PLANE_API_KEY = WEB_ENV.CONTROL_PLANE_API_KEY;
 
 function getBaseUrl(): string {
