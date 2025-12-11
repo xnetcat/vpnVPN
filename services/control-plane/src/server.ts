@@ -62,13 +62,13 @@ const registerServerSchema = z.object({
   publicKey: z.string(),
   listenPort: z.number(),
   metadata: z.unknown().optional(),
-  wgEndpoint: z.string().optional(),
-  wgPort: z.number().optional(),
-  ovpnEndpoint: z.string().optional(),
-  ovpnPort: z.number().optional(),
-  ovpnCaBundle: z.string().optional(),
-  ovpnPeerFingerprint: z.string().optional(),
-  ikev2Remote: z.string().optional(),
+  wgEndpoint: z.string().nullable().optional(),
+  wgPort: z.number().nullable().optional(),
+  ovpnEndpoint: z.string().nullable().optional(),
+  ovpnPort: z.number().nullable().optional(),
+  ovpnCaBundle: z.string().nullable().optional(),
+  ovpnPeerFingerprint: z.string().nullable().optional(),
+  ikev2Remote: z.string().nullable().optional(),
 });
 
 export async function buildServer(): Promise<FastifyInstance> {
@@ -237,7 +237,7 @@ export async function buildServer(): Promise<FastifyInstance> {
 
       req.log.info(
         { count: payload.peers.length, serverId: serverId ?? null },
-        "server_peers_listed",
+        "server_peers_listed"
       );
       return reply.code(200).send(payload);
     } catch (err: unknown) {
@@ -379,7 +379,7 @@ export async function buildServer(): Promise<FastifyInstance> {
 
       req.log.info(
         { userId: body.userId, serverId: body.serverId },
-        "addPeer persisted",
+        "addPeer persisted"
       );
 
       return reply.code(204).send();
@@ -452,7 +452,7 @@ export async function buildServer(): Promise<FastifyInstance> {
         tokens.map((token) => ({
           ...token,
           scope: classifyToken(token.label),
-        })),
+        }))
       );
     } catch (err: unknown) {
       const error = err as Error & { statusCode?: number };

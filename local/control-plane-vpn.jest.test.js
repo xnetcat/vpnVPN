@@ -1,7 +1,13 @@
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
-const { PrismaClient } = require("@prisma/client");
+
+// Load .env first, then override DATABASE_URL to use Docker postgres exposed on localhost:5432
 require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
+const DOCKER_DB_URL = "postgresql://postgres:password@localhost:5432/vpnvpn";
+process.env.DATABASE_URL = DOCKER_DB_URL;
+
+const { PrismaClient } = require("@prisma/client");
+const prisma = new PrismaClient({ datasourceUrl: DOCKER_DB_URL });
 
 function getControlPlaneConfig() {
   const base =
@@ -62,7 +68,7 @@ function ensureKeyPair() {
 
 describe("control-plane -> docker WG ping", () => {
   test("fetch server, register peer, ping google.com", async () => {
-    const prisma = new PrismaClient();
+    // Using global prisma instance with Docker DB URL
     let userId;
     const { base: controlPlaneBase, apiKey: controlPlaneApiKey } =
       getControlPlaneConfig();
@@ -121,6 +127,10 @@ describe("control-plane -> docker WG ping", () => {
       );
     }
 
+    // Wait for vpn-node to sync peers from control-plane (sync interval is 10 seconds)
+    console.log("[test] Waiting 12s for vpn-node to sync peer...");
+    await new Promise((resolve) => setTimeout(resolve, 12000));
+
     const endpointHost = server.wgEndpoint || server.publicIp;
     const endpointPort = server.wgPort || 51820;
     if (!endpointHost) {
@@ -129,44 +139,80 @@ describe("control-plane -> docker WG ping", () => {
 
     const script = `
 set -euo pipefail
-trap 'ip route del 0.0.0.0/0 dev wg0 2>/dev/null || true; ip link del wg0 2>/dev/null || true; rm -f /tmp/wg-privkey' EXIT
+trap 'ip route del 0.0.0.0/0 dev wg-test 2>/dev/null || true; ip link del wg-test 2>/dev/null || true; rm -f /tmp/wg-privkey' EXIT
 
-ip link add wg0 type wireguard
+# Step 1: Get public IP BEFORE connecting to VPN
+echo "[client] Getting public IP before VPN connection..."
+BEFORE_IP=$(curl -sf --connect-timeout 10 https://api.ipify.org || curl -sf --connect-timeout 10 https://ifconfig.me/ip || echo "unknown")
+echo "[client] Public IP before VPN: $BEFORE_IP"
+
+# Step 2: Set up WireGuard VPN connection (using wg-test interface to avoid conflict with server's wg0)
+echo "[client] Setting up WireGuard VPN..."
+ip link add wg-test type wireguard
 printf "%s" "${"$"}{VPN_TEST_CLIENT_PRIVATE_KEY}" > /tmp/wg-privkey
-wg set wg0 \\
+wg set wg-test \\
   private-key /tmp/wg-privkey \\
   peer "${"$"}{VPN_SERVER_PUBLIC_KEY}" \\
   allowed-ips "${"$"}{VPN_ALLOWED_IPS:-0.0.0.0/0,::/0}" \\
   endpoint "${"$"}{VPN_SERVER_ENDPOINT}:${"$"}{VPN_SERVER_PORT:-51820}" \\
   persistent-keepalive "${"$"}{VPN_PERSISTENT_KEEPALIVE:-15}"
 
-ip addr add "${"$"}{VPN_CLIENT_ADDRESS:-10.8.0.2/32}" dev wg0
-ip link set wg0 up
-# Keep route to peer off-tunnel
-ip route add "${"$"}{VPN_SERVER_ENDPOINT}/32" dev eth0 || true
-ip route replace 0.0.0.0/0 dev wg0
+ip addr add "${"$"}{VPN_CLIENT_ADDRESS:-10.8.0.2/32}" dev wg-test
+ip link set wg-test up
+
+# Keep route to VPN server off-tunnel, route everything else through VPN
+ip route add "${"$"}{VPN_SERVER_ENDPOINT}/32" dev eth0 2>/dev/null || true
+ip route replace 0.0.0.0/0 dev wg-test
+
 echo "nameserver 1.1.1.1" > /etc/resolv.conf
-echo "[client] wg show:"
-wg show
-echo "[client] ip addr:"
-ip addr
-echo "[client] ip route:"
-ip route
-echo "[client] ping endpoint ${"$"}{VPN_SERVER_ENDPOINT}"
-ping -c 3 "${"$"}{VPN_SERVER_ENDPOINT}" || true
-echo "[client] sleep 3s before internet ping"
+
+echo "[client] WireGuard interface info:"
+wg show wg-test
+
+# Step 3: Wait for handshake and test connectivity
+echo "[client] Waiting for VPN handshake..."
 sleep 3
-echo "[client] wg show (post-wait):"
-wg show
-echo "[client] ping 8.8.8.8"
-ping -c 5 8.8.8.8
+
+echo "[client] Testing VPN connectivity (ping 8.8.8.8)..."
+ping -c 3 8.8.8.8 || { echo "[client] FAILED: Cannot reach 8.8.8.8 through VPN"; exit 1; }
+
+# Step 4: Get public IP AFTER connecting to VPN
+echo "[client] Getting public IP after VPN connection..."
+AFTER_IP=$(curl -sf --connect-timeout 10 https://api.ipify.org || curl -sf --connect-timeout 10 https://ifconfig.me/ip || echo "unknown")
+echo "[client] Public IP after VPN: $AFTER_IP"
+
+# Step 5: Compare IPs and output result
+echo ""
+echo "=== VPN VERIFICATION RESULT ==="
+echo "IP Before VPN: $BEFORE_IP"
+echo "IP After VPN:  $AFTER_IP"
+
+if [ "$BEFORE_IP" = "unknown" ] || [ "$AFTER_IP" = "unknown" ]; then
+  echo "WARNING: Could not determine one or both IPs"
+  echo '{"before_ip":"'$BEFORE_IP'","after_ip":"'$AFTER_IP'","status":"warning"}'
+  exit 0
+elif [ "$BEFORE_IP" = "$AFTER_IP" ]; then
+  echo "FAILED: IP did not change - VPN may not be routing traffic correctly"
+  echo '{"before_ip":"'$BEFORE_IP'","after_ip":"'$AFTER_IP'","status":"failed"}'
+  exit 1
+else
+  echo "SUCCESS: IP changed from $BEFORE_IP to $AFTER_IP - VPN is working!"
+  echo '{"before_ip":"'$BEFORE_IP'","after_ip":"'$AFTER_IP'","status":"success"}'
+  exit 0
+fi
 `;
+
+    // Use host network mode so the test container can reach vpn-node on localhost
+    // The vpn-node runs with network_mode: host, so its WireGuard port is on localhost:51820
+    const useHostNetwork = true;
+    const effectiveEndpoint = useHostNetwork ? "127.0.0.1" : endpointHost;
 
     const result = spawnSync(
       "docker",
       [
         "run",
         "--rm",
+        "--network=host",
         "--cap-add=NET_ADMIN",
         "--device",
         "/dev/net/tun",
@@ -202,7 +248,7 @@ ping -c 5 8.8.8.8
           CONTROL_PLANE_API_URL: controlPlaneBase,
           VPN_TEST_CLIENT_PRIVATE_KEY: privKey,
           VPN_SERVER_PUBLIC_KEY: server.publicKey,
-          VPN_SERVER_ENDPOINT: endpointHost,
+          VPN_SERVER_ENDPOINT: effectiveEndpoint,
           VPN_SERVER_PORT: String(endpointPort),
           VPN_ALLOWED_IPS: "0.0.0.0/0,::/0",
           VPN_PING_TARGET: "google.com",

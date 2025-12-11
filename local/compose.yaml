@@ -6,7 +6,7 @@ services:
     build:
       context: ../apps/vpn-server
       dockerfile: Dockerfile
-    command: ["run"]
+    # Note: ENTRYPOINT is set in Dockerfile to ["/usr/local/bin/vpn-server", "run"]
     cap_add:
       - NET_ADMIN
     devices:
@@ -59,7 +59,7 @@ services:
   control-plane:
     build:
       context: ..
-      dockerfile: services/control-plane/Dockerfile
+      dockerfile: services/control-plane/Dockerfile.local
     env_file:
       - ../.env
     environment:
