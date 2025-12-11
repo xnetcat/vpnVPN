@@ -3,6 +3,7 @@ import { router, protectedProcedure } from "../init";
 import { TRPCError } from "@trpc/server";
 import { stripe } from "@/lib/stripe";
 import { TIERS } from "@/lib/tiers";
+import { WEB_ENV } from "@/env";
 
 export const billingRouter = router({
   createCheckoutSession: protectedProcedure
@@ -12,7 +13,7 @@ export const billingRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!process.env.STRIPE_SECRET_KEY) {
+      if (!WEB_ENV.STRIPE_SECRET_KEY) {
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Stripe not configured",
@@ -53,7 +54,7 @@ export const billingRouter = router({
         customerId = customer.id;
       }
 
-      const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+      const baseUrl = WEB_ENV.NEXTAUTH_URL;
       const checkout = await stripe.checkout.sessions.create({
         mode: "subscription",
         line_items: [{ price: priceId, quantity: 1 }],
@@ -75,7 +76,7 @@ export const billingRouter = router({
     }),
 
   createPortalSession: protectedProcedure.mutation(async ({ ctx }) => {
-    if (!process.env.STRIPE_SECRET_KEY) {
+    if (!WEB_ENV.STRIPE_SECRET_KEY) {
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",
         message: "Stripe not configured",
@@ -93,7 +94,7 @@ export const billingRouter = router({
       });
     }
 
-    const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    const baseUrl = WEB_ENV.NEXTAUTH_URL;
     const portal = await stripe.billingPortal.sessions.create({
       customer: user.stripeCustomerId,
       return_url: `${baseUrl}/account`,

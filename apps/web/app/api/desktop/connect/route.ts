@@ -5,6 +5,7 @@ import { allocateDeviceIp } from "@/lib/networking";
 import { addPeerForDevice, revokePeersForUser } from "@/lib/controlPlane";
 import { getTierConfig } from "@/lib/tiers";
 import { getSession } from "@/lib/auth";
+import { WEB_ENV } from "@/env";
 
 type Body = {
   publicKey?: string;
@@ -12,8 +13,8 @@ type Body = {
   serverId?: string;
 };
 
-const WG_ENDPOINT = process.env.NEXT_PUBLIC_WG_ENDPOINT || "";
-const WG_SERVER_PUBLIC_KEY = process.env.NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY || "";
+const WG_ENDPOINT = WEB_ENV.NEXT_PUBLIC_WG_ENDPOINT;
+const WG_SERVER_PUBLIC_KEY = WEB_ENV.NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY;
 
 function buildWireGuardConfig(params: {
   privateKey: string;

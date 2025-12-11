@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { router, adminProcedure } from "../init";
 import { TRPCError } from "@trpc/server";
+import { WEB_ENV } from "@/env";
 
 function getControlPlaneConfig() {
-  const base =
-    process.env.CONTROL_PLANE_API_URL ?? process.env.NEXT_PUBLIC_API_URL;
-  const apiKey = process.env.CONTROL_PLANE_API_KEY;
+  const base = WEB_ENV.CONTROL_PLANE_API_URL ?? WEB_ENV.NEXT_PUBLIC_API_URL;
+  const apiKey = WEB_ENV.CONTROL_PLANE_API_KEY;
 
   if (!base || !apiKey) {
     throw new TRPCError({

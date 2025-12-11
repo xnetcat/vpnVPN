@@ -1,13 +1,13 @@
+import { WEB_ENV } from "@/env";
+
 export function buildWireGuardConfig(params: {
   privateKey: string;
   assignedIp: string;
   serverPublicKeyOverride?: string;
 }) {
-  const endpoint = process.env.NEXT_PUBLIC_WG_ENDPOINT || "";
+  const endpoint = WEB_ENV.NEXT_PUBLIC_WG_ENDPOINT;
   const serverPublicKey =
-    params.serverPublicKeyOverride ||
-    process.env.NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY ||
-    "";
+    params.serverPublicKeyOverride || WEB_ENV.NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY;
 
   return [
     "[Interface]",
@@ -30,8 +30,8 @@ export function buildOpenVpnConfig(params: {
   assignedIp: string;
   serverName: string;
 }) {
-  const remote = process.env.NEXT_PUBLIC_OVPN_REMOTE || "<vpn-hostname>";
-  const port = process.env.NEXT_PUBLIC_OVPN_PORT || "1194";
+  const remote = WEB_ENV.NEXT_PUBLIC_OVPN_REMOTE;
+  const port = WEB_ENV.NEXT_PUBLIC_OVPN_PORT;
 
   return [
     "client",
@@ -53,7 +53,7 @@ export function buildOpenVpnConfig(params: {
 }
 
 export function buildIkev2Config(params: { serverName: string }) {
-  const remote = process.env.NEXT_PUBLIC_IKEV2_REMOTE || "<vpn-hostname>";
+  const remote = WEB_ENV.NEXT_PUBLIC_IKEV2_REMOTE;
 
   return [
     "# Example strongSwan / IKEv2 configuration for vpnVPN.",

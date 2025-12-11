@@ -129,6 +129,13 @@ model VpnServer {
   publicIp  String?
   publicKey String?
   metadata  Json?
+  wgEndpoint String?
+  wgPort     Int?
+  ovpnEndpoint String?
+  ovpnPort     Int?
+  ovpnCaBundle String?
+  ovpnPeerFingerprint String?
+  ikev2Remote String?
   status    String
   lastSeen  DateTime
 

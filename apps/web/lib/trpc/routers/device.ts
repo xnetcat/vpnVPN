@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { router, paidProcedure } from "../init";
+import { WEB_ENV } from "@/env";
 import { TRPCError } from "@trpc/server";
 import {
   addPeerForDevice,
@@ -59,6 +60,123 @@ async function generateWireGuardKeyPair(): Promise<{
   }
 }
 
+function buildWireguardConfig(params: {
+  server: any;
+  assignedIp: string;
+  privateKey: string;
+}) {
+  const { server, assignedIp, privateKey } = params;
+  const endpointHost = server.wgEndpoint || server.publicIp;
+  const port =
+    server.wgPort ??
+    (server.metadata as any)?.listenPort ??
+    (server.metadata as any)?.port ??
+    51820;
+  if (!endpointHost || !server.publicKey) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Server missing WireGuard endpoint or public key",
+    });
+  }
+
+  const address = assignedIp.includes("/") ? assignedIp : `${assignedIp}/32`;
+  const endpoint = `${endpointHost}:${port}`;
+
+  return [
+    "[Interface]",
+    `PrivateKey = ${privateKey}`,
+    `Address = ${address}`,
+    "DNS = 1.1.1.1",
+    "",
+    "[Peer]",
+    `PublicKey = ${server.publicKey}`,
+    "AllowedIPs = 0.0.0.0/0, ::/0",
+    `Endpoint = ${endpoint}`,
+    "PersistentKeepalive = 25",
+    "",
+  ].join("\n");
+}
+
+function buildOpenVpnConfig(params: {
+  server: any;
+  assignedIp: string;
+  serverName: string;
+}) {
+  const { server, assignedIp, serverName } = params;
+  const endpoint = server.ovpnEndpoint || server.publicIp;
+  const port =
+    server.ovpnPort ??
+    (server.metadata as any)?.listenPort ??
+    (server.metadata as any)?.port ??
+    1194;
+
+  if (!endpoint) {
+    return null;
+  }
+
+  const caBundle = server.ovpnCaBundle ?? null;
+  const peerFingerprint = server.ovpnPeerFingerprint ?? null;
+  if (!caBundle && !peerFingerprint) {
+    return null;
+  }
+
+  const lines = [
+    "client",
+    "dev tun",
+    "proto udp",
+    `remote ${endpoint} ${port}`,
+    "resolv-retry infinite",
+    "nobind",
+    "persist-key",
+    "persist-tun",
+    "remote-cert-tls server",
+    peerFingerprint
+      ? `peer-fingerprint ${peerFingerprint}`
+      : "# peer-fingerprint <hex>",
+    "cipher AES-256-GCM",
+    "auth SHA256",
+    "verb 3",
+    `# Assigned IP hint: ${assignedIp}`,
+    `# Server: ${serverName}`,
+    "",
+  ];
+
+  if (caBundle) {
+    lines.push("<ca>");
+    lines.push(caBundle);
+    lines.push("</ca>");
+  }
+
+  return lines.join("\n");
+}
+
+function buildIkev2Config(params: { server: any; serverName: string }) {
+  const { server, serverName } = params;
+  const remote = server.ikev2Remote || server.publicIp;
+  if (!remote) return null;
+
+  return [
+    "# Example strongSwan / IKEv2 configuration for vpnVPN.",
+    `# Remote gateway: ${remote}`,
+    "",
+    "conn vpnvpn",
+    "  keyexchange=ikev2",
+    "  type=tunnel",
+    "  left=%any",
+    "  leftauth=psk",
+    `  right=${remote}`,
+    "  rightauth=psk",
+    "  ike=aes256-sha256-modp2048!",
+    "  esp=aes256-sha256!",
+    "  leftsubnet=0.0.0.0/0",
+    "  rightsubnet=0.0.0.0/0",
+    "  auto=add",
+    `# Server: ${serverName}`,
+    "# PSK: <ask your administrator or see documentation>",
+    "",
+  ].join("\n");
+}
+
 export const deviceRouter = router({
   list: paidProcedure.query(async ({ ctx }) => {
     const devices = await ctx.prisma.device.findMany({
@@ -84,7 +202,7 @@ export const deviceRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { name, serverId, machineId, publicKey: clientPublicKey } = input;
+      const { name, serverId, machineId } = input;
 
       const serverRecord = serverId
         ? await prisma.vpnServer.findUnique({ where: { id: serverId } })
@@ -104,14 +222,6 @@ export const deviceRouter = router({
         });
       }
 
-      const openvpnPeerFingerprint =
-        process.env.OPENVPN_PEER_FINGERPRINT ||
-        process.env.VITE_OPENVPN_PEER_FINGERPRINT ||
-        null;
-      const openvpnCaBundle =
-        process.env.OPENVPN_CA_BUNDLE ||
-        process.env.VITE_OPENVPN_CA_BUNDLE ||
-        null;
       const serverMetadata =
         (serverRecord?.metadata as Record<string, unknown> | null) || null;
       const serverPort =
@@ -146,20 +256,9 @@ export const deviceRouter = router({
           // Ignore errors revoking old peer
         }
 
-        // Use client-provided public key if available, otherwise generate server-side
-        let publicKey: string;
-        let privateKey: string | undefined;
-
-        if (clientPublicKey) {
-          // Client generated the keypair - more secure, private key never leaves client
-          publicKey = clientPublicKey;
-          privateKey = undefined; // Not returned to client
-        } else {
-          // Generate keys server-side (for web clients)
-          const keyPair = await generateWireGuardKeyPair();
-          publicKey = keyPair.publicKey;
-          privateKey = keyPair.privateKey;
-        }
+        const keyPair = await generateWireGuardKeyPair();
+        const publicKey = keyPair.publicKey;
+        const privateKey = keyPair.privateKey;
 
         // Update existing device with new keys
         const device = await ctx.prisma.device.update({
@@ -197,18 +296,27 @@ export const deviceRouter = router({
           });
         }
 
-        // Only return privateKey if it was generated server-side (for web clients)
-        // Desktop clients generate keys locally and don't need it
+        const wireguardConfig = buildWireguardConfig({
+          server: { ...serverRecord, metadata: serverMetadata },
+          assignedIp,
+          privateKey,
+        });
+        const openvpnConfig = buildOpenVpnConfig({
+          server: { ...serverRecord, metadata: serverMetadata },
+          assignedIp,
+          serverName: serverRecord.id,
+        });
+        const ikev2Config = buildIkev2Config({
+          server: { ...serverRecord, metadata: serverMetadata },
+          serverName: serverRecord.id,
+        });
+
         return {
           deviceId: device.id,
           assignedIp,
-          publicKey,
-          serverPublicKey: serverRecord.publicKey,
-          serverEndpoint: serverRecord?.publicIp ?? null,
-          serverPort: serverPort ?? null,
-          openvpnPeerFingerprint,
-          openvpnCaBundle,
-          ...(privateKey ? { privateKey } : {}),
+          wireguardConfig,
+          openvpnConfig,
+          ikev2Config,
         };
       }
 
@@ -247,20 +355,9 @@ export const deviceRouter = router({
         await ctx.prisma.device.delete({ where: { id: oldDevice.id } });
       }
 
-      // Use client-provided public key if available, otherwise generate server-side
-      let publicKey: string;
-      let privateKey: string | undefined;
-
-      if (clientPublicKey) {
-        // Client generated the keypair - more secure, private key never leaves client
-        publicKey = clientPublicKey;
-        privateKey = undefined; // Not returned to client
-      } else {
-        // Generate keys server-side (for web clients)
-        const keyPair = await generateWireGuardKeyPair();
-        publicKey = keyPair.publicKey;
-        privateKey = keyPair.privateKey;
-      }
+      const keyPair = await generateWireGuardKeyPair();
+      const publicKey = keyPair.publicKey;
+      const privateKey = keyPair.privateKey;
 
       // Create device in database with "pending" status
       const device = await ctx.prisma.device.create({
@@ -305,18 +402,27 @@ export const deviceRouter = router({
 
       // NOTE: Email is NOT sent here. It will be sent when confirmConnection is called.
 
-      // Only return privateKey if it was generated server-side (for web clients)
-      // Desktop clients generate keys locally and don't need it
+      const wireguardConfig = buildWireguardConfig({
+        server: { ...serverRecord, metadata: serverMetadata },
+        assignedIp,
+        privateKey,
+      });
+      const openvpnConfig = buildOpenVpnConfig({
+        server: { ...serverRecord, metadata: serverMetadata },
+        assignedIp,
+        serverName: serverRecord.id,
+      });
+      const ikev2Config = buildIkev2Config({
+        server: { ...serverRecord, metadata: serverMetadata },
+        serverName: serverRecord.id,
+      });
+
       return {
         deviceId: device.id,
         assignedIp,
-        publicKey,
-        serverPublicKey: serverRecord.publicKey,
-        serverEndpoint: serverRecord?.publicIp ?? null,
-        serverPort: serverPort ?? null,
-        openvpnPeerFingerprint,
-        openvpnCaBundle,
-        ...(privateKey ? { privateKey } : {}),
+        wireguardConfig,
+        openvpnConfig,
+        ikev2Config,
       };
     }),
 
@@ -364,7 +470,7 @@ export const deviceRouter = router({
             data: {
               name: user.name,
               deviceName: device.name,
-              dashboardUrl: `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/devices`,
+              dashboardUrl: `${WEB_ENV.NEXTAUTH_URL}/devices`,
             },
           });
         }
@@ -464,7 +570,7 @@ export const deviceRouter = router({
             data: {
               name: user.name,
               deviceName: device.name,
-              dashboardUrl: `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/devices`,
+              dashboardUrl: `${WEB_ENV.NEXTAUTH_URL}/devices`,
             },
           });
         }

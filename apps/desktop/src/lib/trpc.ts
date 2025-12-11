@@ -32,7 +32,7 @@ class ApiClient {
 
   private async fetch<T>(
     endpoint: string,
-    options: RequestInit = {},
+    options: RequestInit = {}
   ): Promise<T> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -75,18 +75,13 @@ class ApiClient {
     name: string;
     serverId?: string;
     machineId?: string;
-    publicKey?: string; // Optional: if provided, client generated keys locally
   }) {
     return this.fetch<{
       deviceId: string;
       assignedIp: string;
-      publicKey: string;
-      privateKey?: string; // Optional: only present if server generated keys
-      serverPublicKey?: string | null;
-      serverEndpoint?: string | null;
-      serverPort?: number | null;
-      openvpnPeerFingerprint?: string | null;
-      openvpnCaBundle?: string | null;
+      wireguardConfig?: string | null;
+      openvpnConfig?: string | null;
+      ikev2Config?: string | null;
     }>("/api/trpc/device.register", {
       method: "POST",
       body: JSON.stringify(params),

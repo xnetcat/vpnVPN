@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../init";
 import { consumeDesktopCode } from "@/lib/desktopCodes";
+import { WEB_ENV } from "@/env";
 
-const ADMIN_BASE = process.env.VPN_NODE_ADMIN_URL || "http://vpn-node:9090";
+const ADMIN_BASE = WEB_ENV.VPN_NODE_ADMIN_URL || "http://vpn-node:9090";
 
 export const desktopRouter = router({
   // Resolve a 6-digit desktop login code to the original NextAuth callback URL.

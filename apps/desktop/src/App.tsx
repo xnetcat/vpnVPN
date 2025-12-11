@@ -9,12 +9,7 @@ import {
 } from "lucide-react";
 
 import type { ViewState, AppView, SettingsTab } from "./lib/types";
-import {
-  IS_PRODUCTION,
-  API_BASE_URL,
-  OVPN_CA_BUNDLE,
-  OVPN_PEER_FINGERPRINT,
-} from "./lib/config";
+import { IS_PRODUCTION, API_BASE_URL } from "./lib/config";
 import {
   applyVpnConfig,
   disconnectVpn,
@@ -25,14 +20,8 @@ import {
   logError,
   enableKillSwitch,
   disableKillSwitch,
-  generateWireguardKeys,
 } from "./lib/tauri";
 import { setStoredSessionToken, setStoredUser } from "./lib/auth";
-import {
-  buildWireGuardConfig,
-  buildOpenVpnConfig,
-  buildIkev2Config,
-} from "./lib/vpnConfig";
 import {
   useUserCountry,
   useVpnTools,
@@ -498,120 +487,32 @@ export default function App() {
     setConnectError(null);
 
     let deviceId: string | null = null;
-    let localPrivateKey: string | null = null;
 
     try {
-      // Generate WireGuard keys locally for better security (desktop app only)
-      let publicKey: string | undefined;
-      if (protocol === "wireguard") {
-        try {
-          const [privateKey, pubKey] = await generateWireguardKeys();
-          localPrivateKey = privateKey;
-          publicKey = pubKey;
-          console.log(
-            "[App] Generated WireGuard keys locally (private key not sent to server)",
-          );
-        } catch (e) {
-          console.warn(
-            "[App] Failed to generate keys locally, falling back to server-side:",
-            e,
-          );
-          // Fall back to server-side generation if wg genkey is not available
-        }
-      }
-
       const result = await registerDevice({
         name: `Desktop • ${selectedServer.region}`,
         serverId: selectedServer.id,
         machineId: machineId ?? undefined,
-        publicKey, // Send only public key if generated locally
       });
 
       deviceId = result.deviceId;
 
-      let cfg: string;
+      let cfg: string | null = null;
       if (protocol === "wireguard") {
-        console.log("[App] Building WireGuard config with:");
-        console.log(
-          "[App]   selectedServer.publicIp:",
-          selectedServer.publicIp,
-        );
-        console.log(
-          "[App]   selectedServer.metadata:",
-          selectedServer.metadata,
-        );
-        console.log("[App]   wgServerPublicKey:", wgServerPublicKey);
-
-        // Use locally generated private key if available, otherwise use server-provided one
-        const privateKey = localPrivateKey || result.privateKey;
-        if (!privateKey) {
-          throw new Error(
-            "No private key available for WireGuard configuration",
-          );
+        cfg = result.wireguardConfig || null;
+        if (!cfg) {
+          throw new Error("Server did not provide WireGuard config");
         }
-
-        // Determine server connection details with fallbacks
-        const effectiveServerPublicKey =
-          result.serverPublicKey ||
-          selectedServer.publicKey ||
-          wgServerPublicKey ||
-          null;
-        if (!effectiveServerPublicKey) {
-          throw new Error("WireGuard server public key not provided");
-        }
-
-        // Use explicit endpoint/port if provided by server, otherwise fall back to server publicIp or localhost in dev
-        const portFromMetadata =
-          (selectedServer.metadata?.port as number | undefined) ??
-          ((selectedServer.metadata as any)?.listenPort as number | undefined);
-        const port =
-          (typeof result.serverPort === "number"
-            ? result.serverPort
-            : Number(result.serverPort)) || portFromMetadata || 51820;
-
-        const endpointOverride =
-          result.serverEndpoint ||
-          selectedServer.publicIp ||
-          (process.env.NODE_ENV === "development" ? "localhost" : undefined);
-
-        cfg = buildWireGuardConfig({
-          privateKey,
-          assignedIp: result.assignedIp,
-          serverPublicKeyOverride: effectiveServerPublicKey,
-          endpointOverride,
-          portOverride: port,
-        });
-
-        console.log("[App] Generated WireGuard config:\n", cfg);
       } else if (protocol === "openvpn") {
-        const peerFingerprint =
-          result.openvpnPeerFingerprint || OVPN_PEER_FINGERPRINT || null;
-        const caBundle = result.openvpnCaBundle || OVPN_CA_BUNDLE || null;
-        if (!peerFingerprint && !caBundle) {
-          showError(
-            "OpenVPN not configured: missing CA bundle or peer fingerprint from server. Use WireGuard or configure OpenVPN trust.",
-          );
-          throw new Error("OpenVPN missing CA or peer fingerprint");
+        cfg = result.openvpnConfig || null;
+        if (!cfg) {
+          throw new Error("Server did not provide OpenVPN config");
         }
-        cfg = buildOpenVpnConfig({
-          assignedIp: result.assignedIp,
-          serverName: selectedServer.region,
-          endpointOverride:
-            result.serverEndpoint ||
-            selectedServer.publicIp ||
-            (process.env.NODE_ENV === "development" ? "localhost" : undefined),
-          portOverride:
-            (typeof result.serverPort === "number"
-              ? result.serverPort
-              : Number(result.serverPort)) ||
-            (selectedServer.metadata?.port as number | undefined),
-          peerFingerprintOverride: peerFingerprint,
-          caBundleOverride: caBundle,
-        });
       } else {
-        cfg = buildIkev2Config({
-          serverName: selectedServer.region,
-        });
+        cfg = result.ikev2Config || null;
+        if (!cfg) {
+          throw new Error("Server did not provide IKEv2 config");
+        }
       }
 
       setConfig(cfg);

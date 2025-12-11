@@ -1,14 +1,12 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
+import { WEB_ENV } from "@/env";
 
 // Desktop download URLs from environment
-const DESKTOP_BUCKET_URL =
-  process.env.DESKTOP_BUCKET_URL ?? process.env.NEXT_PUBLIC_DESKTOP_BUCKET_URL;
-const ENVIRONMENT = process.env.ENVIRONMENT ?? "staging";
-const DESKTOP_BASE = DESKTOP_BUCKET_URL
-  ? `${DESKTOP_BUCKET_URL}/releases/${ENVIRONMENT}`
-  : null;
+const DESKTOP_BUCKET_URL = WEB_ENV.DESKTOP_BUCKET_URL;
+const ENVIRONMENT = WEB_ENV.ENVIRONMENT;
+const DESKTOP_BASE = `${DESKTOP_BUCKET_URL}/releases/${ENVIRONMENT}`;
 
 type DesktopDownloads = {
   macos: string | null;
@@ -71,9 +69,8 @@ function detectPlatform(userAgent: string | null): PlatformKey | "other" {
 }
 
 async function fetchFleetMetrics(): Promise<FleetMetrics | null> {
-  const base =
-    process.env.CONTROL_PLANE_API_URL ?? process.env.NEXT_PUBLIC_API_URL;
-  const apiKey = process.env.CONTROL_PLANE_API_KEY;
+  const base = WEB_ENV.CONTROL_PLANE_API_URL ?? WEB_ENV.NEXT_PUBLIC_API_URL;
+  const apiKey = WEB_ENV.CONTROL_PLANE_API_KEY;
 
   if (!base || !apiKey) return null;
 
@@ -89,7 +86,7 @@ async function fetchFleetMetrics(): Promise<FleetMetrics | null> {
 
     const totalServers = data.length;
     const onlineNodes = data.filter(
-      (s) => (s.status ?? "unknown").toLowerCase() === "online",
+      (s) => (s.status ?? "unknown").toLowerCase() === "online"
     );
     const onlineServers = onlineNodes.length;
 
@@ -137,7 +134,7 @@ async function fetchFleetMetrics(): Promise<FleetMetrics | null> {
 
 export default async function HomePage() {
   const session = await getSession();
-  const headersList = headers();
+  const headersList = await headers();
   const isAuthed = Boolean((session?.user as any)?.id);
   const metrics = await fetchFleetMetrics();
   const downloads = getDesktopDownloads();
@@ -145,9 +142,7 @@ export default async function HomePage() {
   const userPlatform = detectPlatform(headersList.get("user-agent"));
   const availablePlatforms = PLATFORM_ORDER.filter((key) => downloads[key]);
   const recommendedPlatform: PlatformKey | null =
-    userPlatform !== "other" && downloads[userPlatform]
-      ? userPlatform
-      : null;
+    userPlatform !== "other" && downloads[userPlatform] ? userPlatform : null;
   const fallbackPlatform = availablePlatforms[0] ?? null;
   const activePlatform =
     (recommendedPlatform as PlatformKey | null) ?? fallbackPlatform;
@@ -161,9 +156,9 @@ export default async function HomePage() {
 
   return (
     <main className="relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-950 via-slate-950 to-slate-950" />
+      <div className="pointer-events-none absolute inset-0 bg-linear-to-b from-slate-950 via-slate-950 to-slate-950" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.18),transparent_35%),radial-gradient(circle_at_80%_10%,rgba(56,189,248,0.16),transparent_30%),radial-gradient(circle_at_50%_80%,rgba(59,130,246,0.12),transparent_30%)]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-emerald-500/0 via-emerald-500/50 to-cyan-400/0" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-emerald-500/0 via-emerald-500/50 to-cyan-400/0" />
 
       <div className="relative mx-auto max-w-6xl px-4 pb-20 pt-14 sm:px-6 lg:px-8">
         {/* Hero */}
@@ -174,21 +169,21 @@ export default async function HomePage() {
             </div>
             <h1 className="mt-5 text-balance text-4xl font-semibold leading-tight tracking-tight text-white sm:text-5xl">
               A production VPN product,{" "}
-              <span className="bg-gradient-to-r from-emerald-400 via-cyan-300 to-sky-400 bg-clip-text text-transparent">
+              <span className="bg-linear-to-r from-emerald-400 via-cyan-300 to-sky-400 bg-clip-text text-transparent">
                 not a side project.
               </span>
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-200/80 sm:text-base">
-              Full SaaS VPN stack you actually control: dashboard, billing, multi‑node
-              control plane, metrics, and desktop app. Point it at your own
-              WireGuard/OpenVPN/IKEv2 nodes or let us host them.
+              Full SaaS VPN stack you actually control: dashboard, billing,
+              multi‑node control plane, metrics, and desktop app. Point it at
+              your own WireGuard/OpenVPN/IKEv2 nodes or let us host them.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-4">
               {isAuthed ? (
                 <Link
                   href="/dashboard"
-                  className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 px-5 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/25 transition hover:from-emerald-400 hover:to-cyan-400"
+                  className="inline-flex items-center justify-center rounded-lg bg-linear-to-r from-emerald-500 to-cyan-500 px-5 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/25 transition hover:from-emerald-400 hover:to-cyan-400"
                 >
                   Go to dashboard
                 </Link>
@@ -196,7 +191,7 @@ export default async function HomePage() {
                 <>
                   <Link
                     href="/auth/register"
-                    className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 px-5 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/25 transition hover:from-emerald-400 hover:to-cyan-400"
+                    className="inline-flex items-center justify-center rounded-lg bg-linear-to-r from-emerald-500 to-cyan-500 px-5 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/25 transition hover:from-emerald-400 hover:to-cyan-400"
                   >
                     Get started from $10/mo
                   </Link>
@@ -243,7 +238,7 @@ export default async function HomePage() {
 
           {/* Live metrics card */}
           <div className="relative">
-            <div className="pointer-events-none absolute -inset-6 rounded-3xl bg-gradient-to-tr from-emerald-400/20 via-transparent to-cyan-400/20 blur-2xl" />
+            <div className="pointer-events-none absolute -inset-6 rounded-3xl bg-linear-to-tr from-emerald-400/20 via-transparent to-cyan-400/20 blur-2xl" />
             <div className="relative overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/70 shadow-2xl shadow-emerald-900/30 backdrop-blur">
               <div className="flex items-center justify-between border-b border-slate-800/80 px-4 py-3">
                 <span className="text-xs font-medium text-slate-300">
@@ -341,28 +336,33 @@ export default async function HomePage() {
               Everything you need to run a serious VPN service.
             </h2>
             <p className="mt-2 text-sm text-slate-300">
-              Control plane, billing, metrics, desktop clients, and a Rust node you can
-              self-host or let us run. Same stack in dev and prod.
+              Control plane, billing, metrics, desktop clients, and a Rust node
+              you can self-host or let us run. Same stack in dev and prod.
             </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-5 shadow-lg shadow-emerald-900/20">
-              <h3 className="text-sm font-semibold text-white">SaaS dashboard</h3>
+              <h3 className="text-sm font-semibold text-white">
+                SaaS dashboard
+              </h3>
               <p className="mt-2 text-xs text-slate-300">
-                Next.js dashboard for users and admins: subscriptions, devices, fleet, and live VPN metrics.
+                Next.js dashboard for users and admins: subscriptions, devices,
+                fleet, and live VPN metrics.
               </p>
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-5 shadow-lg shadow-emerald-900/20">
               <h3 className="text-sm font-semibold text-white">Real VPN</h3>
               <p className="mt-2 text-xs text-slate-300">
-                Rust VPN node with WireGuard, OpenVPN, and IKEv2 backends. Real interfaces, real encryption.
+                Rust VPN node with WireGuard, OpenVPN, and IKEv2 backends. Real
+                interfaces, real encryption.
               </p>
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-5 shadow-lg shadow-emerald-900/20">
               <h3 className="text-sm font-semibold text-white">Desktop app</h3>
               <p className="mt-2 text-xs text-slate-300">
-                Tauri desktop app with OTP login; launches WireGuard/OpenVPN/IKEv2 clients on macOS, Windows, and Linux.
+                Tauri desktop app with OTP login; launches
+                WireGuard/OpenVPN/IKEv2 clients on macOS, Windows, and Linux.
               </p>
             </div>
             <div className="rounded-xl border border-emerald-700/60 bg-emerald-500/10 p-5 shadow-lg shadow-emerald-900/30">
@@ -370,7 +370,9 @@ export default async function HomePage() {
                 Bring your own nodes
               </h3>
               <p className="mt-2 text-xs text-emerald-50/80">
-                Ship our Rust node to any VPS/EC2 with Docker or systemd. Manage regions, peers, and health from the same dashboard—or let us host the fleet.
+                Ship our Rust node to any VPS/EC2 with Docker or systemd. Manage
+                regions, peers, and health from the same dashboard—or let us
+                host the fleet.
               </p>
             </div>
           </div>
@@ -390,7 +392,8 @@ export default async function HomePage() {
                 Desktop downloads
               </h2>
               <p className="mt-2 text-sm text-slate-300">
-                We detect your OS and pick the right build. Auto‑updates included.
+                We detect your OS and pick the right build. Auto‑updates
+                included.
               </p>
             </div>
 
@@ -446,25 +449,28 @@ export default async function HomePage() {
                   macOS installation tip
                 </h3>
                 <p className="mt-2 text-xs text-amber-50/80 leading-relaxed">
-                  If Gatekeeper blocks launch, clear the quarantine flag and open:
+                  If Gatekeeper blocks launch, clear the quarantine flag and
+                  open:
                 </p>
                 <div className="mt-3 rounded bg-amber-500/10 p-3">
                   <p className="mb-2 text-xs font-medium text-amber-50">
                     Paste in Terminal:
                   </p>
                   <code className="block rounded border border-amber-400/20 bg-black/60 px-2 py-1.5 font-mono text-[11px] text-amber-50">
-                    xattr -cr "/Applications/vpnVPN Desktop (Staging).app" && open
-                    "/Applications/vpnVPN Desktop (Staging).app"
+                    xattr -cr "/Applications/vpnVPN Desktop (Staging).app" &&
+                    open "/Applications/vpnVPN Desktop (Staging).app"
                   </code>
                 </div>
                 <p className="mt-3 text-xs text-amber-50/70">
-                  Or: right-click the app → Open (one time). Standard for apps outside the Mac App Store.
+                  Or: right-click the app → Open (one time). Standard for apps
+                  outside the Mac App Store.
                 </p>
               </div>
             )}
 
             <p className="mt-6 text-center text-xs text-slate-400">
-              Requires macOS 12+, Windows 10+, or Linux (glibc 2.31+). Auto‑updates on.
+              Requires macOS 12+, Windows 10+, or Linux (glibc 2.31+).
+              Auto‑updates on.
             </p>
           </section>
         )}
@@ -476,7 +482,8 @@ export default async function HomePage() {
               Ready when you are.
             </h3>
             <p className="mt-1 text-xs text-emerald-50/80">
-              Start with one node locally, then fan out to regions. Same binaries in dev and prod.
+              Start with one node locally, then fan out to regions. Same
+              binaries in dev and prod.
             </p>
           </div>
           <div className="mt-4 flex flex-wrap gap-3 sm:mt-0 sm:items-center">
@@ -507,4 +514,3 @@ export default async function HomePage() {
     </main>
   );
 }
-

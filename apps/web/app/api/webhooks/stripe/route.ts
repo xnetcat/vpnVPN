@@ -5,12 +5,13 @@ import { prisma } from "@/lib/prisma";
 import { revokePeersForUser } from "@/lib/controlPlane";
 import { sendEmail } from "@/lib/email";
 import { getTierFromPriceId, getTierConfig } from "@/lib/tiers";
+import { WEB_ENV } from "@/env";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   const sig = req.headers.get("stripe-signature");
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const webhookSecret = WEB_ENV.STRIPE_WEBHOOK_SECRET;
   if (!sig || !webhookSecret) {
     return NextResponse.json(
       { error: "Missing signature/secret" },
@@ -100,9 +101,7 @@ export async function POST(req: Request) {
                 plan: tierConfig.name,
                 deviceLimit: tierConfig.deviceLimit.toString(),
                 nextBillingDate: currentPeriodEnd?.toLocaleDateString(),
-                dashboardUrl: `${
-                  process.env.NEXTAUTH_URL || "http://localhost:3000"
-                }/dashboard`,
+                dashboardUrl: `${WEB_ENV.NEXTAUTH_URL}/dashboard`,
               },
             });
           }
@@ -170,9 +169,7 @@ export async function POST(req: Request) {
                 template: "subscription_cancelled",
                 data: {
                   name: user.name,
-                  pricingUrl: `${
-                    process.env.NEXTAUTH_URL || "http://localhost:3000"
-                  }/pricing`,
+                  pricingUrl: `${WEB_ENV.NEXTAUTH_URL}/pricing`,
                 },
               });
             }

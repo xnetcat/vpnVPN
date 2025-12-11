@@ -1,10 +1,9 @@
-import {
-  WG_ENDPOINT,
-  WG_SERVER_PUBLIC_KEY,
-  OVPN_REMOTE,
-  OVPN_PORT,
-  IKEV2_REMOTE,
-} from "./config";
+const ENV = import.meta.env as any;
+const WG_ENDPOINT = (ENV?.VITE_WG_ENDPOINT as string) || "";
+const WG_SERVER_PUBLIC_KEY = (ENV?.VITE_WG_SERVER_PUBLIC_KEY as string) || "";
+const OVPN_REMOTE = (ENV?.VITE_OVPN_REMOTE as string) || "<vpn-hostname>";
+const OVPN_PORT = (ENV?.VITE_OVPN_PORT as string) || "1194";
+const IKEV2_REMOTE = (ENV?.VITE_IKEV2_REMOTE as string) || "<vpn-hostname>";
 
 export function buildWireGuardConfig(params: {
   privateKey: string;

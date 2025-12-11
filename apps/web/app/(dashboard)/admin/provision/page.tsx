@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/requireAdmin";
 import { redirect } from "next/navigation";
 import { Terminal, Server } from "lucide-react";
+import { WEB_ENV } from "@/env";
 
 export default async function AdminProvisionPage() {
   const gate = await requireAdmin();
@@ -9,8 +10,8 @@ export default async function AdminProvisionPage() {
   }
 
   const apiUrl =
-    process.env.CONTROL_PLANE_API_URL ??
-    process.env.NEXT_PUBLIC_API_URL ??
+    WEB_ENV.CONTROL_PLANE_API_URL ??
+    WEB_ENV.NEXT_PUBLIC_API_URL ??
     "https://api.vpnvpn.dev";
 
   return (

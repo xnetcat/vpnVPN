@@ -62,6 +62,13 @@ const registerServerSchema = z.object({
   publicKey: z.string(),
   listenPort: z.number(),
   metadata: z.unknown().optional(),
+  wgEndpoint: z.string().optional(),
+  wgPort: z.number().optional(),
+  ovpnEndpoint: z.string().optional(),
+  ovpnPort: z.number().optional(),
+  ovpnCaBundle: z.string().optional(),
+  ovpnPeerFingerprint: z.string().optional(),
+  ikev2Remote: z.string().optional(),
 });
 
 export async function buildServer(): Promise<FastifyInstance> {
@@ -151,6 +158,13 @@ export async function buildServer(): Promise<FastifyInstance> {
           publicIp: publicIp || undefined,
           publicKey: body.publicKey,
           metadata: body.metadata as object,
+          wgEndpoint: body.wgEndpoint ?? undefined,
+          wgPort: body.wgPort ?? undefined,
+          ovpnEndpoint: body.ovpnEndpoint ?? undefined,
+          ovpnPort: body.ovpnPort ?? undefined,
+          ovpnCaBundle: body.ovpnCaBundle ?? undefined,
+          ovpnPeerFingerprint: body.ovpnPeerFingerprint ?? undefined,
+          ikev2Remote: body.ikev2Remote ?? undefined,
         },
         create: {
           id: body.id,
@@ -159,6 +173,13 @@ export async function buildServer(): Promise<FastifyInstance> {
           publicIp: publicIp || undefined,
           publicKey: body.publicKey,
           metadata: body.metadata as object,
+          wgEndpoint: body.wgEndpoint ?? undefined,
+          wgPort: body.wgPort ?? undefined,
+          ovpnEndpoint: body.ovpnEndpoint ?? undefined,
+          ovpnPort: body.ovpnPort ?? undefined,
+          ovpnCaBundle: body.ovpnCaBundle ?? undefined,
+          ovpnPeerFingerprint: body.ovpnPeerFingerprint ?? undefined,
+          ikev2Remote: body.ikev2Remote ?? undefined,
         },
       });
 
@@ -266,6 +287,13 @@ export async function buildServer(): Promise<FastifyInstance> {
           publicIp: s.publicIp,
           publicKey: s.publicKey,
           metadata,
+          wgEndpoint: s.wgEndpoint,
+          wgPort: s.wgPort,
+          ovpnEndpoint: s.ovpnEndpoint,
+          ovpnPort: s.ovpnPort,
+          ovpnCaBundle: s.ovpnCaBundle,
+          ovpnPeerFingerprint: s.ovpnPeerFingerprint,
+          ikev2Remote: s.ikev2Remote,
           metrics: metric
             ? {
                 sessions: metric.activePeers ?? 0,
