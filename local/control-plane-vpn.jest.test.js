@@ -29,8 +29,8 @@ async function pickServerOrSkip(kind) {
   try {
     servers = await fetchServers({ base, apiKey });
   } catch (err) {
-    console.warn(
-      `[skip ${kind}] control-plane unreachable or unauthorized. Set CONTROL_PLANE_API_URL and CONTROL_PLANE_API_KEY. Error: ${
+    throw new Error(
+      `[${kind}] control-plane unreachable or unauthorized. Set CONTROL_PLANE_API_URL and CONTROL_PLANE_API_KEY. Error: ${
         err instanceof Error ? err.message : String(err)
       }`
     );
@@ -142,9 +142,24 @@ wg set wg0 \\
 
 ip addr add "${"$"}{VPN_CLIENT_ADDRESS:-10.8.0.2/32}" dev wg0
 ip link set wg0 up
+# Keep route to peer off-tunnel
+ip route add "${"$"}{VPN_SERVER_ENDPOINT}/32" dev eth0 || true
 ip route replace 0.0.0.0/0 dev wg0
 echo "nameserver 1.1.1.1" > /etc/resolv.conf
-ping -c 3 8.8.8.8
+echo "[client] wg show:"
+wg show
+echo "[client] ip addr:"
+ip addr
+echo "[client] ip route:"
+ip route
+echo "[client] ping endpoint ${"$"}{VPN_SERVER_ENDPOINT}"
+ping -c 3 "${"$"}{VPN_SERVER_ENDPOINT}" || true
+echo "[client] sleep 3s before internet ping"
+sleep 3
+echo "[client] wg show (post-wait):"
+wg show
+echo "[client] ping 8.8.8.8"
+ping -c 5 8.8.8.8
 `;
 
     const result = spawnSync(
@@ -212,7 +227,6 @@ describe("openvpn metadata", () => {
     const { base: controlPlaneBase, apiKey: controlPlaneApiKey } =
       getControlPlaneConfig();
     const servers = await pickServerOrSkip("openvpn");
-    if (!servers) return;
     const server =
       servers.find(
         (s) => s.ovpnCaBundle || (s.metadata && s.metadata.ovpnCaBundle)
@@ -224,6 +238,18 @@ describe("openvpn metadata", () => {
     ) {
       throw new Error("missing openvpn metadata");
     }
+
+    const host = server.ovpnEndpoint || server.publicIp;
+    const port = server.ovpnPort || 1194;
+    if (!host) {
+      throw new Error("openvpn host missing");
+    }
+    const ping = spawnSync("ping", ["-c", "1", host], { encoding: "utf8" });
+    if (ping.status !== 0) {
+      throw new Error(
+        `openvpn endpoint unreachable (${host}:${port})\nstdout:\n${ping.stdout}\nstderr:\n${ping.stderr}`
+      );
+    }
   });
 });
 
@@ -232,7 +258,6 @@ describe("ikev2 metadata and ipsec smoke", () => {
     const { base: controlPlaneBase, apiKey: controlPlaneApiKey } =
       getControlPlaneConfig();
     const servers = await pickServerOrSkip("ikev2");
-    if (!servers) return;
     const server =
       servers.find(
         (s) => s.ikev2Remote || (s.metadata && s.metadata.ikev2Remote)
@@ -242,6 +267,18 @@ describe("ikev2 metadata and ipsec smoke", () => {
       (!server.ikev2Remote && !(server.metadata && server.metadata.ikev2Remote))
     ) {
       throw new Error("missing ikev2 metadata");
+    }
+
+    const remote = server.ikev2Remote || server.metadata?.ikev2Remote;
+    const host = remote?.split(":")[0];
+    if (!host) {
+      throw new Error("ikev2 host missing");
+    }
+    const ping = spawnSync("ping", ["-c", "1", host], { encoding: "utf8" });
+    if (ping.status !== 0) {
+      throw new Error(
+        `ikev2 endpoint unreachable (${remote})\nstdout:\n${ping.stdout}\nstderr:\n${ping.stderr}`
+      );
     }
   }, 60_000);
 });
