@@ -13,7 +13,11 @@ import {
   RefreshCw,
 } from "lucide-react";
 import type { Protocol } from "../lib/types";
-import { isDaemonAvailable, getDaemonStatus, installDaemon } from "../lib/tauri";
+import {
+  isDaemonAvailable,
+  getDaemonStatus,
+  installDaemon,
+} from "../lib/tauri";
 
 export type OnboardingStep =
   | "welcome"

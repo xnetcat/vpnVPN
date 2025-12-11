@@ -41,7 +41,7 @@ function loadEnv() {
     // eslint-disable-next-line no-console
     console.error("[env] Missing required environment variables:", missing);
     throw new Error(
-      `Missing required env vars (${missing.length}): ${missing.join(", ")}`
+      `Missing required env vars (${missing.length}): ${missing.join(", ")}`,
     );
   }
 

@@ -120,10 +120,10 @@ pub async fn connect(config: &VpnConfig) -> Result<ConnectionStatus> {
     // At this point the interface is up but we never got a handshake. Leaving it
     // up blackholes traffic (default route points at wg). Proactively tear it
     // down so the user's networking is restored and surface a hard error.
-        warn!(
+    warn!(
         "WireGuard connection not established after {} attempts. Rolling back interface.",
-            MAX_RETRIES + 1
-        );
+        MAX_RETRIES + 1
+    );
     if let Err(e) = disconnect().await {
         warn!("Failed to rollback WireGuard interface: {}", e);
     }

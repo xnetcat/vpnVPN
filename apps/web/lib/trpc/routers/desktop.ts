@@ -12,7 +12,7 @@ export const desktopRouter = router({
       z.object({
         email: z.string().email(),
         code: z.string().min(6).max(6),
-      })
+      }),
     )
     .mutation(async ({ input }) => {
       const url = await consumeDesktopCode(input.email, input.code);

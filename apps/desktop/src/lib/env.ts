@@ -17,10 +17,10 @@ function loadEnv() {
     // eslint-disable-next-line no-console
     console.error(
       "[desktop env] Missing required environment variables:",
-      missing
+      missing,
     );
     throw new Error(
-      `Missing required desktop env vars (${missing.length}): ${missing.join(", ")}`
+      `Missing required desktop env vars (${missing.length}): ${missing.join(", ")}`,
     );
   }
 

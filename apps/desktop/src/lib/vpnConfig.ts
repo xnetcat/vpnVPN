@@ -27,11 +27,11 @@ export function buildWireGuardConfig(params: {
   console.log("[vpnConfig]   Final endpoint:", endpoint);
   console.log(
     "[vpnConfig]   serverPublicKeyOverride:",
-    params.serverPublicKeyOverride
+    params.serverPublicKeyOverride,
   );
   console.log(
     "[vpnConfig]   WG_SERVER_PUBLIC_KEY from env:",
-    WG_SERVER_PUBLIC_KEY
+    WG_SERVER_PUBLIC_KEY,
   );
   console.log("[vpnConfig]   Final serverPublicKey:", serverPublicKey);
 
@@ -112,7 +112,7 @@ export function buildOpenVpnConfig(params: {
     lines.push("</ca>");
   } else {
     lines.push(
-      "# CA bundle not configured - provide VITE_OVPN_CA_BUNDLE or VITE_OVPN_PEER_FINGERPRINT"
+      "# CA bundle not configured - provide VITE_OVPN_CA_BUNDLE or VITE_OVPN_PEER_FINGERPRINT",
     );
   }
 

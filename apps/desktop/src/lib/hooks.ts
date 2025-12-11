@@ -115,7 +115,7 @@ export function useVpnTools(): {
 // Hook to check actual VPN connection status from the system
 export function useVpnConnectionStatus(
   appStatus: "disconnected" | "connecting" | "connected",
-  pollInterval = 5000
+  pollInterval = 5000,
 ): VpnConnectionStatus | null {
   const [connectionStatus, setConnectionStatus] =
     useState<VpnConnectionStatus | null>(null);
@@ -273,7 +273,7 @@ export function useDeviceRegistration() {
         setIsLoading(false);
       }
     },
-    []
+    [],
   );
 
   // Confirm connection - call this after VPN connection is verified

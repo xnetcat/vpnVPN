@@ -68,14 +68,14 @@ export async function POST(req: Request) {
     if (!email || typeof email !== "string") {
       return NextResponse.json(
         { error: "Email is required" },
-        { status: 400, headers: corsHeaders }
+        { status: 400, headers: corsHeaders },
       );
     }
 
     if (!code || typeof code !== "string" || code.length !== 6) {
       return NextResponse.json(
         { error: "Invalid code format" },
-        { status: 400, headers: corsHeaders }
+        { status: 400, headers: corsHeaders },
       );
     }
 
@@ -85,7 +85,7 @@ export async function POST(req: Request) {
     if (isRateLimited(`verify:${normalizedEmail}`)) {
       return NextResponse.json(
         { error: "Too many verification attempts. Please wait a minute." },
-        { status: 429, headers: corsHeaders }
+        { status: 429, headers: corsHeaders },
       );
     }
 
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
     if (isRateLimited(`verify-ip:${ip}`)) {
       return NextResponse.json(
         { error: "Too many verification attempts. Please wait a minute." },
-        { status: 429, headers: corsHeaders }
+        { status: 429, headers: corsHeaders },
       );
     }
 
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
     if (!otpEntry) {
       return NextResponse.json(
         { error: "Invalid or expired code" },
-        { status: 401, headers: corsHeaders }
+        { status: 401, headers: corsHeaders },
       );
     }
 
@@ -180,13 +180,13 @@ export async function POST(req: Request) {
           name: user.name,
         },
       },
-      { headers: corsHeaders }
+      { headers: corsHeaders },
     );
   } catch (error) {
     console.error("[otp/verify] Error:", error);
     return NextResponse.json(
       { error: "Failed to verify code" },
-      { status: 500, headers: corsHeaders }
+      { status: 500, headers: corsHeaders },
     );
   }
 }

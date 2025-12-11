@@ -17,6 +17,6 @@ export async function POST(req: NextRequest) {
       message:
         "This endpoint is deprecated. The desktop app must use device.register (tRPC) which returns server-generated configs.",
     },
-    { status: 410 }
+    { status: 410 },
   );
 }
