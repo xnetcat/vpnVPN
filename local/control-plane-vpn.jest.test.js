@@ -195,3 +195,51 @@ ping -c 3 8.8.8.8
     await prisma.$disconnect();
   }, 120_000);
 });
+
+describe("ikev2 metadata and ipsec smoke", () => {
+  test("ipsec listens and control-plane exposes ikev2Remote", async () => {
+    const controlPlaneBase =
+      process.env.CONTROL_PLANE_API_URL || process.env.CONTROL_PLANE_URL;
+    const controlPlaneApiKey = process.env.CONTROL_PLANE_API_KEY;
+    if (!controlPlaneBase || !controlPlaneApiKey) {
+      throw new Error("CONTROL_PLANE_API_URL or CONTROL_PLANE_API_KEY missing");
+    }
+    const base = controlPlaneBase.replace(/\/$/, "");
+    const serverUrl = `${base}/servers`;
+
+    const serversRes = await fetch(serverUrl, {
+      headers: { "x-api-key": controlPlaneApiKey },
+    });
+    const body = await serversRes.text();
+    if (!serversRes.ok) {
+      throw new Error(
+        `/servers failed: ${serversRes.status} ${serversRes.statusText} ${body}`
+      );
+    }
+    const servers = JSON.parse(body);
+    const server = servers[0];
+    if (
+      !server ||
+      (!server.ikev2Remote && !(server.metadata && server.metadata.ikev2Remote))
+    ) {
+      throw new Error("missing ikev2 metadata");
+    }
+
+    // Run local ipsec smoke script if available
+    const smoke = spawnSync("bash", ["./scripts/ikev2-smoke.sh"], {
+      cwd: path.resolve(__dirname, ".."),
+      env: {
+        ...process.env,
+        CONTROL_PLANE_API_URL: controlPlaneBase,
+        CONTROL_PLANE_API_KEY: controlPlaneApiKey,
+      },
+      encoding: "utf8",
+      timeout: 30_000,
+    });
+    if (smoke.status !== 0) {
+      throw new Error(
+        `ikev2 smoke failed\nstdout:\n${smoke.stdout}\nstderr:\n${smoke.stderr}`
+      );
+    }
+  }, 60_000);
+});
