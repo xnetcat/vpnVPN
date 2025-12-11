@@ -387,6 +387,24 @@ async fn run_server(
         );
     }
 
+    // Ensure WireGuard/OpenVPN endpoints and ports are populated for registration
+    if let Some(ip) = detected_public_ip.clone() {
+        if env::var("VPN_WG_ENDPOINT").is_err() {
+            env::set_var("VPN_WG_ENDPOINT", ip.clone());
+        }
+        if env::var("VPN_OVPN_ENDPOINT").is_err() {
+            env::set_var("VPN_OVPN_ENDPOINT", ip.clone());
+        }
+    }
+    env::set_var(
+        "VPN_WG_PORT",
+        env::var("VPN_WG_PORT").unwrap_or_else(|_| args.listen_port.to_string()),
+    );
+    env::set_var(
+        "VPN_OVPN_PORT",
+        env::var("VPN_OVPN_PORT").unwrap_or_else(|_| "1194".to_string()),
+    );
+
     // Registration (fail fast if we cannot talk to the control plane)
     if let Some(pubkey) = node_arc.get_public_key() {
         let client = cp_client.clone();

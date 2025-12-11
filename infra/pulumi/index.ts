@@ -23,6 +23,7 @@ let desktopBucketUrl: pulumi.Output<string> | undefined;
 let lambdaCodeBucket: pulumi.Output<string> | undefined;
 let controlPlaneDomainTarget: pulumi.Output<string> | undefined;
 let metricsDomainTarget: pulumi.Output<string> | undefined;
+let vpnServerImageTag: pulumi.Output<string> | undefined;
 
 if (stack.startsWith("global")) {
   // ==========================================================================
@@ -307,6 +308,7 @@ if (stack.startsWith("global")) {
     `,
     triggers: [buildId],
   });
+  vpnServerImageTag = pulumi.output(vpnServerImageTagValue);
 
   // Observability (AMP/Grafana)
   const obs = new Observability("observability");
@@ -326,8 +328,13 @@ if (stack.startsWith("global")) {
   const globalStack = new pulumi.StackReference(globalStackName);
 
   const envTag = `${env}-latest`;
-  const imageTag =
-    (regionConfig.get("imageTag") as string | undefined) ?? envTag;
+  const globalImageTag = globalStack.getOutput("vpnServerImageTag");
+  const imageTag = pulumi
+    .output(globalImageTag)
+    .apply(
+      (gt) =>
+        regionConfig.get("imageTag") ?? (gt as string | undefined) ?? envTag
+    );
   const minInstances = regionConfig.getNumber("minInstances") ?? 1;
   const maxInstances = regionConfig.getNumber("maxInstances") ?? 10;
   const desiredInstances = regionConfig.getNumber("desiredInstances");
@@ -372,6 +379,7 @@ export const outputs = {
   ...(lambdaCodeBucket && { lambdaCodeBucket }),
   ...(controlPlaneDomainTarget && { controlPlaneDomainTarget }),
   ...(metricsDomainTarget && { metricsDomainTarget }),
+  ...(vpnServerImageTag && { vpnServerImageTag }),
 };
 
 // Re-export individually for backward compatibility
@@ -385,4 +393,5 @@ export {
   lambdaCodeBucket,
   controlPlaneDomainTarget,
   metricsDomainTarget,
+  vpnServerImageTag,
 };

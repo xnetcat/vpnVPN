@@ -1,6 +1,7 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import * as awsx from "@pulumi/awsx";
+import * as command from "@pulumi/command";
 
 export interface VpnAsgArgs {
   region: pulumi.Input<string>;
@@ -359,6 +360,16 @@ runcmd:
         ],
       },
       { parent: this }
+    );
+
+    // Roll instances when the launch template (image) changes
+    new command.local.Command(
+      `${name}-instance-refresh`,
+      {
+        create: pulumi.interpolate`aws autoscaling start-instance-refresh --auto-scaling-group-name ${asg.name} --strategy Rolling --preferences '{"MinHealthyPercentage":90,"InstanceWarmup":120,"SkipMatching":true}'`,
+        triggers: [lt.latestVersion],
+      },
+      { parent: this, dependsOn: [lt, asg] }
     );
 
     // Simple CPU target-tracking autoscaling
