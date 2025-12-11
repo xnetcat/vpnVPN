@@ -9,7 +9,12 @@ import {
 } from "lucide-react";
 
 import type { ViewState, AppView, SettingsTab } from "./lib/types";
-import { IS_PRODUCTION, API_BASE_URL } from "./lib/config";
+import {
+  IS_PRODUCTION,
+  API_BASE_URL,
+  OVPN_CA_BUNDLE,
+  OVPN_PEER_FINGERPRINT,
+} from "./lib/config";
 import {
   applyVpnConfig,
   disconnectVpn,
@@ -486,6 +491,16 @@ export default function App() {
       );
       return;
     }
+    if (protocol === "openvpn") {
+      const hasCa = !!OVPN_CA_BUNDLE;
+      const hasFp = !!OVPN_PEER_FINGERPRINT;
+      if (!hasCa && !hasFp) {
+        showError(
+          "OpenVPN not configured: missing CA bundle or peer fingerprint. Configure VITE_OVPN_CA_BUNDLE or VITE_OVPN_PEER_FINGERPRINT, or use WireGuard.",
+        );
+        return;
+      }
+    }
 
     setStatus("connecting");
     setConfig(null);
@@ -656,13 +671,15 @@ export default function App() {
       } catch (e) {
         logError("Failed to apply VPN config via Tauri", e);
         const parsed = parseConnectError(e);
-        const logSnippet = parsed.logs
-          ? parsed.logs.slice(-8).join("\n")
-          : null;
         const formattedMessage = `${parsed.code ? `[${parsed.code}] ` : ""}${parsed.message}`;
-        const finalMessage = logSnippet
-          ? `${formattedMessage}\n${logSnippet}`
+        const firstLogLine =
+          parsed.logs?.find((line) => line.trim().length > 0) ?? null;
+        let finalMessage = firstLogLine
+          ? `${formattedMessage}\n${firstLogLine}`
           : formattedMessage;
+        if (finalMessage.length > 400) {
+          finalMessage = `${finalMessage.slice(0, 400)}…`;
+        }
         setConnectError(finalMessage);
         showError(finalMessage);
         // Config was generated but not applied - stay disconnected
@@ -1006,6 +1023,18 @@ function parseConnectError(err: unknown): {
       : (err as any)?.message
         ? String((err as any).message)
         : String(err);
+
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes("options error") &&
+    lower.includes("must define ca file")
+  ) {
+    return {
+      code: "openvpn_missing_ca",
+      message:
+        "OpenVPN server verification is not configured (missing CA or peer fingerprint). Configure VITE_OVPN_CA_BUNDLE or VITE_OVPN_PEER_FINGERPRINT.",
+    };
+  }
 
   try {
     const parsed = JSON.parse(raw);

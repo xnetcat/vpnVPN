@@ -74,7 +74,14 @@ export function buildOpenVpnConfig(params: {
       ? params.portOverride
       : Number(OVPN_PORT) || 1194;
 
-  return [
+  const caBundle =
+    import.meta.env.VITE_OVPN_CA_BUNDLE?.trim() ??
+    import.meta.env.VITE_OVPN_CA?.trim() ??
+    "";
+  const peerFingerprint =
+    import.meta.env.VITE_OVPN_PEER_FINGERPRINT?.trim() ?? "";
+
+  const lines = [
     "client",
     "dev tun",
     "proto udp",
@@ -84,13 +91,28 @@ export function buildOpenVpnConfig(params: {
     "persist-key",
     "persist-tun",
     "remote-cert-tls server",
+    peerFingerprint
+      ? `peer-fingerprint ${peerFingerprint}`
+      : "# peer-fingerprint <hex>",
     "cipher AES-256-GCM",
     "auth SHA256",
     "verb 3",
     `# Assigned IP hint: ${params.assignedIp}`,
     `# Server: ${params.serverName}`,
     "",
-  ].join("\n");
+  ];
+
+  if (caBundle) {
+    lines.push("<ca>");
+    lines.push(caBundle);
+    lines.push("</ca>");
+  } else {
+    lines.push(
+      "# CA bundle not configured - provide VITE_OVPN_CA_BUNDLE or VITE_OVPN_PEER_FINGERPRINT"
+    );
+  }
+
+  return lines.join("\n");
 }
 
 export function buildIkev2Config(params: { serverName: string }) {

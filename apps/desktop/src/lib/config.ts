@@ -16,12 +16,15 @@ console.log("[config]   API_BASE_URL:", API_BASE_URL);
 console.log("[config]   WG_ENDPOINT:", WG_ENDPOINT || "(empty)");
 console.log(
   "[config]   WG_SERVER_PUBLIC_KEY:",
-  WG_SERVER_PUBLIC_KEY ? "(set)" : "(empty)",
+  WG_SERVER_PUBLIC_KEY ? "(set)" : "(empty)"
 );
 
 // OpenVPN configuration
 export const OVPN_REMOTE = import.meta.env.VITE_OVPN_REMOTE ?? "<vpn-hostname>";
 export const OVPN_PORT = import.meta.env.VITE_OVPN_PORT ?? "1194";
+export const OVPN_CA_BUNDLE = import.meta.env.VITE_OVPN_CA_BUNDLE?.trim() ?? "";
+export const OVPN_PEER_FINGERPRINT =
+  import.meta.env.VITE_OVPN_PEER_FINGERPRINT?.trim() ?? "";
 
 // IKEv2 configuration
 export const IKEV2_REMOTE =
