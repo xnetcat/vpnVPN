@@ -935,7 +935,7 @@ fn disconnect_vpn(_protocol: Option<String>) -> Result<(), String> {
 // Backwards-compatible wrappers used by older frontends.
 #[tauri::command]
 fn apply_wireguard_config(config: String) -> Result<(), String> {
-    apply_vpn_config("wireguard".into(), config)
+    apply_vpn_config("wireguard".into(), config, None)
 }
 
 #[tauri::command]
