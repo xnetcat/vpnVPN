@@ -1,8 +1,19 @@
 # vpnVPN Desktop (Tauri)
 
-Native multi‑platform desktop client for vpnVPN. The UI is rendered directly in
-Tauri (no embedded `/desktop` webview) and talks to the Next.js API routes for
-auth, billing, device registration, and VPN credentials.
+Native multi‑platform desktop client for vpnVPN. Uses a Tauri GUI with a
+privileged Rust daemon for VPN management. Supports WireGuard, OpenVPN, and IKEv2.
+
+## Architecture
+
+The app uses a split architecture for security:
+
+- **Tauri GUI** (unprivileged): React + Vite frontend, handles UI and API calls
+- **Daemon** (privileged): Rust binary managing VPN backends via IPC (Unix socket)
+
+The daemon runs with root/admin privileges to manage network interfaces, while
+the GUI runs unprivileged. Communication happens via JSON-RPC over Unix sockets.
+
+See [DEVELOPMENT.md](./DEVELOPMENT.md) for detailed daemon development docs.
 
 ## Running locally
 
@@ -15,12 +26,19 @@ auth, billing, device registration, and VPN credentials.
    cd apps/web && bun run dev   # serves http://localhost:3000
    ```
 
-2. Start the desktop app:
+2. Start the daemon (requires sudo):
+
+   ```bash
+   cd apps/desktop
+   sudo bun run dev:daemon
+   ```
+
+3. Start the desktop app:
 
    ```bash
    cd apps/desktop
    export VITE_API_BASE_URL="http://localhost:3000"
-   export VITE_DASHBOARD_URL="http://localhost:3000/dashboard" # optional, used when opening the browser
+   export VITE_DASHBOARD_URL="http://localhost:3000/dashboard"
    bun install
    bun run dev
    ```

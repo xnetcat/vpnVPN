@@ -116,9 +116,13 @@ These tasks require external service configuration (follow guides in `docs/PRODU
 | `/server/register`       | POST   | Bearer token | 20/min     | VPN node registration    |
 | `/server/peers`          | GET    | Bearer token | 100/min    | Fetch peers for a server |
 | `/servers`               | GET    | API key      | 100/min    | List all servers         |
+| `/servers/:id`           | DELETE | API key      | 30/min     | Delete a server          |
 | `/peers`                 | POST   | API key      | 30/min     | Create/update peer       |
 | `/peers/revoke-for-user` | POST   | API key      | 30/min     | Revoke user's peers      |
 | `/peers/:publicKey`      | DELETE | API key      | 30/min     | Revoke specific peer     |
+| `/tokens`                | GET    | API key      | 100/min    | List all tokens          |
+| `/tokens`                | POST   | API key      | 30/min     | Create new token         |
+| `/tokens/:token`         | DELETE | API key      | 30/min     | Revoke a token           |
 
 #### Metrics (`services/metrics`)
 

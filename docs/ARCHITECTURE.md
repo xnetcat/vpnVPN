@@ -16,12 +16,34 @@ Next.js 15 SaaS frontend hosted on Vercel.
 
 ### `apps/desktop`
 
-Tauri desktop client for configuring and connecting to the VPN.
+Tauri desktop client with a privileged Rust daemon for VPN management.
 
-- React + Vite frontend bundled into native app
-- Embeds web app via iframe for authenticated experience
+**Architecture:**
+
+```
+┌─────────────────┐   IPC (JSON-RPC)   ┌──────────────────┐
+│   Tauri GUI     │ ◄───────────────► │  Daemon (Rust)   │
+│ (unprivileged)  │   Unix Socket      │  (privileged)    │
+└─────────────────┘                    └──────────────────┘
+        │                                      │
+        │ React + Vite                         │ VPN Backends
+        ▼                                      ▼
+┌─────────────────┐                    ┌──────────────────┐
+│   Web UI        │                    │ wg-quick/openvpn │
+│                 │                    │ strongSwan/IKEv2 │
+└─────────────────┘                    └──────────────────┘
+```
+
+**Key Features:**
+
+- React + Vite frontend bundled into Tauri native app
+- Privileged daemon handles VPN operations (requires root/admin)
+- IPC via Unix socket (`/var/run/vpnvpn-daemon.sock` production, `/tmp/vpnvpn-daemon.sock` dev)
 - Deep link support for `vpnvpn://` protocol
+- Supports WireGuard, OpenVPN, and IKEv2 protocols
 - Built for macOS, Linux, and Windows
+
+See `apps/desktop/DEVELOPMENT.md` for daemon development details.
 
 ### `apps/vpn-server`
 
@@ -47,14 +69,18 @@ Bun + Fastify HTTP API backed by Postgres via `@vpnvpn/db`.
 
 **Endpoints:**
 
-| Endpoint | Description |
-| -------- | ----------- |
-| `POST /server/register` | VPN node self-registration (bearer token auth) |
-| `GET /server/peers` | Fetch peers assigned to a server (bearer token auth) |
-| `GET /servers` | List all servers with metrics (API key auth) |
-| `POST /peers` | Create/update a user peer (API key auth) |
-| `POST /peers/revoke-for-user` | Revoke all peers for a user (API key auth) |
-| `DELETE /peers/:publicKey` | Revoke a specific peer (API key auth) |
+| Endpoint                      | Description                                          |
+| ----------------------------- | ---------------------------------------------------- |
+| `POST /server/register`       | VPN node self-registration (bearer token auth)       |
+| `GET /server/peers`           | Fetch peers assigned to a server (bearer token auth) |
+| `GET /servers`                | List all servers with metrics (API key auth)         |
+| `DELETE /servers/:id`         | Delete a VPN server (API key auth)                   |
+| `POST /peers`                 | Create/update a user peer (API key auth)             |
+| `POST /peers/revoke-for-user` | Revoke all peers for a user (API key auth)           |
+| `DELETE /peers/:publicKey`    | Revoke a specific peer (API key auth)                |
+| `GET /tokens`                 | List all VPN node tokens (API key auth)              |
+| `POST /tokens`                | Create a new token (API key auth)                    |
+| `DELETE /tokens/:token`       | Revoke a token (API key auth)                        |
 
 **Security:** Bearer tokens for VPN nodes, `x-api-key` header for web app calls.
 
@@ -109,7 +135,7 @@ Deployed to Vercel with environment variables configured in the Vercel dashboard
 
 Deployed as AWS Lambda functions with API Gateway:
 
-- Bundled with Bun for minimal package size
+- Docker images built and pushed to ECR
 - Uses Fastify's `inject()` method for Lambda compatibility
 - Same code runs locally as standalone servers
 
@@ -123,14 +149,17 @@ Can also be deployed as containers:
 
 ### VPN Server
 
-Deployed via Pulumi to AWS:
+Deployed via Pulumi to AWS using `VpnStaticPool`:
 
 - ECR repository for Docker images
-- EC2 Auto Scaling Group behind Network Load Balancer
-- Security groups for VPN protocols (WireGuard, OpenVPN, IKEv2)
-- Target-tracking autoscaling based on ActiveSessions metric
+- EC2 instances with Elastic IPs (stable public addresses)
+- Security groups for VPN protocols:
+  - WireGuard (UDP 51820)
+  - OpenVPN (UDP 1194)
+  - IKEv2/IPsec (UDP 500, 4500)
+- User data script configures NAT/masquerading for VPN client internet access
 
-Pulumi reads `controlPlaneApiUrl` from config to connect VPN nodes to the control plane.
+Pulumi reads `controlPlaneApiUrl` from global stack to connect VPN nodes to the control plane.
 
 ### Desktop App
 
