@@ -26,6 +26,8 @@ const addPeerSchema = z.object({
   serverId: z.string().optional(),
   country: z.string().optional(),
   region: z.string().optional(),
+  username: z.string().optional(),
+  password: z.string().optional(),
 });
 
 const revokeForUserSchema = z.object({
@@ -232,6 +234,8 @@ export async function buildServer(): Promise<FastifyInstance> {
           preshared_key: null as string | null,
           allowed_ips: p.allowedIps,
           endpoint: null as string | null,
+          username: p.username,
+          password: p.password,
         })),
       };
 
@@ -373,6 +377,8 @@ export async function buildServer(): Promise<FastifyInstance> {
           serverId: body.serverId,
           country: body.country,
           region: body.region,
+          username: body.username,
+          password: body.password,
           active: true,
         },
       });

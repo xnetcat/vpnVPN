@@ -110,6 +110,10 @@ pub struct VpnConfig {
     pub ikev2_identity: Option<String>,
     pub ikev2_remote_id: Option<String>,
 
+    // Generic credentials (OpenVPN/IKEv2)
+    pub username: Option<String>,
+    pub password: Option<String>,
+
     // DNS settings
     pub dns_servers: Vec<String>,
 }
@@ -130,6 +134,8 @@ impl Default for VpnConfig {
             ovpn_config: None,
             ikev2_identity: None,
             ikev2_remote_id: None,
+            username: None,
+            password: None,
             dns_servers: vec!["1.1.1.1".to_string(), "1.0.0.1".to_string()],
         }
     }

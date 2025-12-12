@@ -55,6 +55,8 @@ pub struct PeerSpec {
     pub preshared_key: Option<String>,
     pub allowed_ips: Vec<String>,
     pub endpoint: Option<String>,
+    pub username: Option<String>,
+    pub password: Option<String>,
 }
 
 pub struct VpnNode {

@@ -594,15 +594,26 @@ fn disconnect_ikev2() -> Result<(), String> {
     Ok(())
 }
 
+/// Credentials for VPN authentication.
+#[derive(Deserialize)]
+struct VpnCredentials {
+    username: String,
+    password: String,
+}
+
 /// Apply VPN configuration - requires daemon to be running.
 /// The daemon handles all VPN operations for security and kill-switch support.
 #[tauri::command]
-fn apply_vpn_config(protocol: String, config: String) -> Result<(), String> {
+fn apply_vpn_config(
+    protocol: String, 
+    config: String, 
+    credentials: Option<VpnCredentials>
+) -> Result<(), String> {
     eprintln!("[apply_vpn_config] Called with protocol: {}", protocol);
     eprintln!("[apply_vpn_config] Config:\n{}", config);
 
     // Parse the config string to extract VPN parameters
-    let vpn_config = parse_vpn_config(&protocol, &config)?;
+    let vpn_config = parse_vpn_config(&protocol, &config, credentials)?;
 
     eprintln!(
         "[apply_vpn_config] Parsed config: endpoint={}:{}",
@@ -639,9 +650,13 @@ fn collect_daemon_log_tail(limit: usize) -> Option<Vec<String>> {
 }
 
 /// Parse VPN config string into daemon VpnConfig struct.
-fn parse_vpn_config(protocol: &str, config: &str) -> Result<daemon_client::VpnConfig, String> {
+fn parse_vpn_config(
+    protocol: &str, 
+    config: &str, 
+    credentials: Option<VpnCredentials>
+) -> Result<daemon_client::VpnConfig, String> {
     match protocol {
-        "wireguard" => parse_wireguard_config(config),
+        "wireguard" => parse_wireguard_config(config, credentials),
         "openvpn" => Ok(daemon_client::VpnConfig {
             protocol: "openvpn".to_string(),
             server_id: String::new(),
@@ -656,15 +671,20 @@ fn parse_vpn_config(protocol: &str, config: &str) -> Result<daemon_client::VpnCo
             ovpn_config: Some(config.to_string()),
             ikev2_identity: None,
             ikev2_remote_id: None,
+            username: credentials.as_ref().map(|c| c.username.clone()),
+            password: credentials.as_ref().map(|c| c.password.clone()),
             dns_servers: vec!["1.1.1.1".to_string()],
         }),
-        "ikev2" => parse_ikev2_config(config),
+        "ikev2" => parse_ikev2_config(config, credentials),
         other => Err(format!("unsupported protocol: {other}")),
     }
 }
 
 /// Parse WireGuard config into VpnConfig.
-fn parse_wireguard_config(config: &str) -> Result<daemon_client::VpnConfig, String> {
+fn parse_wireguard_config(
+    config: &str, 
+    credentials: Option<VpnCredentials>
+) -> Result<daemon_client::VpnConfig, String> {
     let mut private_key = None;
     let mut address = None;
     let mut dns = vec![];
@@ -733,6 +753,8 @@ fn parse_wireguard_config(config: &str) -> Result<daemon_client::VpnConfig, Stri
         ovpn_config: None,
         ikev2_identity: None,
         ikev2_remote_id: None,
+        username: credentials.as_ref().map(|c| c.username.clone()),
+        password: credentials.as_ref().map(|c| c.password.clone()),
         dns_servers: if dns.is_empty() {
             vec!["1.1.1.1".to_string()]
         } else {
@@ -742,7 +764,10 @@ fn parse_wireguard_config(config: &str) -> Result<daemon_client::VpnConfig, Stri
 }
 
 /// Parse IKEv2 config into VpnConfig.
-fn parse_ikev2_config(config: &str) -> Result<daemon_client::VpnConfig, String> {
+fn parse_ikev2_config(
+    config: &str, 
+    credentials: Option<VpnCredentials>
+) -> Result<daemon_client::VpnConfig, String> {
     // IKEv2 config is typically just server info
     // Format: server=endpoint;identity=...;remote_id=...
     let mut server_endpoint = String::new();
@@ -775,6 +800,8 @@ fn parse_ikev2_config(config: &str) -> Result<daemon_client::VpnConfig, String> 
         ovpn_config: None,
         ikev2_identity: identity,
         ikev2_remote_id: remote_id,
+        username: credentials.as_ref().map(|c| c.username.clone()),
+        password: credentials.as_ref().map(|c| c.password.clone()),
         dns_servers: vec!["1.1.1.1".to_string()],
     })
 }

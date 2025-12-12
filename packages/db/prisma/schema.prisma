@@ -158,6 +158,8 @@ model VpnPeer {
   country    String?
   region     String?
   active     Boolean   @default(true)
+  username   String?   @unique
+  password   String?
   createdAt  DateTime  @default(now())
   revokedAt  DateTime?
 

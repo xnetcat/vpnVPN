@@ -7,6 +7,8 @@ type AddPeerPayload = {
   serverId?: string;
   country?: string;
   region?: string;
+  username?: string;
+  password?: string;
 };
 
 import { WEB_ENV } from "@/env";

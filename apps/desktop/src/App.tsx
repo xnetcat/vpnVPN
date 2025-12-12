@@ -515,7 +515,7 @@ export default function App() {
 
       setConfig(cfg);
       try {
-        await applyVpnConfig(protocol, cfg);
+        await applyVpnConfig(protocol, cfg, result.vpnCredentials);
 
         // For IKEv2, we can't verify connection status - it opens the config file
         // for manual import into System Settings

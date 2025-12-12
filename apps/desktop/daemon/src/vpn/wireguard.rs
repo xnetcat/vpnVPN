@@ -100,7 +100,7 @@ pub async fn connect(config: &VpnConfig) -> Result<ConnectionStatus> {
     // Verify connection - retry a few times as peer sync may be delayed
     let mut status = check_status().await?;
     let mut retries = 0;
-    const MAX_RETRIES: u32 = 3;
+    const MAX_RETRIES: u32 = 6;
 
     while status.state != ConnectionState::Connected && retries < MAX_RETRIES {
         retries += 1;

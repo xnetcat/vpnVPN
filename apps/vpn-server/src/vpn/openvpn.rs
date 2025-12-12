@@ -8,6 +8,8 @@ use tracing::info;
 const OVPN_DIR: &str = "/etc/openvpn";
 const OVPN_CONF: &str = "/etc/openvpn/server.conf";
 const OVPN_STATUS: &str = "/var/run/openvpn-status.log";
+const OVPN_AUTH_SCRIPT: &str = "/etc/openvpn/verify.sh";
+const OVPN_SECRETS: &str = "/etc/openvpn/secrets.txt";
 const OVPN_MGMT_PORT: u16 = 7505;
 
 pub struct OpenVpnBackend {
@@ -41,23 +43,55 @@ impl OpenVpnBackend {
             }
         }
 
-        if !Path::new(OVPN_CONF).exists() {
-            let conf = format!(
-                "port {port}\nproto udp\ndev tun1\nuser root\ngroup root\n\
+            if !status.success() {
+                return Err(anyhow!("openssl self-signed cert failed"));
+            }
+        }
+
+        // Always overwrite config to ensure updates to auth script path
+        let conf = format!(
+            "port {port}\nproto udp\ndev tun1\nuser root\ngroup root\n\
 persist-key\npersist-tun\n\
 topology subnet\nserver 10.9.0.0 255.255.255.0\n\
 keepalive 10 60\n\
 dh none\n\
 tls-server\nca {ov}/server.crt\ncert {ov}/server.crt\nkey {ov}/server.key\n\
+verify-client-cert none\n\
+username-as-common-name\n\
+script-security 2\n\
+auth-user-pass-verify {auth_script} via-env\n\
 status {status_path} 5\nstatus-version 3\n\
 management 127.0.0.1 {mgmt}\nverb 3\n",
-                port = self.listen_port,
-                ov = OVPN_DIR,
-                status_path = OVPN_STATUS,
-                mgmt = OVPN_MGMT_PORT,
-            );
-            fs::write(OVPN_CONF, conf).context("write openvpn server.conf")?;
+            port = self.listen_port,
+            ov = OVPN_DIR,
+            auth_script = OVPN_AUTH_SCRIPT,
+            status_path = OVPN_STATUS,
+            mgmt = OVPN_MGMT_PORT,
+        );
+        fs::write(OVPN_CONF, conf).context("write openvpn server.conf")?;
+        
+        Ok(())
+    }
+
+    fn ensure_auth_script(&self) -> Result<()> {
+        let script = r#"#!/bin/sh
+[ ! -f /etc/openvpn/secrets.txt ] && exit 1
+# Expect alphanumeric username/password (safe for grep)
+grep -F -x "$username $password" /etc/openvpn/secrets.txt >/dev/null
+exit $?
+"#;
+        fs::write(OVPN_AUTH_SCRIPT, script).context("write verify.sh")?;
+        
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(OVPN_AUTH_SCRIPT)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(OVPN_AUTH_SCRIPT, perms)?;
+        
+        // Ensure secrets file exists (empty initially)
+        if !Path::new(OVPN_SECRETS).exists() {
+            fs::write(OVPN_SECRETS, "").context("create empty secrets.txt")?;
         }
+        
         Ok(())
     }
 
@@ -94,6 +128,7 @@ impl VpnBackend for OpenVpnBackend {
     }
 
     fn start(&self) -> Result<()> {
+        self.ensure_auth_script()?;
         self.ensure_certs_and_conf()?;
         // Run as daemonized process
         let status = Command::new("openvpn")
@@ -115,5 +150,19 @@ impl VpnBackend for OpenVpnBackend {
 
     fn status(&self) -> Result<BackendStatus> {
         Ok(Self::parse_status())
+    }
+
+    fn apply_peers(&self, peers: &[super::PeerSpec]) -> Result<()> {
+        let mut content = String::new();
+        for p in peers {
+            if let (Some(u), Some(pw)) = (&p.username, &p.password) {
+                content.push_str(&format!("{} {}\n", u, pw));
+            }
+        }
+        
+        // Write atomically if possible, but straight write is fine for now
+        fs::write(OVPN_SECRETS, content).context("write secrets.txt")?;
+        info!(peer_count = peers.len(), "updated_openvpn_secrets");
+        Ok(())
     }
 }

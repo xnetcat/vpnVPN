@@ -320,6 +320,9 @@ pub struct VpnConfig {
     // IKEv2-specific
     pub ikev2_identity: Option<String>,
     pub ikev2_remote_id: Option<String>,
+    // Auth
+    pub username: Option<String>,
+    pub password: Option<String>,
     // DNS
     pub dns_servers: Vec<String>,
 }

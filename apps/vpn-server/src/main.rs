@@ -468,7 +468,7 @@ async fn run_server(
     tokio::spawn(async move {
         loop {
             // Initial delay and interval
-            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
             match sync_client.fetch_peers().await {
                 Ok(peers) => {

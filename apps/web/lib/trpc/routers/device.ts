@@ -43,7 +43,7 @@ async function generateWireGuardKeyPair(): Promise<{
     // Fallback to NaCl if wg command is not available (e.g., in Docker)
     console.warn(
       "[device] wg genkey not available, falling back to NaCl key generation",
-      error,
+      error
     );
     const keyPair = nacl.box.keyPair();
     const publicKey = Buffer.from(keyPair.publicKey).toString("base64");
@@ -134,6 +134,7 @@ function buildOpenVpnConfig(params: {
       ? `peer-fingerprint ${peerFingerprint}`
       : "# peer-fingerprint <hex>",
     "cipher AES-256-GCM",
+    "auth-user-pass vpnvpn-auth.txt",
     "auth SHA256",
     "verb 3",
     `# Assigned IP hint: ${assignedIp}`,
@@ -199,7 +200,7 @@ export const deviceRouter = router({
         // Optional: if provided, use client-generated public key (more secure)
         // If not provided, generate keys server-side (for web clients)
         publicKey: z.string().optional(),
-      }),
+      })
     )
     .mutation(async ({ ctx, input }) => {
       const { name, serverId, machineId } = input;
@@ -246,7 +247,7 @@ export const deviceRouter = router({
           {
             deviceId: existingDevice.id,
             machineId,
-          },
+          }
         );
 
         // Revoke old peer and generate new keys
@@ -288,7 +289,7 @@ export const deviceRouter = router({
               err,
               userId: ctx.userId,
               deviceId: device.id,
-            },
+            }
           );
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
@@ -373,6 +374,10 @@ export const deviceRouter = router({
 
       const assignedIp = allocateDeviceIp(ctx.userId, device.id);
 
+      // Generate OpenVPN/IKEv2 credentials
+      const vpnUsername = device.id;
+      const vpnPassword = require("crypto").randomBytes(16).toString("hex");
+
       // Register with control plane. We first revoke any existing peers for
       // this user so that only a single active VPN configuration is valid at
       // any given time.
@@ -384,6 +389,9 @@ export const deviceRouter = router({
           allowedIps: [assignedIp],
           // Pass through server affinity so the control plane can record it.
           serverId,
+          // Capture the generated credentials for the control plane to verify
+          username: vpnUsername,
+          password: vpnPassword,
         });
       } catch (err) {
         // Clean up the device if control plane registration fails
@@ -423,6 +431,10 @@ export const deviceRouter = router({
         wireguardConfig,
         openvpnConfig,
         ikev2Config,
+        vpnCredentials: {
+          username: vpnUsername,
+          password: vpnPassword,
+        },
       };
     }),
 

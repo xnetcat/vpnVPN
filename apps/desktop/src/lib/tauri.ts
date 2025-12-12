@@ -49,8 +49,9 @@ export const logError = (...args: unknown[]) => {
 export async function applyVpnConfig(
   protocol: Protocol,
   config: string,
+  credentials?: { username: string; password: string }
 ): Promise<void> {
-  await invoke("apply_vpn_config", { protocol, config });
+  await invoke("apply_vpn_config", { protocol, config, credentials });
 }
 
 export async function disconnectVpn(protocol: Protocol): Promise<void> {
@@ -151,7 +152,7 @@ export async function refreshVpnTools(): Promise<VpnToolsStatus | null> {
 
 // Update VPN binary paths in daemon and return refreshed tools status
 export async function updateVpnBinaryPaths(
-  paths: VpnBinaryPaths,
+  paths: VpnBinaryPaths
 ): Promise<VpnToolsStatus | null> {
   try {
     log("Updating VPN binary paths:", paths);
@@ -163,7 +164,7 @@ export async function updateVpnBinaryPaths(
         wireguardCliPath: paths.wireguard_cli_path ?? null,
         openvpnPath: paths.openvpn_path ?? null,
         ikev2Path: paths.ikev2_path ?? null,
-      },
+      }
     );
 
     if (legacy) {
@@ -306,7 +307,7 @@ export async function getDaemonLogs(): Promise<string> {
 
 // Tail daemon logs (cursor-based)
 export async function tailDaemonLogs(
-  cursor?: number,
+  cursor?: number
 ): Promise<DaemonLogChunk | null> {
   try {
     return await invoke<DaemonLogChunk>("tail_daemon_logs", { cursor });
@@ -358,7 +359,7 @@ export async function getOnboardingState(): Promise<OnboardingState | null> {
 
 // Save onboarding state
 export async function saveOnboardingState(
-  state: OnboardingState,
+  state: OnboardingState
 ): Promise<void> {
   await invoke("save_onboarding_state", { state });
 }
