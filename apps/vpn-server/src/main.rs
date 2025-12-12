@@ -430,7 +430,9 @@ async fn run_server(
             &pki_artifacts.server_pem,
             &pki_artifacts.server_fingerprint,
         ) {
-            std::env::set_var("VPN_IKEV2_REMOTE", &meta.remote);
+            if std::env::var("VPN_IKEV2_REMOTE").is_err() {
+                std::env::set_var("VPN_IKEV2_REMOTE", &meta.remote);
+            }
             std::env::set_var("VPN_IKEV2_FINGERPRINT", &meta.server_fingerprint);
             std::env::set_var("VPN_IKEV2_CA_BUNDLE", &meta.ca_pem);
         }

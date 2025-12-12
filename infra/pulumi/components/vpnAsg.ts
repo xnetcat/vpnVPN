@@ -264,11 +264,13 @@ export class VpnAsg extends pulumi.ComponentResource {
     const accountId = aws.getCallerIdentityOutput().accountId;
     const regionName = aws.getRegionOutput().name;
 
-    // Amazon Linux 2023 AMI (has native WireGuard support)
+    // Amazon Linux 2 AMI (Kernel 5.10) - Using AL2 as AL2023 has OpenVPN/WireGuard quirks
     const ami = aws.ec2.getAmiOutput({
       owners: ["137112412989"],
       mostRecent: true,
-      filters: [{ name: "name", values: ["al2023-ami-2023.*-x86_64"] }],
+      filters: [
+        { name: "name", values: ["amzn2-ami-kernel-5.10-hvm-*-x86_64-gp2"] },
+      ],
     });
 
     const userData = pulumi.interpolate`#cloud-config
@@ -276,18 +278,68 @@ package_update: true
 runcmd:
   - |
     set -euxo pipefail
-    dnf install -y docker awscli
+    # AL2 Setup
+    yum update -y
+    amazon-linux-extras install -y docker
     systemctl enable docker
     systemctl start docker
+    usermod -a -G docker ec2-user
+    
+    # Install WireGuard tools (requires EPEL on AL2)
+    amazon-linux-extras install -y epel
+    curl -Lo /etc/yum.repos.d/wireguard.repo https://copr.fedorainfracloud.org/coprs/jdoss/wireguard/repo/epel-7/jdoss-wireguard-epel-7.repo
+    yum install -y wireguard-tools
+    
+    # AL2 might need kernel module path checks, but 5.10 has it built-in usually.
+    modprobe wireguard || echo "WireGuard module load failed"
+
+    # Install AWS CLI v2 (AL2 usually has v1)
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    unzip -q awscliv2.zip
+    ./aws/install
+    
+    # ECR Login
     aws ecr get-login-password --region ${regionName} | docker login --username AWS --password-stdin ${accountId}.dkr.ecr.${regionName}.amazonaws.com
+    
     INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
     ASG_NAME=$(aws autoscaling describe-auto-scaling-instances --instance-ids $INSTANCE_ID --query 'AutoScalingInstances[0].AutoScalingGroupName' --output text || echo "unknown")
-    # Install and load WireGuard kernel module (AL2023 has native support)
-    dnf install -y wireguard-tools
-    modprobe wireguard || echo "WireGuard module load failed, container will use userspace"
-    # Enable IP forwarding and NAT on host for VPN traffic
+
+    # Detect default interface
+    DEFAULT_IFACE=$(ip route | grep default | awk '{print $5}')
+    if [ -z "$DEFAULT_IFACE" ]; then
+      DEFAULT_IFACE="eth0"
+      echo "Warning: Could not detect default interface, falling back to eth0"
+    fi
+    echo "Detected default interface: $DEFAULT_IFACE"
+
+    # Enable IP forwarding
     sysctl -w net.ipv4.ip_forward=1
-    iptables -t nat -C POSTROUTING -o eth0 -j MASQUERADE || iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+    # Disable Reverse Path Filtering
+    sysctl -w net.ipv4.conf.all.rp_filter=0
+    sysctl -w net.ipv4.conf.default.rp_filter=0
+    
+    # Configure NAT/Masquerading
+    # Clear existing rules and set default policies
+    iptables -F
+    iptables -t nat -F
+    iptables -P FORWARD ACCEPT
+    iptables -P INPUT ACCEPT
+    iptables -P OUTPUT ACCEPT
+
+    # Add MASQUERADE rule for the default interface
+    iptables -t nat -A POSTROUTING -o $DEFAULT_IFACE -j MASQUERADE
+    
+    # Aggressively Insert Allow Rules at the TOP of chains
+    # Allow traffic from VPN interfaces into the system
+    iptables -I INPUT 1 -i wg0 -j ACCEPT
+    iptables -I INPUT 1 -i tun0 -j ACCEPT
+    
+    # Allow forwarding from VPN to WAN and back
+    iptables -I FORWARD 1 -i wg0 -j ACCEPT
+    iptables -I FORWARD 1 -i tun0 -j ACCEPT
+    iptables -I FORWARD 1 -o $DEFAULT_IFACE -j ACCEPT
+    iptables -I FORWARD 1 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    
     docker pull ${args.imageUri}
     mkdir -p /dev/net || true
     if [ ! -c /dev/net/tun ]; then
