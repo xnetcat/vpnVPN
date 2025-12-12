@@ -92,15 +92,26 @@
 
 ## Pending Tasks
 
-### Production Readiness
+### Testing & Validation
 
-These tasks require external service configuration (follow guides in `docs/PRODUCTION_SETUP.md`):
+- [ ] End-to-end production flow test (signup → payment → VPN connection)
 
-- [ ] Configure production Stripe webhooks
-- [ ] Set up production Resend sender domain
-- [ ] Create production VPN node tokens
-- [ ] End-to-end production flow test
-- [ ] SSL certificates for custom domains
+### Feature Development
+
+- [ ] Proxy support (SOCKS5/HTTP proxy servers)
+- [ ] VPN node deployment from admin dashboard (integrate existing `deploy.sh` script)
+
+---
+
+## Completed (Production)
+
+### Production Deployment
+
+- [x] Configure production Stripe webhooks
+- [x] Set up production Resend sender domain
+- [x] Create production VPN node tokens
+- [x] SSL certificates for custom domains
+- [x] Multi-region VPN deployment (10 production regions)
 
 ---
 
