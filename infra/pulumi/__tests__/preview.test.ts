@@ -24,12 +24,12 @@ describe("Pulumi Preview Validation", () => {
   it("should export required components", async () => {
     const { ControlPlane } = await import("../controlPlane");
     const { MetricsService } = await import("../metricsService");
-    const { VpnAsg } = await import("../components/vpnAsg");
+    const { VpnStaticPool } = await import("../components/vpnStaticPool");
     const { Observability } = await import("../observability");
 
     expect(ControlPlane).toBeDefined();
     expect(MetricsService).toBeDefined();
-    expect(VpnAsg).toBeDefined();
+    expect(VpnStaticPool).toBeDefined();
     expect(Observability).toBeDefined();
   });
 
@@ -64,21 +64,11 @@ describe("Stack Configuration Validation", () => {
   it("should define regional stack resources", () => {
     // Validate that regional stack configuration is correct
     const requiredRegionalResources = [
-      "VPC with public/private subnets",
+      "VPC with public subnets",
       "Security groups for VPN protocols",
-      "Network Load Balancer",
-      "EC2 Auto Scaling Group",
-      "Target groups for UDP/TCP",
+      "Fixed EC2 instances with Elastic IPs",
     ];
 
     expect(requiredRegionalResources.length).toBeGreaterThan(0);
   });
 });
-
-
-
-
-
-
-
-

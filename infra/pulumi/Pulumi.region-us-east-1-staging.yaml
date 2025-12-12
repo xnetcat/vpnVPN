@@ -4,8 +4,9 @@ config:
   aws:region: us-east-1
   global:ecrRepoName: vpnvpn/staging
   region:imageTag: staging-latest
+  region:instanceCount: "1"
+  region:instanceType: t3.small
+  region:adminCidr: 0.0.0.0/0
   region:desiredInstances: "1"
   region:minInstances: "1"
   region:maxInstances: "3"
-  region:instanceType: t3.small
-  region:adminCidr: 0.0.0.0/0

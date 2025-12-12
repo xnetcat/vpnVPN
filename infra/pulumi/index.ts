@@ -2,7 +2,7 @@ import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import * as awsx from "@pulumi/awsx";
 import * as command from "@pulumi/command";
-import { VpnAsg } from "./components/vpnAsg";
+import { VpnStaticPool } from "./components/vpnStaticPool";
 import { ControlPlane } from "./controlPlane";
 import { MetricsService } from "./metricsService";
 import { Observability } from "./observability";
@@ -18,7 +18,7 @@ let ecrUri: pulumi.Output<string> | undefined;
 let controlPlaneApiUrl: pulumi.Output<string> | undefined;
 let metricsApiUrl: pulumi.Output<string> | undefined;
 let ampWorkspaceId: pulumi.Output<string> | undefined;
-let nlbDnsName: pulumi.Output<string> | undefined;
+let instancePublicIps: pulumi.Output<string[]> | undefined;
 let desktopBucketUrl: pulumi.Output<string> | undefined;
 let lambdaCodeBucket: pulumi.Output<string> | undefined;
 let controlPlaneDomainTarget: pulumi.Output<string> | undefined;
@@ -335,12 +335,8 @@ if (stack.startsWith("global")) {
       (gt) =>
         regionConfig.get("imageTag") ?? (gt as string | undefined) ?? envTag
     );
-  const minInstances = regionConfig.getNumber("minInstances") ?? 1;
-  const maxInstances = regionConfig.getNumber("maxInstances") ?? 10;
-  const desiredInstances = regionConfig.getNumber("desiredInstances");
+  const instanceCount = regionConfig.getNumber("instanceCount") ?? 1;
   const adminCidr = regionConfig.get("adminCidr") ?? "0.0.0.0/0";
-  const targetSessionsPerInstance =
-    regionConfig.getNumber("targetSessionsPerInstance") ?? 100;
   const instanceType = regionConfig.get("instanceType") ?? "t3.medium";
   const vpnToken = regionConfig.requireSecret("vpnToken");
 
@@ -350,20 +346,17 @@ if (stack.startsWith("global")) {
   // Get global stack reference for API URL
   const apiUrl = globalStack.getOutput("controlPlaneApiUrl");
 
-  const pool = new VpnAsg("vpnvpn", {
+  const pool = new VpnStaticPool("vpnvpn", {
     region: regionName,
-    minInstances,
-    maxInstances,
-    desiredInstances,
+    instanceCount,
     imageUri: computedEcrUri,
     instanceType,
     adminCidr,
-    targetSessionsPerInstance,
     vpnToken,
     apiUrl: apiUrl as pulumi.Input<string>,
   });
 
-  nlbDnsName = pool.nlbDnsName;
+  instancePublicIps = pool.instancePublicIps;
 } else {
   throw new Error(`Unknown stack name: ${stack}`);
 }
@@ -374,7 +367,7 @@ export const outputs = {
   ...(controlPlaneApiUrl && { controlPlaneApiUrl }),
   ...(metricsApiUrl && { metricsApiUrl }),
   ...(ampWorkspaceId && { ampWorkspaceId }),
-  ...(nlbDnsName && { nlbDnsName }),
+  ...(instancePublicIps && { instancePublicIps }),
   ...(desktopBucketUrl && { desktopBucketUrl }),
   ...(lambdaCodeBucket && { lambdaCodeBucket }),
   ...(controlPlaneDomainTarget && { controlPlaneDomainTarget }),
@@ -388,7 +381,7 @@ export {
   controlPlaneApiUrl,
   metricsApiUrl,
   ampWorkspaceId,
-  nlbDnsName,
+  instancePublicIps,
   desktopBucketUrl,
   lambdaCodeBucket,
   controlPlaneDomainTarget,
