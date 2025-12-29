@@ -1,7 +1,7 @@
 ## Propozycja tematu pracy dyplomowej
 
 **Proponowany temat:**  
-**Projekt i implementacja platformy SaaS do zarządzania infrastrukturą VPN z zachowaniem wysokich standardów prywatności (na przykładzie systemu vpnVPN).**
+**Projekt i implementacja platformy do zarządzania usługą VPN z zachowaniem wysokich standardów prywatności (na przykładzie systemu vpnVPN).**
 
 ### Krótki opis planowanej pracy
 

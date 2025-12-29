@@ -1,6 +1,6 @@
 # Platforma SaaS do zarządzania infrastrukturą VPN
 
-## vpnVPN – Projekt i Implementacja
+## projekt – Projekt i Implementacja
 
 ---
 
@@ -8,19 +8,21 @@
 
 ## Temat pracy
 
-**Projekt i implementacja platformy SaaS do zarządzania infrastrukturą VPN z naciskiem na prywatność użytkowników**
+**Projekt i implementacja platformy SaaS do zarządzania infrastrukturą VPN**
 
 ### Cel pracy
 
 - Zaprojektowanie i realizacja kompletnego systemu VPN typu SaaS
-- Centralne zarządzanie flotą serwerów VPN
-- Ochrona prywatności użytkowników (brak logowania ruchu)
+- Centralne zarządzanie flotą serwerów VPN rozproszonych geograficznie
+- Ochrona prywatności użytkowników (brak logowania ruchu, minimalizacja metadanych)
+- Wsparcie wielu protokołów VPN (WireGuard, OpenVPN, IKEv2)
 
 ### Motywacja
 
-- Rosnące znaczenie prywatności w sieci
-- Popularność usług VPN i modeli subskrypcyjnych
-- Potrzeba rozwiązań typu „privacy-first"
+- Rosnące znaczenie prywatności w sieci (RODO, inwigilacja, blokady geograficzne)
+- Popularność usług VPN i modeli subskrypcyjnych (rynek VPN: $45 mld do 2027)
+- Potrzeba rozwiązań typu „privacy-first" z weryfikowalnym przepływem danych
+- Brak otwartych, kompletnych implementacji SaaS VPN
 
 ---
 
@@ -29,24 +31,26 @@
 ## 4 główne komponenty
 
 ```
-┌─────────────┐     ┌───────────────────┐     ┌─────────────────┐
-│   Frontend  │────▶│   Control Plane   │◀────│   VPN Server    │
-│  (Next.js)  │     │ (Lambda+Postgres) │     │     (Rust)      │
-└─────────────┘     └───────────────────┘     └─────────────────┘
-       ▲                                              ▲
-       │                                              │
-       ▼                                              │
-┌─────────────────────────────────────────────────────┘
-│   Desktop Client (Tauri + Daemon)
-└─────────────────────────────────────────────────────
+┌─────────────────┐     ┌───────────────────┐     ┌─────────────────┐
+│    Frontend     │────▶│   Control Plane   │◀────│   VPN Server    │
+│   (Next.js)     │     │ (Lambda+Postgres) │     │     (Rust)      │
+│   Vercel        │     │   AWS Serverless  │     │   EC2 + EIP     │
+└─────────────────┘     └───────────────────┘     └─────────────────┘
+        ▲                        ▲                        ▲
+        │ HTTPS                  │ HTTPS                  │ UDP/TCP
+        ▼                        │                        ▼
+┌─────────────────┐              │              ┌─────────────────┐
+│  Desktop Client │──────────────┘              │   Użytkownicy   │
+│  (Tauri+Daemon) │                             │   końcowi       │
+└─────────────────┘                             └─────────────────┘
 ```
 
-| Komponent          | Rola                                  |
-| ------------------ | ------------------------------------- |
-| **Frontend**       | Panel użytkownika i administratora    |
-| **Control Plane**  | API, zarządzanie stanem, autentykacja |
-| **VPN Server**     | Zestawianie tuneli VPN                |
-| **Desktop Client** | Aplikacja kliencka z daemonem         |
+| Komponent          | Technologia        | Rola                                       |
+| ------------------ | ------------------ | ------------------------------------------ |
+| **Frontend**       | Next.js 15, Vercel | Panel użytkownika, admin, płatności Stripe |
+| **Control Plane**  | Lambda, PostgreSQL | API REST, zarządzanie stanem, autentykacja |
+| **VPN Server**     | Rust, EC2          | Tunele VPN, synchronizacja peerów          |
+| **Desktop Client** | Tauri, Rust Daemon | Aplikacja kliencka, połączenia VPN         |
 
 ---
 
@@ -54,19 +58,22 @@
 
 ## Frontend (apps/web)
 
-- **Next.js 15** – App Router, SSR/ISR
-- **TypeScript** – typowanie statyczne
-- **Prisma + PostgreSQL** – ORM i baza danych
-- **NextAuth.js** – autoryzacja (GitHub/Google/email)
-- **Stripe** – subskrypcje i płatności
-- **Wdrożenie:** Vercel
+- **Next.js 15** – App Router, Server Components, SSR/ISR, SEO-friendly
+- **TypeScript** – typowanie statyczne, lepsza jakość kodu
+- **Prisma + PostgreSQL** – ORM z type-safe queries, migracje
+- **NextAuth.js** – autoryzacja OAuth (GitHub, Google) + magic link email
+- **Stripe** – subskrypcje, Checkout, Customer Portal, webhooki
+- **tRPC** – type-safe API między frontendem a backendem
+- **Wdrożenie:** Vercel (edge functions, CDN, automatyczne HTTPS)
 
 ## Control Plane (services/control-plane)
 
-- **Bun + Fastify** – szybki runtime i framework HTTP
-- **AWS Lambda** – serverless z obrazami Docker
-- **PostgreSQL/Neon** – managed baza danych
-- **Pulumi** – Infrastructure as Code (TypeScript)
+- **Bun** – szybszy runtime niż Node.js (3x startup, natywny TS)
+- **Fastify** – wydajny framework HTTP (~77k req/s)
+- **AWS Lambda** – serverless, płatność za użycie, auto-skalowanie
+- **Docker on Lambda** – obrazy ECR, pełna kontrola środowiska
+- **PostgreSQL/Neon** – managed serverless Postgres, branching
+- **Pulumi** – Infrastructure as Code w TypeScript
 
 ---
 
@@ -74,19 +81,21 @@
 
 ## VPN Server (apps/vpn-server)
 
-- **Rust** – bezpieczeństwo pamięci, wysoka wydajność
-- **WireGuard** – nowoczesny protokół VPN
-- **OpenVPN** – dojrzały protokół z szerokim wsparciem
-- **IKEv2/IPsec** – protokół enterprise
-- **Tokio + Axum** – asynchroniczne HTTP/API
-- **Wdrożenie:** EC2 z Elastic IP
+- **Rust** – bezpieczeństwo pamięci (brak null, brak data races), wydajność C/C++
+- **WireGuard** – nowoczesny protokół, ~4000 linii kodu, ChaCha20-Poly1305
+- **OpenVPN** – dojrzały protokół (20+ lat), TLS, szeroka kompatybilność
+- **IKEv2/IPsec** – natywne wsparcie w Windows/macOS/iOS/Android, MOBIKE
+- **Tokio** – asynchroniczny runtime (epoll/kqueue), zero-cost abstractions
+- **Axum** – framework HTTP zbudowany na Tower, middleware, routing
+- **Wdrożenie:** EC2 z Elastic IP (stałe adresy publiczne), 10 regionów
 
 ## Desktop Client (apps/desktop)
 
-- **Tauri** – lekki framework aplikacji desktopowych
-- **React + Vite** – szybki frontend
-- **Daemon Rust** – uprzywilejowany proces VPN
-- **IPC (Unix Socket)** – komunikacja GUI ↔ Daemon
+- **Tauri** – lekki (5MB vs 150MB Electron), natywny webview, Rust backend
+- **React + Vite** – szybki HMR, ESM, optymalizacja produkcyjna
+- **Daemon Rust** – uprzywilejowany proces z prawami root/admin
+- **IPC (Unix Socket/Named Pipe)** – komunikacja GUI ↔ Daemon, JSON-RPC
+- **Platformy:** macOS (x64/ARM), Linux (deb/rpm/AppImage), Windows (MSI/NSIS)
 
 ---
 
@@ -94,23 +103,25 @@
 
 ## ✅ Frontend (95%)
 
-- Pełny SaaS z rejestracją i autoryzacją
-- Integracja ze Stripe (subskrypcje, webhooki)
-- Panel użytkownika: urządzenia, konfiguracje VPN
-- Panel administratora: serwery, tokeny, użytkownicy
+- Pełny SaaS z rejestracją, logowaniem (OAuth + email magic link)
+- Integracja ze Stripe: 3 plany (Basic, Pro, Enterprise), webhooki, portal
+- Panel użytkownika: zarządzanie urządzeniami, generowanie konfiguracji VPN/QR
+- Panel administratora: zarządzanie serwerami, tokenami, użytkownikami
+- Dashboard z metrykami w czasie rzeczywistym (połączenia, transfer, regiony)
 
 ## ✅ Control Plane (100%)
 
-- Wszystkie endpointy API (`/server/register`, `/peers`, `/tokens`, ...)
-- Autentykacja (Bearer token + API key)
-- Wdrożenie na AWS Lambda
+- Kompletne API: `/server/register`, `/server/peers`, `/peers`, `/tokens`, `/servers`
+- Autentykacja: Bearer token dla węzłów VPN, API key dla web app
+- Rate limiting: per-IP i per-token, ochrona przed nadużyciami
+- Wdrożenie: AWS Lambda z Docker, API Gateway, auto-deploy via GitHub Actions
 
 ## ✅ VPN Server (90%)
 
-- Rejestracja i synchronizacja peerów
-- WireGuard, OpenVPN, IKEv2 backends
-- Metryki i admin API
-- Wdrożenie na EC2 w 10 regionach
+- Rejestracja w control plane, cykliczna synchronizacja peerów (30s)
+- Trzy backendy: WireGuard (wg-quick), OpenVPN (server mode), IKEv2 (strongSwan)
+- Admin API: `/health`, `/metrics`, `/status`, `/pubkey`
+- Metryki: aktywne sesje, transfer, czas działania (Prometheus format)
 
 ---
 
@@ -118,52 +129,54 @@
 
 ## ✅ Desktop Client (85%)
 
-- Architektura Tauri + Daemon
-- Obsługa WireGuard, OpenVPN, IKEv2
-- IPC przez Unix socket
-- Buildy na macOS, Linux, Windows
+- Architektura z separacją uprawnień: GUI (nieprzywil.) + Daemon (root)
+- Obsługa trzech protokołów VPN z automatycznym wyborem najlepszego serwera
+- IPC przez Unix socket (prod: /var/run/, dev: /tmp/)
+- Buildy automatyczne: macOS DMG, Linux deb/rpm/AppImage, Windows MSI
 
-## ✅ Infrastruktura (Pulumi)
+## ✅ Infrastruktura (Pulumi 100%)
 
-- Lambda z obrazami Docker (ECR)
-- API Gateway + PostgreSQL/Neon
-- EC2 z Elastic IP dla węzłów VPN
-- S3 dla buildów desktop
+- **Global stack:** Lambda (control-plane, metrics), ECR, S3, API Gateway
+- **Regional stacks:** EC2 z Elastic IP, VPC, Security Groups
+- 10 regionów AWS: us-east-1, us-west-2, eu-west-1, eu-central-1, ap-northeast-1...
+- Observability: Amazon Managed Prometheus, Grafana dashboards
 
-## ✅ Dokumentacja
+## ✅ CI/CD (GitHub Actions)
 
-- Architektura systemu
-- API Reference (wszystkie endpointy)
-- Przewodnik konfiguracji
-- DEVELOPMENT.md dla developera
+- Pipeline: lint → test → build → deploy (staging/production)
+- Rust: cross-compile do x86_64, push do ECR
+- Desktop: matrix build (macOS/Linux/Windows), upload do S3
+- Pulumi: preview na PR, deploy na merge do main
 
 ---
 
 # Slajd 7: Czego się nauczyłem
 
-## Technologie sieciowe
+## Technologie sieciowe i VPN
 
-- Protokoły VPN (WireGuard vs OpenVPN vs IKEv2)
-- Interfejsy TUN/TAP, routowanie, NAT
-- Konfiguracja iptables i masquerade
+- Protokoły VPN: WireGuard (Noise Protocol), OpenVPN (TLS), IKEv2 (Diffie-Hellman)
+- Warstwa sieciowa: interfejsy TUN/TAP, routowanie, NAT/masquerade
+- Konfiguracja systemu: iptables, sysctl (ip_forward, rp_filter)
+- Porty i protokoły: WireGuard UDP 51820, OpenVPN UDP 1194, IKEv2 UDP 500/4500
 
-## Architektura chmurowa
+## Architektura chmurowa (AWS)
 
-- AWS Lambda z Docker (ECR)
-- Infrastructure as Code (Pulumi)
-- Serverless patterns
+- Serverless: Lambda cold starts, Docker vs ZIP, API Gateway integracja
+- Infrastructure as Code: Pulumi (TypeScript), state management, dependencies
+- Networking: VPC, subnets, security groups, Elastic IP allocation
 
-## Programowanie systemowe
+## Programowanie systemowe (Rust)
 
-- Rust – bezpieczeństwo pamięci
-- IPC i komunikacja międzyprocesowa
-- Uprzywilejowane operacje sieciowe
+- Ownership i borrowing – eliminacja błędów pamięci w compile-time
+- Async/await z Tokio – wydajna obsługa tysięcy połączeń
+- IPC i komunikacja międzyprocesowa – Unix sockets, privileged operations
+- Cross-platform: conditional compilation (#[cfg]), platform-specific code
 
 ## Bezpieczeństwo i prywatność
 
-- Minimalizacja metadanych
-- Brak logowania ruchu użytkowników
-- Zarządzanie tokenami i sekretami
+- Brak logowania ruchu – tylko metryki zagregowane (bez IP użytkowników)
+- Zarządzanie sekretami – Pulumi encrypted state, environment variables
+- Autentykacja – bearer tokens (VPN nodes), API keys (web app), OAuth (users)
 
 ---
 
@@ -171,49 +184,51 @@
 
 ## ✅ Zrealizowane (produkcja)
 
-- [x] Konfiguracja webhooków Stripe
-- [x] Weryfikacja domeny email (Resend)
-- [x] Certyfikaty SSL dla custom domains
-- [x] Wdrożenie na 10 regionów AWS
+- [x] Stripe webhooks i Customer Portal (produkcja)
+- [x] Domena email z weryfikacją SPF/DKIM (Resend)
+- [x] Certyfikaty SSL dla custom domains (ACM + CloudFront)
+- [x] Wdrożenie VPN na 10 regionów AWS z Elastic IP
 
 ## 🔲 Testowanie
 
-- [ ] Test end-to-end na produkcji (rejestracja → płatność → połączenie VPN)
+- [ ] Test end-to-end na produkcji: signup → payment → device → VPN connection
+- [ ] Testy obciążeniowe: symulacja 1000+ jednoczesnych połączeń
 
 ## 🔲 Nowe funkcjonalności
 
-- [ ] Wsparcie proxy (SOCKS5/HTTP)
-- [ ] Wdrażanie węzłów VPN z panelu administratora
+- [ ] Wsparcie proxy (SOCKS5/HTTP) – obejście blokad DPI
+- [ ] Wdrażanie węzłów VPN z panelu administratora (integracja z Pulumi)
+- [ ] Split tunneling – wybór aplikacji korzystających z VPN
 
 ## 🔲 Dokumentacja pracy dyplomowej
 
-- [ ] Część teoretyczna (protokoły VPN, SaaS)
-- [ ] Analiza wymagań i projekt systemu
-- [ ] Opis implementacji
-- [ ] Testy i wnioski
+- [ ] Część teoretyczna: protokoły VPN, architektura SaaS, bezpieczeństwo
+- [ ] Analiza wymagań funkcjonalnych i niefunkcjonalnych
+- [ ] Opis implementacji z diagramami sekwencji
+- [ ] Testy, wnioski i kierunki dalszego rozwoju
 
 ---
 
 # Slajd 9: Podsumowanie
 
-## Zrealizowano
+## Status realizacji
 
-| Obszar                  | Status  |
-| ----------------------- | ------- |
-| Frontend SaaS           | ✅ 95%  |
-| Control Plane           | ✅ 100% |
-| VPN Server              | ✅ 90%  |
-| Desktop Client          | ✅ 85%  |
-| Infrastruktura          | ✅ 100% |
-| Dokumentacja techniczna | ✅ 100% |
+| Obszar                  | Status  | Uwagi                                  |
+| ----------------------- | ------- | -------------------------------------- |
+| Frontend SaaS           | ✅ 95%  | Stripe, OAuth, dashboard, admin        |
+| Control Plane           | ✅ 100% | Wszystkie endpointy, Lambda, Postgres  |
+| VPN Server              | ✅ 90%  | WireGuard, OpenVPN, IKEv2, 10 regionów |
+| Desktop Client          | ✅ 85%  | macOS, Linux, Windows, daemon          |
+| Infrastruktura          | ✅ 100% | Pulumi, CI/CD, multi-region            |
+| Dokumentacja techniczna | ✅ 100% | API, architektura, runbooki            |
 
 ## Kluczowe osiągnięcia
 
-- Kompletny system VPN typu SaaS
-- 4 protokoły VPN (WireGuard, OpenVPN, IKEv2)
-- 3 platformy desktopowe (macOS, Linux, Windows)
-- 10 regionów AWS
-- Privacy-first design
+- **Kompletny system VPN** – od rejestracji użytkownika do połączenia VPN
+- **3 protokoły VPN** – WireGuard (szybki), OpenVPN (kompatybilny), IKEv2 (natywny)
+- **3 platformy desktop** – macOS, Linux, Windows z natywnym instalatorem
+- **10 regionów AWS** – globalna obecność, niskie opóźnienia
+- **Privacy-first** – brak logowania ruchu, minimalizacja metadanych
 
 ---
 
@@ -221,16 +236,13 @@
 
 ## Pytania?
 
-**Repozytorium:** vpnVPN (monorepo)
+### Stos technologiczny
 
-**Stos technologiczny:**
-
-- Frontend: Next.js, TypeScript, Prisma, Stripe
-- Backend: Bun, Fastify, AWS Lambda, PostgreSQL
-- VPN: Rust, WireGuard, OpenVPN, IKEv2
-- Desktop: Tauri, React, Rust Daemon
-- Infra: Pulumi, AWS, Docker, ECR
-
----
-
-_Prezentacja wygenerowana na podstawie dokumentacji projektu vpnVPN_
+| Warstwa        | Technologie                                  |
+| -------------- | -------------------------------------------- |
+| **Frontend**   | Next.js 15, TypeScript, Prisma, Stripe, tRPC |
+| **Backend**    | Bun, Fastify, AWS Lambda, PostgreSQL/Neon    |
+| **VPN Server** | Rust, Tokio, Axum, WireGuard, OpenVPN, IKEv2 |
+| **Desktop**    | Tauri, React, Vite, Rust Daemon              |
+| **Infra**      | Pulumi, AWS (Lambda, EC2, ECR, S3), Docker   |
+| **CI/CD**      | GitHub Actions, cross-platform builds        |
