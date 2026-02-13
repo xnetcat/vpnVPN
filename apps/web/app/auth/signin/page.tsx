@@ -26,11 +26,11 @@ function SignInForm() {
 
   const defaultCallback =
     typeof window !== "undefined"
-      ? `${window.location.origin}/desktop`
-      : "/desktop";
+      ? `${window.location.origin}/dashboard`
+      : "/dashboard";
 
   const callbackUrl =
-    isDesktopParam && rawCallback === "/desktop"
+    isDesktopParam && rawCallback === "/dashboard"
       ? defaultCallback
       : rawCallback;
 
@@ -117,11 +117,7 @@ function SignInForm() {
       setCodeState("success");
       // For desktop flows, send the user to the desktop shell which should now
       // have a valid session.
-      if (isDesktopParam) {
-        window.location.href = "/desktop?desktop=1";
-      } else {
-        window.location.href = "/dashboard";
-      }
+      window.location.href = "/dashboard";
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("desktop code sign-in failed", err);

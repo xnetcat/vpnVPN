@@ -8,6 +8,7 @@ use std::sync::Mutex;
 
 pub static REGISTRY: Lazy<Registry> = Lazy::new(Registry::new);
 
+#[allow(dead_code)]
 pub static SESSIONS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
     let counter = IntCounter::new("vpn_sessions_total", "Total VPN sessions served")
         .expect("create sessions_total metric");
@@ -22,6 +23,7 @@ pub static SESSIONS_ACTIVE: Lazy<IntGauge> = Lazy::new(|| {
     gauge
 });
 
+#[allow(dead_code)]
 pub static PEERS_REGISTERED: Lazy<IntGauge> = Lazy::new(|| {
     let gauge = IntGauge::new("vpn_registered_peers", "Total registered peers")
         .expect("create peers gauge");
@@ -29,6 +31,7 @@ pub static PEERS_REGISTERED: Lazy<IntGauge> = Lazy::new(|| {
     gauge
 });
 
+#[allow(dead_code)]
 pub static BYTES_TRANSFERS: Lazy<IntCounterVec> = Lazy::new(|| {
     let vec = IntCounterVec::new(
         Opts::new("vpn_transfer_bytes_total", "Transferred bytes by direction"),
@@ -52,6 +55,7 @@ pub static BYTES_TRANSFERS_PROTO: Lazy<IntCounterVec> = Lazy::new(|| {
     vec
 });
 
+#[allow(dead_code)]
 pub static AUTH_FAILURES: Lazy<IntCounter> = Lazy::new(|| {
     let counter = IntCounter::new("vpn_admin_auth_failures", "Failed admin authentications")
         .expect("create auth failures counter");
@@ -59,7 +63,9 @@ pub static AUTH_FAILURES: Lazy<IntCounter> = Lazy::new(|| {
     counter
 });
 
+#[allow(dead_code)]
 static LAST_EGRESS: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
+#[allow(dead_code)]
 static LAST_EGRESS_BY_PROTOCOL: Lazy<Mutex<HashMap<String, u64>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 pub static SESSIONS_ACTIVE_PROTO: Lazy<IntGaugeVec> = Lazy::new(|| {
@@ -89,16 +95,19 @@ pub fn record_active_sessions(total: usize) {
     SESSIONS_ACTIVE.set(total as i64);
 }
 
+#[allow(dead_code)]
 pub fn increment_total_sessions(count: usize) {
     if count > 0 {
         SESSIONS_TOTAL.inc_by(count as u64);
     }
 }
 
+#[allow(dead_code)]
 pub fn set_registered_peers(total: usize) {
     PEERS_REGISTERED.set(total as i64);
 }
 
+#[allow(dead_code)]
 pub fn record_transfer(direction: &str, bytes: u64) {
     if bytes == 0 {
         return;
@@ -108,12 +117,9 @@ pub fn record_transfer(direction: &str, bytes: u64) {
         .inc_by(bytes);
 }
 
+#[allow(dead_code)]
 pub fn get_egress_delta() -> u64 {
-    let total: u64 = BYTES_TRANSFERS
-        .with_label_values(&["egress"])
-        .get()
-        .try_into()
-        .unwrap_or_default();
+    let total: u64 = BYTES_TRANSFERS.with_label_values(&["egress"]).get();
     let last = LAST_EGRESS.load(Ordering::Relaxed);
     let delta = total.saturating_sub(last);
     LAST_EGRESS.store(total, Ordering::Relaxed);
@@ -135,14 +141,17 @@ pub fn record_transfer_for(protocol: &str, direction: &str, bytes: u64) {
         .inc_by(bytes);
 }
 
+#[allow(dead_code)]
 pub fn get_active_sessions() -> u64 {
     SESSIONS_ACTIVE.get().try_into().unwrap_or_default()
 }
 
+#[allow(dead_code)]
 pub fn get_bytes_sent_delta() -> u64 {
     get_egress_delta()
 }
 
+#[allow(dead_code)]
 pub fn get_per_protocol_active(protocols: &[&str]) -> Vec<(String, u64)> {
     protocols
         .iter()
@@ -159,15 +168,14 @@ pub fn get_per_protocol_active(protocols: &[&str]) -> Vec<(String, u64)> {
         .collect()
 }
 
+#[allow(dead_code)]
 pub fn get_per_protocol_egress_delta(protocols: &[&str]) -> Vec<(String, u64)> {
     let mut last = LAST_EGRESS_BY_PROTOCOL.lock().unwrap();
     let mut out = Vec::new();
     for p in protocols {
         let total: u64 = BYTES_TRANSFERS_PROTO
             .with_label_values(&[p, "egress"])
-            .get()
-            .try_into()
-            .unwrap_or_default();
+            .get();
         let prev = *last.get(&p.to_string()).unwrap_or(&0);
         let delta = total.saturating_sub(prev);
         last.insert(p.to_string(), total);

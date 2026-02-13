@@ -103,57 +103,8 @@ jobs:
           docker tag ${{ steps.meta.outputs.ecr_uri }}:${{ steps.meta.outputs.image_tag }} ${{ steps.meta.outputs.ecr_uri }}:${{ steps.meta.outputs.env_tag }}
           docker push ${{ steps.meta.outputs.ecr_uri }}:${{ steps.meta.outputs.env_tag }}
 
-  build-services:
-    needs: changes
-    if: needs.changes.outputs.services == 'true' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
-    env:
-      AWS_REGION: ${{ vars.AWS_REGION || secrets.AWS_REGION || 'us-east-1' }}
-    outputs:
-      control_plane_key: ${{ steps.upload.outputs.control_plane_key }}
-      metrics_key: ${{ steps.upload.outputs.metrics_key }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: "1.1.38"
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Build services
-        run: |
-          bun run --cwd services/control-plane build:lambda
-          bun run --cwd services/metrics build:lambda
-
-      - name: Package and Upload
-        id: upload
-        run: |
-          mkdir -p dist/lambda
-          cd services/control-plane/dist/lambda && zip -r ../../../../dist/lambda/control-plane.zip . && cd ../../../..
-          cd services/metrics/dist/lambda && zip -r ../../../../dist/lambda/metrics.zip . && cd ../../../..
-
-          TIMESTAMP=$(date +%Y%m%d%H%M%S)
-          S3_BUCKET="${{ secrets.LAMBDA_CODE_BUCKET || 'vpnvpn-lambda-deployments' }}"
-
-          aws s3 cp dist/lambda/control-plane.zip "s3://${S3_BUCKET}/control-plane/${TIMESTAMP}/control-plane.zip"
-          aws s3 cp dist/lambda/control-plane.zip "s3://${S3_BUCKET}/control-plane/latest/control-plane.zip"
-
-          aws s3 cp dist/lambda/metrics.zip "s3://${S3_BUCKET}/metrics/${TIMESTAMP}/metrics.zip"
-          aws s3 cp dist/lambda/metrics.zip "s3://${S3_BUCKET}/metrics/latest/metrics.zip"
-
-          echo "control_plane_key=control-plane/latest/control-plane.zip" >> $GITHUB_OUTPUT
-          echo "metrics_key=metrics/latest/metrics.zip" >> $GITHUB_OUTPUT
-
   deploy-infra:
-    needs: [changes, build-rust, build-services]
+    needs: [changes, build-rust]
     if: always() && (needs.changes.outputs.infra == 'true' || needs.changes.outputs.vpn_server == 'true' || needs.changes.outputs.services == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
@@ -186,6 +137,18 @@ jobs:
       - uses: oven-sh/setup-bun@v1
         with:
           bun-version: "1.1.38"
+
+      - name: Cache Bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: pulumi-bun-cache-${{ runner.os }}-${{ hashFiles('infra/pulumi/bun.lockb') }}
+
+      - name: Cache Pulumi node_modules
+        uses: actions/cache@v4
+        with:
+          path: infra/pulumi/node_modules
+          key: pulumi-node-modules-${{ runner.os }}-${{ hashFiles('infra/pulumi/bun.lockb') }}
       - uses: pulumi/actions@v5
         with:
           pulumi-version: latest
@@ -200,9 +163,6 @@ jobs:
 
       - name: Deploy Global Stack
         working-directory: infra/pulumi
-        env:
-          CONTROL_PLANE_CODE_KEY: ${{ needs.build-services.outputs.control_plane_key }}
-          METRICS_CODE_KEY: ${{ needs.build-services.outputs.metrics_key }}
         run: |
           STACK_NAME="global-${DEPLOY_ENV}"
           pulumi stack select "${STACK_NAME}" || pulumi stack init "${STACK_NAME}"
@@ -222,10 +182,6 @@ jobs:
           else
             echo "Using existing Control Plane API Key"
           fi
-
-          # Only update code keys if they were rebuilt
-          if [ -n "$CONTROL_PLANE_CODE_KEY" ]; then pulumi config set global:controlPlaneCodeKey "$CONTROL_PLANE_CODE_KEY" --stack "${STACK_NAME}"; fi
-          if [ -n "$METRICS_CODE_KEY" ]; then pulumi config set global:metricsCodeKey "$METRICS_CODE_KEY" --stack "${STACK_NAME}"; fi
 
           pulumi up -y --stack "${STACK_NAME}"
 

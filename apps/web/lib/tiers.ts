@@ -8,11 +8,13 @@ export interface TierConfig {
   features: string[];
 }
 
+import { WEB_ENV } from "@/env";
+
 export const TIERS: Record<Tier, TierConfig> = {
   basic: {
     name: "Basic",
     price: 10,
-    priceId: process.env.STRIPE_PRICE_ID_BASIC || "",
+    priceId: WEB_ENV.STRIPE_PRICE_ID_BASIC,
     deviceLimit: 1,
     features: [
       "1 device",
@@ -24,7 +26,7 @@ export const TIERS: Record<Tier, TierConfig> = {
   pro: {
     name: "Pro",
     price: 30,
-    priceId: process.env.STRIPE_PRICE_ID_PRO || "",
+    priceId: WEB_ENV.STRIPE_PRICE_ID_PRO,
     deviceLimit: 5,
     features: [
       "5 devices",
@@ -37,7 +39,7 @@ export const TIERS: Record<Tier, TierConfig> = {
   enterprise: {
     name: "Enterprise",
     price: 1000,
-    priceId: process.env.STRIPE_PRICE_ID_ENTERPRISE || "",
+    priceId: WEB_ENV.STRIPE_PRICE_ID_ENTERPRISE,
     deviceLimit: 999,
     features: [
       "Unlimited devices",

@@ -21,9 +21,11 @@ pub trait NetworkManager: Send + Sync {
     fn bring_up_interface(&self, iface: &str) -> Result<()>;
 
     /// Teardown interface
+    #[allow(dead_code)]
     fn teardown_interface(&self, iface: &str) -> Result<()>;
 
     /// Get the command used to interact with the interface
+    #[allow(dead_code)]
     fn get_cmd_output(&self, cmd: &str, args: &[&str]) -> Result<String> {
         let output = Command::new(cmd)
             .args(args)

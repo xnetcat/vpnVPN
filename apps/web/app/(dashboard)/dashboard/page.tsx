@@ -1,7 +1,6 @@
 import { requirePaidUser } from "@/lib/requirePaidUser";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import AddDeviceModal from "@/components/AddDeviceModal";
 import { getTierConfig } from "@/lib/tiers";
 import { Server, Smartphone, Activity } from "lucide-react";
 import { createContext } from "@/lib/trpc/init";
@@ -65,11 +64,10 @@ export default async function DashboardPage() {
   const { devices, subscription, servers, latestDevice } =
     await getDashboardData(gate.userId);
   const tierConfig = getTierConfig(gate.tier);
-  const canAddDevice = devices < tierConfig.deviceLimit;
 
   return (
     <main className="mx-auto max-w-6xl p-6 text-slate-50">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-semibold text-slate-50">Dashboard</h1>
           <p className="mt-1 text-sm text-slate-400">
@@ -77,11 +75,15 @@ export default async function DashboardPage() {
             devices
           </p>
         </div>
-        <AddDeviceModal
-          canAdd={canAddDevice}
-          current={devices}
-          limit={tierConfig.deviceLimit}
-        />
+        <div className="max-w-md rounded-md border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-slate-300 shadow-sm shadow-slate-900/40">
+          <div className="text-xs font-semibold uppercase tracking-wide text-emerald-400">
+            Device provisioning
+          </div>
+          <p className="mt-1">
+            Add and register devices from the vpnVPN desktop app. Manual device
+            creation in the web dashboard is disabled.
+          </p>
+        </div>
       </div>
 
       {/* Key Metrics */}

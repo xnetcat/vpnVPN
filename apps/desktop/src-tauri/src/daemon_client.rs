@@ -15,11 +15,22 @@ const SOCKET_PATH: &str = "/var/run/vpnvpn-daemon.sock";
 /// Development socket path (user-accessible, for hot reload)
 const DEV_SOCKET_PATH: &str = "/tmp/vpnvpn-daemon.sock";
 
+fn allow_dev_socket() -> bool {
+    cfg!(debug_assertions)
+        || matches!(
+            std::env::var("APP_CHANNEL")
+                .ok()
+                .as_deref()
+                .map(|s| s.to_lowercase()),
+            Some(ref v) if v == "devel" || v == "dev" || v == "development"
+        )
+}
+
 /// Get the active socket path, preferring dev socket if available.
 /// This allows hot reload development without touching the production daemon.
 fn get_socket_path() -> &'static str {
     // In dev, prefer the /tmp socket if it exists
-    if std::path::Path::new(DEV_SOCKET_PATH).exists() {
+    if allow_dev_socket() && std::path::Path::new(DEV_SOCKET_PATH).exists() {
         eprintln!("[daemon_client] Using dev socket: {}", DEV_SOCKET_PATH);
         return DEV_SOCKET_PATH;
     }
@@ -82,7 +93,7 @@ pub fn is_daemon_available() -> bool {
     #[cfg(unix)]
     {
         // Check dev socket first
-        if std::path::Path::new(DEV_SOCKET_PATH).exists() {
+        if allow_dev_socket() && std::path::Path::new(DEV_SOCKET_PATH).exists() {
             eprintln!(
                 "[daemon_client] Dev socket {} exists, trying to connect...",
                 DEV_SOCKET_PATH
@@ -309,6 +320,9 @@ pub struct VpnConfig {
     // IKEv2-specific
     pub ikev2_identity: Option<String>,
     pub ikev2_remote_id: Option<String>,
+    // Auth
+    pub username: Option<String>,
+    pub password: Option<String>,
     // DNS
     pub dns_servers: Vec<String>,
 }
@@ -519,21 +533,4 @@ pub fn update_binary_paths(paths: VpnBinaryPaths) -> Result<VpnToolsStatus, Stri
     } else {
         serde_json::from_value(result).map_err(|e| format!("Failed to parse VPN tools: {}", e))
     }
-}
-
-/// Get VPN tools from daemon status (includes vpn_tools field).
-pub fn get_vpn_tools_from_status() -> Result<VpnToolsStatus, String> {
-    eprintln!("[daemon_client] Getting VPN tools from daemon status...");
-
-    let result = send_request("get_status", serde_json::Value::Null)?;
-
-    // Extract vpn_tools from Status response
-    if let Some(status_obj) = result.get("Status") {
-        if let Some(tools_obj) = status_obj.get("vpn_tools") {
-            return serde_json::from_value(tools_obj.clone())
-                .map_err(|e| format!("Failed to parse VPN tools from status: {}", e));
-        }
-    }
-
-    Err("VPN tools not found in daemon status".to_string())
 }

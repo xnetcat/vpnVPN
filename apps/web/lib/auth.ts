@@ -7,25 +7,26 @@ import { getServerSession } from "next-auth";
 import { prisma } from "@vpnvpn/db";
 import { createDesktopCode } from "@/lib/desktopCodes";
 import { stripe } from "@/lib/stripe";
+import { WEB_ENV } from "@/env";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
     GitHubProvider({
-      clientId: process.env.GITHUB_ID || "",
-      clientSecret: process.env.GITHUB_SECRET || "",
+      clientId: WEB_ENV.GITHUB_ID,
+      clientSecret: WEB_ENV.GITHUB_SECRET,
       allowDangerousEmailAccountLinking: true,
     }),
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+      clientId: WEB_ENV.GOOGLE_CLIENT_ID,
+      clientSecret: WEB_ENV.GOOGLE_CLIENT_SECRET,
       allowDangerousEmailAccountLinking: true,
     }),
     EmailProvider({
       // We use Resend via a custom sendVerificationRequest handler instead of SMTP.
       // A dummy server value is still required by the provider types.
-      server: process.env.EMAIL_SERVER || "",
-      from: process.env.EMAIL_FROM,
+      server: WEB_ENV.EMAIL_SERVER || "",
+      from: WEB_ENV.EMAIL_FROM,
       async sendVerificationRequest({ identifier, url }) {
         try {
           // For desktop flows (callbackUrl -> /desktop), also include a vpnvpn://
@@ -99,7 +100,7 @@ export const authOptions: NextAuthOptions = {
         if (!existing) return;
 
         // Create Stripe customer if not exists
-        if (!existing.stripeCustomerId && process.env.STRIPE_SECRET_KEY) {
+        if (!existing.stripeCustomerId && WEB_ENV.STRIPE_SECRET_KEY) {
           const customer = await stripe.customers.create({
             email: existing.email ?? undefined,
             name: existing.name ?? undefined,
@@ -119,7 +120,7 @@ export const authOptions: NextAuthOptions = {
             template: "welcome",
             data: {
               name: existing.name,
-              dashboardUrl: `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/dashboard`,
+              dashboardUrl: `${WEB_ENV.NEXTAUTH_URL}/dashboard`,
             },
           });
         }
@@ -132,7 +133,7 @@ export const authOptions: NextAuthOptions = {
     // Custom sign-in page implemented at `app/auth/signin/page.tsx`
     signIn: "/auth/signin",
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: WEB_ENV.NEXTAUTH_SECRET,
 };
 
 // NextAuth route handler factory (for app router)

@@ -86,12 +86,19 @@ POST /server/register
 }
 ```
 
-| Field        | Type   | Required | Description                |
-| ------------ | ------ | -------- | -------------------------- |
-| `id`         | string | Yes      | Unique server identifier   |
-| `publicKey`  | string | Yes      | WireGuard public key       |
-| `listenPort` | number | Yes      | WireGuard listen port      |
-| `metadata`   | object | No       | Additional server metadata |
+| Field                 | Type   | Required | Description                            |
+| --------------------- | ------ | -------- | -------------------------------------- |
+| `id`                  | string | Yes      | Unique server identifier               |
+| `publicKey`           | string | Yes      | WireGuard public key                   |
+| `listenPort`          | number | Yes      | WireGuard listen port                  |
+| `metadata`            | object | No       | Additional server metadata             |
+| `wgEndpoint`          | string | No       | WireGuard endpoint (host)              |
+| `wgPort`              | number | No       | WireGuard port                         |
+| `ovpnEndpoint`        | string | No       | OpenVPN endpoint (host)                |
+| `ovpnPort`            | number | No       | OpenVPN port                           |
+| `ovpnCaBundle`        | string | No       | OpenVPN CA certificate (PEM)           |
+| `ovpnPeerFingerprint` | string | No       | OpenVPN server certificate fingerprint |
+| `ikev2Remote`         | string | No       | IKEv2 remote address (host:port)       |
 
 **Response:**
 
@@ -136,11 +143,15 @@ GET /server/peers?id=<server-id>
       "public_key": "client-wireguard-public-key",
       "preshared_key": null,
       "allowed_ips": ["10.8.0.2/32"],
-      "endpoint": null
+      "endpoint": null,
+      "username": "ovpn-user",
+      "password": "ovpn-pass"
     }
   ]
 }
 ```
+
+> **Note:** `username` and `password` are included for OpenVPN authentication.
 
 **Status Codes:**
 
@@ -217,14 +228,16 @@ POST /peers
 }
 ```
 
-| Field        | Type     | Required | Description                   |
-| ------------ | -------- | -------- | ----------------------------- |
-| `publicKey`  | string   | Yes      | Client WireGuard public key   |
-| `userId`     | string   | Yes      | User ID from web app database |
-| `allowedIps` | string[] | Yes      | Allowed IP ranges for client  |
-| `serverId`   | string   | No       | Preferred server ID           |
-| `country`    | string   | No       | Country code                  |
-| `region`     | string   | No       | AWS region                    |
+| Field        | Type     | Required | Description                       |
+| ------------ | -------- | -------- | --------------------------------- |
+| `publicKey`  | string   | Yes      | Client WireGuard public key       |
+| `userId`     | string   | Yes      | User ID from web app database     |
+| `allowedIps` | string[] | Yes      | Allowed IP ranges for client      |
+| `serverId`   | string   | No       | Preferred server ID               |
+| `country`    | string   | No       | Country code                      |
+| `region`     | string   | No       | AWS region                        |
+| `username`   | string   | No       | OpenVPN username (auto-generated) |
+| `password`   | string   | No       | OpenVPN password (auto-generated) |
 
 **Note:** Creating a new peer automatically revokes any existing active peers for the same user.
 
@@ -294,6 +307,148 @@ DELETE /peers/:publicKey
 | ---- | -------------------------- |
 | 204  | Peer revoked               |
 | 400  | Peer not found             |
+| 401  | Invalid or missing API key |
+
+---
+
+### Delete Server
+
+Delete a VPN server from the control plane.
+
+```
+DELETE /servers/:id
+```
+
+**Authentication:** API Key (`x-api-key` header)
+
+**URL Parameters:**
+
+| Parameter | Description                 |
+| --------- | --------------------------- |
+| `id`      | Server identifier to delete |
+
+**Response:** `204 No Content`
+
+**Status Codes:**
+
+| Code | Description                |
+| ---- | -------------------------- |
+| 204  | Server deleted             |
+| 404  | Server not found           |
+| 401  | Invalid or missing API key |
+
+---
+
+### List Tokens
+
+List all VPN node authentication tokens.
+
+```
+GET /tokens
+```
+
+**Authentication:** API Key (`x-api-key` header)
+
+**Response:**
+
+```json
+[
+  {
+    "token": "abc123...",
+    "label": "production-node-1",
+    "active": true,
+    "usageCount": 42,
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "scope": "user"
+  }
+]
+```
+
+**Status Codes:**
+
+| Code | Description                |
+| ---- | -------------------------- |
+| 200  | Success                    |
+| 401  | Invalid or missing API key |
+
+---
+
+### Create Token
+
+Create a new VPN node authentication token.
+
+```
+POST /tokens
+```
+
+**Authentication:** API Key (`x-api-key` header)
+
+**Request Body:**
+
+```json
+{
+  "label": "new-production-node"
+}
+```
+
+**Response:**
+
+```json
+{
+  "token": "generated-secure-token...",
+  "label": "new-production-node",
+  "active": true,
+  "usageCount": 0,
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "scope": "user"
+}
+```
+
+**Status Codes:**
+
+| Code | Description                |
+| ---- | -------------------------- |
+| 201  | Token created              |
+| 400  | Invalid request body       |
+| 401  | Invalid or missing API key |
+
+---
+
+### Revoke Token
+
+Revoke a VPN node authentication token.
+
+```
+DELETE /tokens/:token
+```
+
+**Authentication:** API Key (`x-api-key` header)
+
+**URL Parameters:**
+
+| Parameter | Description           |
+| --------- | --------------------- |
+| `token`   | Token value to revoke |
+
+**Response:**
+
+```json
+{
+  "token": "revoked-token...",
+  "label": "node-label",
+  "active": false,
+  "usageCount": 10,
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "scope": "user"
+}
+```
+
+**Status Codes:**
+
+| Code | Description                |
+| ---- | -------------------------- |
+| 200  | Token revoked              |
+| 404  | Token not found            |
 | 401  | Invalid or missing API key |
 
 ---

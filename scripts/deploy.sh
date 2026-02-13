@@ -10,7 +10,7 @@
 # 5. (Optional, legacy) Builds desktop apps and uploads to S3
 #
 # Usage:
-#   ./scripts/deploy.sh [staging|production] [--skip-desktop] [--skip-vpn-nodes]
+#   ./scripts/deploy.sh [staging|production] [--skip-desktop] [--skip-vpn-nodes] [--only-vpn] [--only-desktop] [--add-region=REGION] [--nodes=N]
 #
 # Prerequisites:
 #   - AWS CLI configured
@@ -42,7 +42,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # =============================================================================
 
 ENVIRONMENT="${1:-staging}"
-SKIP_DESKTOP=true
+SKIP_DESKTOP=false
 SKIP_VPN_NODES=false
 ONLY_VPN=false
 ONLY_DESKTOP=false
@@ -50,6 +50,7 @@ ONLY_DESKTOP=false
 for arg in "$@"; do
   case $arg in
     --with-desktop) SKIP_DESKTOP=false ;;
+    --skip-desktop) SKIP_DESKTOP=true ;;
     --skip-vpn-nodes) SKIP_VPN_NODES=true ;;
     --only-vpn) ONLY_VPN=true ;;
     --only-desktop) ONLY_DESKTOP=true ;;
@@ -122,7 +123,12 @@ fi
 
 log_info "Using ECR Repository: ${REPO_NAME}"
 
-log_info "Using ECR Repository: ${REPO_NAME}"
+# Pulumi builds control-plane/metrics/vpn-server images; set deterministic build id + env tag
+SERVICE_BUILD_ID="${SERVICE_BUILD_ID:-$(git rev-parse --short HEAD)}"
+IMAGE_TAG="${IMAGE_TAG:-${ENVIRONMENT}-latest}"
+log_info "Service build id: ${SERVICE_BUILD_ID} (Pulumi build tag), image tag: ${IMAGE_TAG}"
+export SERVICE_BUILD_ID
+export IMAGE_TAG
 
 # Parse VPN regions configuration from regions.json or environment
 REGIONS_FILE="${SCRIPT_DIR}/regions.json"
@@ -221,62 +227,18 @@ deploy_global_stack() {
 }
 
 # =============================================================================
-# Step 2: Build and Push VPN Server Image
-# =============================================================================
-
-build_vpn_server() {
-  if [[ "$ONLY_DESKTOP" == "true" ]]; then
-    return
-  fi
-
-  log_info "Building VPN server Docker image..."
-  
-  cd "${ROOT_DIR}/apps/vpn-server"
-  
-  # Generate image tag from git commit
-  IMAGE_TAG="${IMAGE_TAG:-sha-$(git rev-parse --short HEAD)}"
-  
-  # Generate image tag from git commit
-  IMAGE_TAG="${IMAGE_TAG:-sha-$(git rev-parse --short HEAD)}"
-  
-  ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${REPO_NAME}"
-  FULL_IMAGE="${ECR_URI}:${IMAGE_TAG}"
-  FULL_IMAGE="${ECR_URI}:${IMAGE_TAG}"
-  
-  log_info "Building image: ${FULL_IMAGE}"
-  docker build --platform linux/amd64 -t "${FULL_IMAGE}" .
-  
-  # Login to ECR
-  log_info "Logging into ECR..."
-  aws ecr get-login-password --region us-east-1 | \
-    docker login --username AWS --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"
-  
-  # Push image
-  log_info "Pushing image to ECR..."
-  docker push "${FULL_IMAGE}"
-  
-  # Also tag as latest for the environment
-  docker tag "${FULL_IMAGE}" "${ECR_URI}:${ENVIRONMENT}-latest"
-  docker push "${ECR_URI}:${ENVIRONMENT}-latest"
-  
-  log_success "VPN server image pushed: ${FULL_IMAGE}"
-  cd "${ROOT_DIR}"
-  
-  export IMAGE_TAG
-}
-
-# =============================================================================
-# Step 3: Deploy VPN Nodes to Regions
-# =============================================================================
-
-# =============================================================================
-# Step 3: Deploy VPN Nodes to Regions
+# Step 2: Deploy VPN Nodes to Regions
 # =============================================================================
 
 deploy_vpn_nodes() {
   if [[ "$SKIP_VPN_NODES" == "true" ]]; then
     log_warn "Skipping VPN node deployment (--skip-vpn-nodes)"
     return
+  fi
+
+  if [[ -z "${IMAGE_TAG:-}" ]]; then
+    log_error "IMAGE_TAG is empty. Ensure global stack ran and vpnServerImageTag output is available."
+    exit 1
   fi
   
   log_info "Deploying VPN nodes to regions..."
@@ -331,9 +293,7 @@ deploy_vpn_nodes() {
     fi
     
     pulumi config set aws:region "${REGION}"
-    pulumi config set aws:region "${REGION}"
     pulumi config set global:ecrRepoName "${REPO_NAME}"
-    pulumi config set region:imageTag "${IMAGE_TAG}"
     pulumi config set region:imageTag "${IMAGE_TAG}"
     pulumi config set region:desiredInstances "${NODES}"
     pulumi config set region:minInstances "${MIN}"
@@ -373,9 +333,17 @@ build_desktop_apps() {
   # Note: Desktop app uses VITE_API_BASE_URL (see src/lib/config.ts)
   export VITE_API_BASE_URL="${WEB_URL}"
   export VITE_DASHBOARD_URL="${DESKTOP_URL}"
+  if [[ "$ENVIRONMENT" == "production" ]]; then
+    export VITE_APP_CHANNEL="prod"
+    export APP_CHANNEL="prod"
+  else
+    export VITE_APP_CHANNEL="staging"
+    export APP_CHANNEL="staging"
+  fi
   
   log_info "API Base URL: ${WEB_URL}"
   log_info "Dashboard URL: ${DESKTOP_URL}"
+  log_info "Desktop channel: ${VITE_APP_CHANNEL}"
   
   # Build frontend (this bundles into dist/ which Tauri embeds)
   log_info "Building desktop frontend with Vite..."
@@ -679,7 +647,6 @@ main() {
   echo ""
   
   deploy_global_stack
-  build_vpn_server
   deploy_vpn_nodes
   build_desktop_apps
   upload_desktop_to_s3

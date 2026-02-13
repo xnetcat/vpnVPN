@@ -12,43 +12,43 @@ datasource db {
 }
 
 model User {
-  id                String         @id @default(cuid())
-  name              String?
-  email             String?        @unique
-  emailVerified     DateTime?
-  image             String?
-  stripeCustomerId  String?
-  role              String         @default("user")
+  id               String    @id @default(cuid())
+  name             String?
+  email            String?   @unique
+  emailVerified    DateTime?
+  image            String?
+  stripeCustomerId String?
+  role             String    @default("user")
 
-  accounts          Account[]
-  sessions          Session[]
-  subscriptions     Subscription[]
+  accounts                Account[]
+  sessions                Session[]
+  subscriptions           Subscription[]
   notificationPreferences NotificationPreferences?
-  devices           Device[]
-  vpnPeers          VpnPeer[]
+  devices                 Device[]
+  vpnPeers                VpnPeer[]
 
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Account {
-  id                String   @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String?
-  access_token      String?
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String?
-  session_state     String?
-  oauth_token_secret String?
-  oauth_token        String?
+  id                       String  @id @default(cuid())
+  userId                   String
+  type                     String
+  provider                 String
+  providerAccountId        String
+  refresh_token            String?
+  access_token             String?
+  expires_at               Int?
+  token_type               String?
+  scope                    String?
+  id_token                 String?
+  session_state            String?
+  oauth_token_secret       String?
+  oauth_token              String?
   refresh_token_expires_in Int?
 
-  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -74,44 +74,44 @@ model VerificationToken {
 }
 
 model Subscription {
-  id                   String   @id @default(cuid())
+  id                   String    @id @default(cuid())
   userId               String
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  stripeSubscriptionId String   @unique
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeSubscriptionId String    @unique
   priceId              String
   status               String
-  tier                 String   @default("basic")
+  tier                 String    @default("basic")
   currentPeriodEnd     DateTime?
 
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
 }
 
 model NotificationPreferences {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  marketing     Boolean  @default(true)
-  transactional Boolean  @default(true)
-  security      Boolean  @default(true)
+  marketing     Boolean @default(true)
+  transactional Boolean @default(true)
+  security      Boolean @default(true)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Device {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   name            String
-  publicKey       String   @unique
-  machineId       String?  // Unique identifier for the physical device
+  publicKey       String    @unique
+  machineId       String? // Unique identifier for the physical device
   serverId        String?
-  status          String   @default("pending") // "pending" | "active"
+  status          String    @default("pending") // "pending" | "active"
   lastConnectedAt DateTime?
 
   createdAt DateTime @default(now())
@@ -125,31 +125,41 @@ model Device {
 // Control plane: VPN servers, peers, tokens, metrics
 
 model VpnServer {
-  id        String     @id
+  id        String   @id
   publicIp  String?
+  publicKey String?
   metadata  Json?
+  wgEndpoint String?
+  wgPort     Int?
+  ovpnEndpoint String?
+  ovpnPort     Int?
+  ovpnCaBundle String?
+  ovpnPeerFingerprint String?
+  ikev2Remote String?
   status    String
   lastSeen  DateTime
 
-  peers     VpnPeer[]
-  metrics   VpnMetric[]
+  peers   VpnPeer[]
+  metrics VpnMetric[]
 
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model VpnPeer {
-  publicKey String   @id
+  publicKey String @id
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  serverId  String?
-  server    VpnServer? @relation(fields: [serverId], references: [id])
+  serverId String?
+  server   VpnServer? @relation(fields: [serverId], references: [id])
 
   allowedIps String[]
   country    String?
   region     String?
   active     Boolean   @default(true)
+  username   String?   @unique
+  password   String?
   createdAt  DateTime  @default(now())
   revokedAt  DateTime?
 
@@ -170,10 +180,10 @@ model VpnMetric {
   server    VpnServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
   timestamp DateTime  @default(now())
 
-  cpu        Float?
-  memory     Float?
+  cpu         Float?
+  memory      Float?
   activePeers Int?
-  region     String?
+  region      String?
 
   @@index([serverId, timestamp])
 }
@@ -181,17 +191,14 @@ model VpnMetric {
 // Short-lived desktop login codes used to link the vpnVPN desktop app without
 // relying on OS-level deep link handling.
 model DesktopLoginCode {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   email      String
   code       String
   url        String
   expiresAt  DateTime
   consumedAt DateTime?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   @@index([email, code])
   @@index([expiresAt])
 }
-
-
-

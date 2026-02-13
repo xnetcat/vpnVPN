@@ -1,9 +1,9 @@
 import { router, paidProcedure } from "../init";
 import { TRPCError } from "@trpc/server";
+import { WEB_ENV } from "@/env";
 
-const base =
-  process.env.CONTROL_PLANE_API_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
-const apiKey = process.env.CONTROL_PLANE_API_KEY;
+const base = WEB_ENV.CONTROL_PLANE_API_URL;
+const apiKey = WEB_ENV.CONTROL_PLANE_API_KEY;
 
 export const proxiesRouter = router({
   list: paidProcedure.query(async () => {

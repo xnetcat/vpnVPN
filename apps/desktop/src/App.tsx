@@ -18,13 +18,10 @@ import {
   updateTrayState,
   log,
   logError,
+  enableKillSwitch,
+  disableKillSwitch,
 } from "./lib/tauri";
 import { setStoredSessionToken, setStoredUser } from "./lib/auth";
-import {
-  buildWireGuardConfig,
-  buildOpenVpnConfig,
-  buildIkev2Config,
-} from "./lib/vpnConfig";
 import {
   useUserCountry,
   useVpnTools,
@@ -32,7 +29,6 @@ import {
   useDesktopSettings,
   useServers,
   useDeviceRegistration,
-  useServerPubkey,
   useAuth,
   useMachineId,
   useDaemonStatus,
@@ -162,7 +158,7 @@ function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="mb-8 flex flex-col items-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-emerald-500 to-teal-600">
             <Shield className="h-8 w-8 text-white" />
           </div>
           <h1 className="mt-4 text-2xl font-bold text-slate-50">
@@ -207,7 +203,7 @@ function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
             <button
               type="submit"
               disabled={isLoading || !email}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 py-3 text-sm font-semibold text-white transition-all hover:from-emerald-400 hover:to-teal-400 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-linear-to-r from-emerald-500 to-teal-500 py-3 text-sm font-semibold text-white transition-all hover:from-emerald-400 hover:to-teal-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -262,7 +258,7 @@ function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
             <button
               type="submit"
               disabled={isLoading || code.length !== 6}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 py-3 text-sm font-semibold text-white transition-all hover:from-emerald-400 hover:to-teal-400 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-linear-to-r from-emerald-500 to-teal-500 py-3 text-sm font-semibold text-white transition-all hover:from-emerald-400 hover:to-teal-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -306,7 +302,7 @@ function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
 function LoadingScreen() {
   return (
     <div className="flex h-screen flex-col items-center justify-center bg-slate-950">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-emerald-500 to-teal-600">
         <Shield className="h-8 w-8 animate-pulse text-white" />
       </div>
       <h1 className="mt-4 text-xl font-semibold text-slate-50">vpnVPN</h1>
@@ -343,6 +339,7 @@ export default function App() {
     stopDaemon,
     restartDaemon: restartDaemonFn,
     repairDaemon,
+    uninstallDaemon,
     requestPermissions,
     updateDaemon,
   } = useDaemonStatus();
@@ -352,6 +349,7 @@ export default function App() {
   const [status, setStatus] = useState<ViewState>("disconnected");
   const [config, setConfig] = useState<string | null>(null);
   const [hasAttemptedAutoConnect, setHasAttemptedAutoConnect] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
 
   // Toast notifications
   const { toasts, removeToast, warning, info, error: showError } = useToasts();
@@ -387,7 +385,6 @@ export default function App() {
   } = useServers();
   const { registerDevice, confirmConnection, cancelConnection } =
     useDeviceRegistration();
-  const wgServerPublicKey = useServerPubkey();
   const machineId = useMachineId();
 
   const selectedServer =
@@ -469,7 +466,7 @@ export default function App() {
     if (!selectedServer) return;
     if (!isCurrentProtocolAvailable) {
       showError(
-        `${protocol === "wireguard" ? "WireGuard" : protocol === "openvpn" ? "OpenVPN" : "IKEv2"} is not installed. Check Settings → Connection for installation instructions.`,
+        `${protocol === "wireguard" ? "WireGuard" : protocol === "openvpn" ? "OpenVPN" : "IKEv2"} is not installed. Check Settings → Connection for installation instructions.`
       );
       return;
     }
@@ -477,105 +474,54 @@ export default function App() {
     // but cannot verify connection status programmatically
     if (protocol === "ikev2" && !vpnTools?.ikev2.available) {
       showError(
-        "IKEv2/IPsec is not available on this system. Please install strongSwan or use a different protocol.",
+        "IKEv2/IPsec is not available on this system. Please install strongSwan or use a different protocol."
       );
       return;
     }
+    // OpenVPN safety: require trust material either from server response or env
 
     setStatus("connecting");
     setConfig(null);
+    setConnectError(null);
 
     let deviceId: string | null = null;
-    let localPrivateKey: string | null = null;
 
     try {
-      // Generate WireGuard keys locally for better security (desktop app only)
-      let publicKey: string | undefined;
-      if (protocol === "wireguard") {
-        try {
-          const { invoke } = await import("@tauri-apps/api/core");
-          const [privateKey, pubKey] = await invoke<[string, string]>(
-            "generate_wireguard_keys",
-          );
-          localPrivateKey = privateKey;
-          publicKey = pubKey;
-          console.log(
-            "[App] Generated WireGuard keys locally (private key not sent to server)",
-          );
-        } catch (e) {
-          console.warn(
-            "[App] Failed to generate keys locally, falling back to server-side:",
-            e,
-          );
-          // Fall back to server-side generation if wg genkey is not available
-        }
-      }
-
       const result = await registerDevice({
         name: `Desktop • ${selectedServer.region}`,
         serverId: selectedServer.id,
         machineId: machineId ?? undefined,
-        publicKey, // Send only public key if generated locally
       });
 
       deviceId = result.deviceId;
 
-      let cfg: string;
+      let cfg: string | null = null;
       if (protocol === "wireguard") {
-        console.log("[App] Building WireGuard config with:");
-        console.log(
-          "[App]   selectedServer.publicIp:",
-          selectedServer.publicIp,
-        );
-        console.log(
-          "[App]   selectedServer.metadata:",
-          selectedServer.metadata,
-        );
-        console.log("[App]   wgServerPublicKey:", wgServerPublicKey);
-
-        // Use locally generated private key if available, otherwise use server-provided one
-        const privateKey = localPrivateKey || result.privateKey;
-        if (!privateKey) {
-          throw new Error(
-            "No private key available for WireGuard configuration",
-          );
+        cfg = result.wireguardConfig || null;
+        if (!cfg) {
+          throw new Error("Server did not provide WireGuard config");
         }
-
-        // Determine endpoint: use server's publicIp if available, otherwise fall back to localhost for dev
-        // In local dev, VPN node is typically on localhost:51820
-        const endpoint =
-          selectedServer.publicIp ||
-          (process.env.NODE_ENV === "development" ? "localhost" : undefined);
-
-        cfg = buildWireGuardConfig({
-          privateKey,
-          assignedIp: result.assignedIp,
-          serverPublicKeyOverride: wgServerPublicKey || undefined,
-          endpointOverride: endpoint,
-          portOverride: selectedServer.metadata?.port || 51820,
-        });
-
-        console.log("[App] Generated WireGuard config:\n", cfg);
       } else if (protocol === "openvpn") {
-        cfg = buildOpenVpnConfig({
-          assignedIp: result.assignedIp,
-          serverName: selectedServer.region,
-        });
+        cfg = result.openvpnConfig || null;
+        if (!cfg) {
+          throw new Error("Server did not provide OpenVPN config");
+        }
       } else {
-        cfg = buildIkev2Config({
-          serverName: selectedServer.region,
-        });
+        cfg = result.ikev2Config || null;
+        if (!cfg) {
+          throw new Error("Server did not provide IKEv2 config");
+        }
       }
 
       setConfig(cfg);
       try {
-        await applyVpnConfig(protocol, cfg);
+        await applyVpnConfig(protocol, cfg, result.vpnCredentials);
 
         // For IKEv2, we can't verify connection status - it opens the config file
         // for manual import into System Settings
         if (protocol === "ikev2") {
           info(
-            "IKEv2 config file opened. Please import it into your System Settings to complete the connection.",
+            "IKEv2 config file opened. Please import it into your System Settings to complete the connection."
           );
           setStatus("disconnected");
           // Don't confirm the device since we can't verify the connection
@@ -601,7 +547,7 @@ export default function App() {
 
           if (attempt < maxRetries - 1) {
             log(
-              `VPN connection not ready yet (attempt ${attempt + 1}/${maxRetries}), waiting for peer sync...`,
+              `VPN connection not ready yet (attempt ${attempt + 1}/${maxRetries}), waiting for peer sync...`
             );
           }
         }
@@ -616,7 +562,7 @@ export default function App() {
         } else {
           warning(
             "VPN config applied but connection could not be verified after multiple attempts. " +
-              "The peer may not have synced to the VPN node yet. Please try again in a few seconds.",
+              "The peer may not have synced to the VPN node yet. Please try again in a few seconds."
           );
           setStatus("disconnected");
           log("VPN connection not verified after retries:", vpnStatus);
@@ -625,11 +571,21 @@ export default function App() {
         }
       } catch (e) {
         logError("Failed to apply VPN config via Tauri", e);
-        warning(
-          "Config generated, but failed to apply VPN settings locally. You may need to import it manually.",
-        );
+        const parsed = parseConnectError(e);
+        const formattedMessage = `${parsed.code ? `[${parsed.code}] ` : ""}${parsed.message}`;
+        const firstLogLine =
+          parsed.logs?.find((line) => line.trim().length > 0) ?? null;
+        let finalMessage = firstLogLine
+          ? `${formattedMessage}\n${firstLogLine}`
+          : formattedMessage;
+        if (finalMessage.length > 400) {
+          finalMessage = `${finalMessage.slice(0, 400)}…`;
+        }
+        setConnectError(finalMessage);
+        // showError(finalMessage);
         // Config was generated but not applied - stay disconnected
         setStatus("disconnected");
+        setConfig(null);
         // Cancel the connection - cleans up the pending device
         if (deviceId) {
           await cancelConnection(deviceId);
@@ -638,6 +594,7 @@ export default function App() {
     } catch (e: any) {
       setStatus("disconnected");
       const errorMessage = e.message ?? "Failed to connect to VPN server";
+      setConfig(null);
 
       // Check if it's a device limit error
       if (
@@ -652,10 +609,11 @@ export default function App() {
             onClick: () => {
               void openInBrowser(`${API_BASE_URL}/devices`);
             },
-          },
+          }
         );
       } else {
-        showError(errorMessage);
+        setConnectError(errorMessage);
+        // showError(errorMessage);
       }
 
       // If device was created but connection failed, cancel it
@@ -667,9 +625,10 @@ export default function App() {
 
   const handleDisconnect = useCallback(() => {
     setConfig(null);
+    setConnectError(null);
     setStatus("disconnected");
     void disconnectVpn(protocol).catch((e) =>
-      logError("Failed to disconnect VPN via Tauri", e),
+      logError("Failed to disconnect VPN via Tauri", e)
     );
   }, [protocol]);
 
@@ -720,9 +679,6 @@ export default function App() {
           async () => {
             log("Tray: Toggle kill switch");
             try {
-              const { enableKillSwitch, disableKillSwitch } = await import(
-                "./lib/tauri"
-              );
               if (daemonStatus?.kill_switch_active) {
                 await disableKillSwitch();
               } else {
@@ -732,7 +688,7 @@ export default function App() {
             } catch (e) {
               logError("Failed to toggle kill switch", e);
             }
-          },
+          }
         );
         unlisten.push(unlistenKillSwitch);
 
@@ -791,19 +747,11 @@ export default function App() {
       selectedServerId: selectedServer?.id ?? null,
       selectedServerRegion: selectedServer?.region ?? null,
       protocol,
-      wgServerPublicKey,
       isProduction: IS_PRODUCTION,
       tauriAvailable: true,
       userCountry,
     }),
-    [
-      status,
-      vpnConnectionStatus,
-      selectedServer,
-      protocol,
-      wgServerPublicKey,
-      userCountry,
-    ],
+    [status, vpnConnectionStatus, selectedServer, protocol, userCountry]
   );
 
   // Show loading screen while checking auth
@@ -867,7 +815,7 @@ export default function App() {
           onStartDaemon={startDaemon}
           onStopDaemon={stopDaemon}
           onRestartDaemon={restartDaemonFn}
-          onRepairDaemon={repairDaemon}
+          onUninstallDaemon={uninstallDaemon}
           onRequestPermissions={requestPermissions}
           isDevelopment={isDevelopment}
           onUpdateDaemon={updateDaemon}
@@ -945,9 +893,62 @@ export default function App() {
             protocol={protocol}
           />
 
-          <StatusPanel protocol={protocol} hasConfig={config !== null} />
+          <StatusPanel
+            protocol={protocol}
+            status={status}
+            hasConfig={config !== null}
+            errorMessage={connectError}
+          />
         </main>
       </div>
     </div>
   );
+}
+
+function parseConnectError(err: unknown): {
+  code?: string;
+  message: string;
+  logs?: string[];
+} {
+  const raw =
+    typeof err === "string"
+      ? err
+      : (err as any)?.message
+        ? String((err as any).message)
+        : String(err);
+
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes("options error") &&
+    lower.includes("must define ca file")
+  ) {
+    return {
+      code: "openvpn_missing_ca",
+      message:
+        "OpenVPN server verification is not configured (missing CA or peer fingerprint).",
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return {
+        code: (parsed as any).code ?? undefined,
+        message:
+          (parsed as any).message ??
+          (typeof parsed === "string" ? parsed : "Connection failed"),
+        logs: Array.isArray((parsed as any).logs)
+          ? ((parsed as any).logs as string[])
+          : undefined,
+      };
+    }
+  } catch {
+    // not JSON
+  }
+
+  const codeMatch = raw.match(/Daemon error \(([^)]+)\)/);
+  return {
+    code: codeMatch?.[1],
+    message: raw,
+  };
 }

@@ -1,9 +1,9 @@
 import { router, paidProcedure } from "../init";
 import { TRPCError } from "@trpc/server";
+import { WEB_ENV } from "@/env";
 
-const base =
-  process.env.CONTROL_PLANE_API_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
-const apiKey = process.env.CONTROL_PLANE_API_KEY;
+const base = WEB_ENV.CONTROL_PLANE_API_URL;
+const apiKey = WEB_ENV.CONTROL_PLANE_API_KEY;
 
 export const serversRouter = router({
   list: paidProcedure.query(async () => {
@@ -41,6 +41,15 @@ export const serversRouter = router({
       country: item.country || item.metadata?.country,
       status: item.status || "unknown",
       sessions: item.metrics?.sessions || 0,
+      publicKey: item.publicKey || null,
+      wgEndpoint: item.wgEndpoint || item.metadata?.wgEndpoint || null,
+      wgPort: item.wgPort || item.metadata?.wgPort || null,
+      ovpnEndpoint: item.ovpnEndpoint || item.metadata?.ovpnEndpoint || null,
+      ovpnPort: item.ovpnPort || item.metadata?.ovpnPort || null,
+      ovpnCaBundle: item.ovpnCaBundle || item.metadata?.ovpnCaBundle || null,
+      ovpnPeerFingerprint:
+        item.ovpnPeerFingerprint || item.metadata?.ovpnPeerFingerprint || null,
+      ikev2Remote: item.ikev2Remote || item.metadata?.ikev2Remote || null,
       cpu: typeof item.metrics?.cpu === "number" ? item.metrics.cpu : undefined,
       lastSeen: item.lastSeen,
       // Include server connection details

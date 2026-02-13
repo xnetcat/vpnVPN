@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { WEB_ENV } from "@/env";
 
 // Use Node.js runtime to enable database checks
 export const runtime = "nodejs";
@@ -27,7 +28,7 @@ export async function GET() {
   }
 
   // Control Plane reachability check (optional)
-  const controlPlaneUrl = process.env.CONTROL_PLANE_URL;
+  const controlPlaneUrl = WEB_ENV.CONTROL_PLANE_API_URL;
   if (controlPlaneUrl) {
     const cpStart = Date.now();
     try {

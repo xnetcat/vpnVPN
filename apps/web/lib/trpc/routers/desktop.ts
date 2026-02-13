@@ -1,8 +1,7 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../init";
 import { consumeDesktopCode } from "@/lib/desktopCodes";
-
-const ADMIN_BASE = process.env.VPN_NODE_ADMIN_URL || "http://vpn-node:9090";
+import { WEB_ENV } from "@/env";
 
 export const desktopRouter = router({
   // Resolve a 6-digit desktop login code to the original NextAuth callback URL.
@@ -22,34 +21,4 @@ export const desktopRouter = router({
       }
       return { ok: true as const, url };
     }),
-
-  // Discover the WireGuard server public key from the vpn-node admin endpoint.
-  // Returns { publicKey: string | null } without throwing on errors so the
-  // client can fall back to env configuration.
-  serverPubkey: publicProcedure.query(async () => {
-    try {
-      const res = await fetch(`${ADMIN_BASE}/pubkey`, {
-        cache: "no-store",
-      });
-
-      if (!res.ok) {
-        // eslint-disable-next-line no-console
-        console.error(
-          "[desktop] failed to fetch vpn-node pubkey via admin endpoint",
-          res.status,
-        );
-        return { publicKey: null as string | null };
-      }
-
-      const data = (await res.json()) as string | null;
-      return { publicKey: data };
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error(
-        "[desktop] error while fetching vpn-node pubkey via admin endpoint",
-        err,
-      );
-      return { publicKey: null as string | null };
-    }
-  }),
 });

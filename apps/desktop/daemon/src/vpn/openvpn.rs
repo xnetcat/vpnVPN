@@ -21,13 +21,30 @@ pub async fn connect(config: &VpnConfig) -> Result<ConnectionStatus> {
     }
     std::fs::write(&config_path, &ovpn_config)?;
 
+    // Write auth file
+    let auth_path = config_path.parent().unwrap().join("vpnvpn-auth.txt");
+    let auth_content = if let (Some(u), Some(p)) = (&config.username, &config.password) {
+        format!("{}\n{}\n", u, p)
+    } else {
+        // Fallback or error? For now, write dummy to avoid client crash, but connection will fail if server enforces auth.
+        "user\npass\n".to_string()
+    };
+    std::fs::write(&auth_path, auth_content)?;
+
     // Set restrictive file permissions (read/write for owner only)
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+        
+        // Config file permissions
         let mut perms = std::fs::metadata(&config_path)?.permissions();
         perms.set_mode(0o600); // rw------- (owner read/write only)
         std::fs::set_permissions(&config_path, perms)?;
+
+        // Auth file permissions
+        let mut auth_perms = std::fs::metadata(&auth_path)?.permissions();
+        auth_perms.set_mode(0o600);
+        std::fs::set_permissions(&auth_path, auth_perms)?;
     }
 
     debug!("OpenVPN config written to {:?}", config_path);

@@ -2,9 +2,10 @@
   "name": "@vpnvpn/desktop",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev:vite": "vite --port 5173 --strictPort",
-    "dev:tauri": "tauri dev",
+    "dev:vite": "APP_CHANNEL=devel VITE_APP_CHANNEL=devel vite --port 5173 --strictPort",
+    "dev:tauri": "APP_CHANNEL=devel VITE_APP_CHANNEL=devel tauri dev",
     "dev": "concurrently --kill-others --names \"vite,tauri\" --prefix-colors \"cyan,magenta\" \"bun run dev:vite\" \"bun run dev:tauri\"",
     "dev:daemon": "cd daemon && cargo run -- --dev --log-level debug",
     "dev:daemon:watch": "cd daemon && cargo watch -c -w src -x 'run -- --dev --log-level debug'",

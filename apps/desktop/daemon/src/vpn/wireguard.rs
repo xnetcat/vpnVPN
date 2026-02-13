@@ -1,6 +1,6 @@
 //! WireGuard VPN backend.
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use tracing::{debug, error, info, warn};
 use vpnvpn_shared::config::VpnBinaryPaths;
 use vpnvpn_shared::protocol::{ConnectionState, ConnectionStatus, Protocol, VpnConfig};
@@ -100,7 +100,7 @@ pub async fn connect(config: &VpnConfig) -> Result<ConnectionStatus> {
     // Verify connection - retry a few times as peer sync may be delayed
     let mut status = check_status().await?;
     let mut retries = 0;
-    const MAX_RETRIES: u32 = 3;
+    const MAX_RETRIES: u32 = 6;
 
     while status.state != ConnectionState::Connected && retries < MAX_RETRIES {
         retries += 1;
@@ -114,18 +114,23 @@ pub async fn connect(config: &VpnConfig) -> Result<ConnectionStatus> {
 
     if status.state == ConnectionState::Connected {
         info!("WireGuard connection established");
-    } else {
-        warn!(
-            "WireGuard connection not established after {} attempts. ",
-            MAX_RETRIES + 1
-        );
-        warn!(
-            "This may be normal if the peer hasn't synced to the VPN node yet (syncs every 10 seconds). ",
-        );
-        warn!("Connection may establish automatically once peer is synced.");
+        return Ok(status);
     }
 
-    Ok(status)
+    // At this point the interface is up but we never got a handshake. Leaving it
+    // up blackholes traffic (default route points at wg). Proactively tear it
+    // down so the user's networking is restored and surface a hard error.
+    warn!(
+        "WireGuard connection not established after {} attempts. Rolling back interface.",
+        MAX_RETRIES + 1
+    );
+    if let Err(e) = disconnect().await {
+        warn!("Failed to rollback WireGuard interface: {}", e);
+    }
+
+    Err(anyhow!(
+        "WireGuard connection could not be verified after peer-sync retries; configuration was reverted"
+    ))
 }
 
 /// Disconnect from WireGuard VPN.

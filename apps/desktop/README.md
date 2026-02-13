@@ -1,74 +1,63 @@
 # vpnVPN Desktop (Tauri)
 
-This directory contains the multi‑platform desktop shell for vpnVPN.  
-The desktop app is intentionally **thin** – it embeds the existing Next.js web app
-desktop experience (`/desktop`) instead of duplicating UI and business logic.
+Native multi‑platform desktop client for vpnVPN. Uses a Tauri GUI with a
+privileged Rust daemon for VPN management. Supports WireGuard, OpenVPN, and IKEv2.
 
-The flow is:
+## Architecture
 
-1. `apps/web` exposes a rich desktop UI at `/desktop` (served from
-   `vpnvpn.dev` or `staging.vpnvpn.dev` in production/staging, `http://localhost:3000/desktop` locally).
-2. The Tauri app opens that URL inside a native window.
-3. All authentication, billing, device registration, and VPN credential
-   management continue to be handled by the Next.js app via tRPC.
+The app uses a split architecture for security:
+
+- **Tauri GUI** (unprivileged): React + Vite frontend, handles UI and API calls
+- **Daemon** (privileged): Rust binary managing VPN backends via IPC (Unix socket)
+
+The daemon runs with root/admin privileges to manage network interfaces, while
+the GUI runs unprivileged. Communication happens via JSON-RPC over Unix sockets.
+
+See [DEVELOPMENT.md](./DEVELOPMENT.md) for detailed daemon development docs.
 
 ## Running locally
 
-1. **Start the web app** (and local services):
+1. Start the web app / API (and local services):
 
    ```bash
-   # In project root (monorepo)
    bun install
-   bun run dev            # Docker: full stack (web, control-plane, metrics, vpn-server)
-   # Or run web app only
-   cd apps/web
-   bun run dev            # The app serves http://localhost:3000, including /desktop
+   bun run dev            # full stack (web, control-plane, metrics, vpn-server)
+   # or just the web app
+   cd apps/web && bun run dev   # serves http://localhost:3000
    ```
 
-   Make sure your local control plane / VPN services are running via
-   `local/compose.yaml` or `local/test-flow.sh` so the web app can talk to the
-   local API Gateway and VPN nodes.
-
-2. **Start the desktop app**:
+2. Start the daemon (requires sudo):
 
    ```bash
    cd apps/desktop
+   sudo bun run dev:daemon
+   ```
 
-   # Optional: override the embedded URL (defaults to http://localhost:3000/desktop)
-   export VITE_VPNVPN_DESKTOP_URL="http://localhost:3000/desktop"
+3. Start the desktop app:
 
+   ```bash
+   cd apps/desktop
+   export VITE_API_BASE_URL="http://localhost:3000"
+   export VITE_DASHBOARD_URL="http://localhost:3000/dashboard"
    bun install
    bun run dev
    ```
 
-   The Tauri window should open and display the `/desktop` route from the web
-   app. When the web app is configured to use your local control plane
-   (`CONTROL_PLANE_API_URL` / `NEXT_PUBLIC_API_URL`), the desktop app will
-   automatically operate against local VPN services.
-
 ## Building for production
 
-1. Ensure `web-app` is deployed and reachable at `https://vpnvpn.dev`.
-   The `/desktop` route should be available and wired to your production
-   control plane.
+```bash
+cd apps/desktop
+export VITE_API_BASE_URL="https://vpnvpn.dev"
+export VITE_DASHBOARD_URL="https://vpnvpn.dev/dashboard"
+bun install
+bun run build
+```
 
-2. Build the desktop bundles:
-
-   ```bash
-   cd apps/desktop
-   export VITE_VPNVPN_DESKTOP_URL="https://vpnvpn.dev/desktop"
-   bun install
-   bun run build
-   ```
-
-Tauri will produce native installers / bundles for macOS, Windows, and Linux.
+Tauri produces native installers for macOS, Windows, and Linux.
 
 ## Configuration
 
-- `VITE_VPNVPN_DESKTOP_URL` – URL that the embedded webview should load.
-  - **Dev default**: `http://localhost:3000/desktop`
-  - **Staging example**: `https://staging.vpnvpn.dev/desktop`
-  - **Prod example**: `https://vpnvpn.dev/desktop`
-
-No control‑plane or VPN secrets are stored in the desktop app. All sensitive
-communication stays inside `web-app` (Next.js) and its tRPC backend.
+- `VITE_API_BASE_URL` – base URL for Next.js API routes (auth, trpc, etc.)
+- `VITE_DASHBOARD_URL` – dashboard URL to open in a browser when needed
+- `VITE_WG_ENDPOINT`, `VITE_WG_SERVER_PUBLIC_KEY`, `VITE_OVPN_REMOTE`,
+  `VITE_OVPN_PORT`, `VITE_IKEV2_REMOTE` – VPN endpoint configuration

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Check,
   X,
@@ -18,7 +18,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-import { getDaemonLogs } from "../lib/tauri";
+import { tailDaemonLogs } from "../lib/tauri";
 
 type DaemonStatus = {
   running: boolean;
@@ -27,6 +27,10 @@ type DaemonStatus = {
   has_network_permission: boolean;
   has_firewall_permission: boolean;
   kill_switch_active: boolean;
+  channel?: string;
+  source?: string;
+  binary_path?: string | null;
+  using_dev_socket?: boolean;
 };
 
 type ServiceTabProps = {
@@ -36,7 +40,7 @@ type ServiceTabProps = {
   onStartDaemon: () => Promise<void>;
   onStopDaemon: () => Promise<void>;
   onRestartDaemon: () => Promise<void>;
-  onRepairDaemon: () => Promise<void>;
+  onUninstallDaemon: () => Promise<void>;
   onRequestPermissions: () => Promise<void>;
   isDevelopment?: boolean;
   onUpdateDaemon?: () => Promise<void>;
@@ -129,32 +133,59 @@ export function ServiceTab({
   onStartDaemon,
   onStopDaemon,
   onRestartDaemon,
-  onRepairDaemon,
+  onUninstallDaemon,
   onRequestPermissions,
   isDevelopment = false,
   onUpdateDaemon,
 }: ServiceTabProps) {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
-  const [logs, setLogs] = useState<string>("");
+  const [logs, setLogs] = useState<string[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [logCursor, setLogCursor] = useState<number | null>(null);
+  const [logTimer, setLogTimer] = useState<ReturnType<
+    typeof setInterval
+  > | null>(null);
+  useEffect(() => {
+    return () => {
+      if (logTimer) clearInterval(logTimer);
+    };
+  }, [logTimer]);
 
   const handleViewLogs = async () => {
     if (showLogs) {
       setShowLogs(false);
+      if (logTimer) {
+        clearInterval(logTimer);
+        setLogTimer(null);
+      }
       return;
     }
 
     setLogsLoading(true);
     try {
-      const logContent = await getDaemonLogs();
-      setLogs(logContent);
+      await pullLogs();
       setShowLogs(true);
+      const timer = setInterval(() => {
+        void pullLogs();
+      }, 2000);
+      setLogTimer(timer);
     } catch (e) {
-      setLogs(`Error loading logs: ${e}`);
+      setLogs([`Error loading logs: ${e}`]);
       setShowLogs(true);
     } finally {
       setLogsLoading(false);
+    }
+  };
+
+  const pullLogs = async () => {
+    const chunk = await tailDaemonLogs(logCursor ?? undefined);
+    if (!chunk) return;
+    setLogCursor(chunk.cursor);
+    if (chunk.lines.length > 0) {
+      setLogs(
+        (prev) => [...prev, ...chunk.lines].slice(-400), // keep last 400 lines
+      );
     }
   };
 
@@ -205,10 +236,20 @@ export function ServiceTab({
                 )}
               </div>
               <div className="flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-lg font-semibold text-slate-100">
                     vpnVPN Daemon
                   </span>
+                  {daemonStatus.channel && (
+                    <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-200">
+                      {daemonStatus.channel}
+                    </span>
+                  )}
+                  {daemonStatus.source && (
+                    <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-300">
+                      {daemonStatus.source}
+                    </span>
+                  )}
                   <span
                     className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                       daemonStatus.running
@@ -232,6 +273,11 @@ export function ServiceTab({
                 </div>
               </div>
             </div>
+            {daemonStatus.binary_path && (
+              <p className="mt-3 text-xs text-slate-500">
+                Path: {daemonStatus.binary_path}
+              </p>
+            )}
           </div>
         ) : (
           <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-5">
@@ -286,12 +332,12 @@ export function ServiceTab({
             />
           )}
           <ActionButton
-            onClick={() => handleAction("repair", onRepairDaemon)}
-            loading={actionLoading === "repair"}
+            onClick={() => handleAction("uninstall", onUninstallDaemon)}
+            loading={actionLoading === "uninstall"}
             disabled={actionLoading !== null}
             icon={Wrench}
-            label="Repair/Reinstall"
-            variant="warning"
+            label="Uninstall Daemon"
+            variant="danger"
           />
         </div>
       </div>
@@ -364,7 +410,7 @@ export function ServiceTab({
         {showLogs && (
           <div className="rounded-xl border border-slate-700 bg-slate-950 p-4">
             <pre className="max-h-96 overflow-auto whitespace-pre-wrap font-mono text-xs text-slate-300">
-              {logs || "No logs available"}
+              {logs.length ? logs.join("\n") : "No logs available"}
             </pre>
           </div>
         )}

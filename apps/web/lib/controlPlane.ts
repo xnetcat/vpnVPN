@@ -7,23 +7,14 @@ type AddPeerPayload = {
   serverId?: string;
   country?: string;
   region?: string;
+  username?: string;
+  password?: string;
 };
 
-const CONTROL_PLANE_BASE =
-  process.env.CONTROL_PLANE_API_URL ?? process.env.NEXT_PUBLIC_API_URL;
-const CONTROL_PLANE_API_KEY = process.env.CONTROL_PLANE_API_KEY;
+import { WEB_ENV } from "@/env";
 
-if (!CONTROL_PLANE_BASE) {
-  console.warn(
-    "[controlPlane] CONTROL_PLANE_API_URL or NEXT_PUBLIC_API_URL is not set. Device registration will fail."
-  );
-}
-
-if (!CONTROL_PLANE_API_KEY) {
-  console.warn(
-    "[controlPlane] CONTROL_PLANE_API_KEY is not set. Admin/device writes to control plane will fail."
-  );
-}
+const CONTROL_PLANE_BASE = WEB_ENV.CONTROL_PLANE_API_URL;
+const CONTROL_PLANE_API_KEY = WEB_ENV.CONTROL_PLANE_API_KEY;
 
 function getBaseUrl(): string {
   if (!CONTROL_PLANE_BASE || !CONTROL_PLANE_API_KEY) {

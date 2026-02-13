@@ -7,6 +7,9 @@ import type {
   VpnBinaryPaths,
   DesktopSettings,
   VpnConnectionStatus,
+  DaemonStatus,
+  OnboardingState,
+  DaemonLogChunk,
 } from "./types";
 
 // Logging helpers
@@ -46,12 +49,18 @@ export const logError = (...args: unknown[]) => {
 export async function applyVpnConfig(
   protocol: Protocol,
   config: string,
+  credentials?: { username: string; password: string }
 ): Promise<void> {
-  await invoke("apply_vpn_config", { protocol, config });
+  await invoke("apply_vpn_config", { protocol, config, credentials });
 }
 
 export async function disconnectVpn(protocol: Protocol): Promise<void> {
   await invoke("disconnect_vpn", { protocol });
+}
+
+// Generate WireGuard keypair via Tauri (private key stays local)
+export async function generateWireguardKeys(): Promise<[string, string]> {
+  return await invoke<[string, string]>("generate_wireguard_keys");
 }
 
 // VPN tools detection - uses daemon when available, falls back to basic detection
@@ -143,7 +152,7 @@ export async function refreshVpnTools(): Promise<VpnToolsStatus | null> {
 
 // Update VPN binary paths in daemon and return refreshed tools status
 export async function updateVpnBinaryPaths(
-  paths: VpnBinaryPaths,
+  paths: VpnBinaryPaths
 ): Promise<VpnToolsStatus | null> {
   try {
     log("Updating VPN binary paths:", paths);
@@ -155,7 +164,7 @@ export async function updateVpnBinaryPaths(
         wireguardCliPath: paths.wireguard_cli_path ?? null,
         openvpnPath: paths.openvpn_path ?? null,
         ikev2Path: paths.ikev2_path ?? null,
-      },
+      }
     );
 
     if (legacy) {
@@ -266,8 +275,6 @@ export async function openInBrowser(url: string): Promise<void> {
 
 // ============ Daemon operations ============
 
-import type { DaemonStatus, OnboardingState } from "./types";
-
 // Check if daemon is available
 export async function isDaemonAvailable(): Promise<boolean> {
   try {
@@ -295,6 +302,18 @@ export async function getDaemonLogs(): Promise<string> {
   } catch (e) {
     logError("Failed to get daemon logs", e);
     return `Error getting logs: ${e}`;
+  }
+}
+
+// Tail daemon logs (cursor-based)
+export async function tailDaemonLogs(
+  cursor?: number
+): Promise<DaemonLogChunk | null> {
+  try {
+    return await invoke<DaemonLogChunk>("tail_daemon_logs", { cursor });
+  } catch (e) {
+    logError("Failed to tail daemon logs", e);
+    return null;
   }
 }
 
@@ -340,7 +359,7 @@ export async function getOnboardingState(): Promise<OnboardingState | null> {
 
 // Save onboarding state
 export async function saveOnboardingState(
-  state: OnboardingState,
+  state: OnboardingState
 ): Promise<void> {
   await invoke("save_onboarding_state", { state });
 }

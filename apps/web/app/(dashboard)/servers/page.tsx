@@ -22,8 +22,13 @@ export default async function ServersPage() {
   const servers = await getServers();
 
   return (
-    <main className="mx-auto max-w-6xl p-6">
-      <h1 className="text-2xl font-semibold mb-4">Servers</h1>
+    <main className="mx-auto max-w-6xl space-y-3">
+      <div>
+        <h1 className="text-xl font-semibold text-slate-50">Servers</h1>
+        <p className="text-sm text-slate-400">
+          Fleet health, regions, and live session load.
+        </p>
+      </div>
       <ServersTable servers={servers} />
     </main>
   );

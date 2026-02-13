@@ -1,23 +1,37 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 export default async function SiteHeader() {
-  // Hide the header on desktop routes - DesktopShell provides its own header
   const headersList = await headers();
-  const pathname = headersList.get("x-pathname") || "";
-  const search = headersList.get("x-search") || "";
+  const pathname = (headersList.get("x-pathname") || "").toLowerCase();
 
-  // Check if this is a desktop route or desktop auth flow
-  const isDesktopRoute =
-    pathname.startsWith("/desktop") || search.includes("desktop=1");
+  // Hide the marketing header on app shells (dashboard/admin).
+  const isAppShellRoute = [
+    "/dashboard",
+    "/devices",
+    "/servers",
+    "/proxies",
+    "/account",
+    "/admin",
+  ].some((prefix) => pathname.startsWith(prefix));
 
-  if (isDesktopRoute) {
+  if (isAppShellRoute) {
     return null;
   }
 
   const session = await getSession();
   const authed = Boolean((session?.user as any)?.id);
+  const role = authed
+    ? (
+        await prisma.user.findUnique({
+          where: { id: (session?.user as any)?.id as string },
+          select: { role: true },
+        })
+      )?.role
+    : null;
+  const isAdmin = role === "admin";
   return (
     <header className="border-b border-slate-800 bg-slate-950/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
@@ -33,6 +47,11 @@ export default async function SiteHeader() {
               <Link href="/dashboard" className="hover:text-slate-50">
                 Dashboard
               </Link>
+              {isAdmin && (
+                <Link href="/admin" className="hover:text-slate-50">
+                  Admin
+                </Link>
+              )}
               <Link href="/servers" className="hover:text-slate-50">
                 Servers
               </Link>

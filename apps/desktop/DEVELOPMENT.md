@@ -22,6 +22,15 @@ The app will automatically connect to the dev daemon at `/tmp/vpnvpn-daemon.sock
 
 ---
 
+## Channels (prod / staging / devel)
+
+- GUI reads `VITE_APP_CHANNEL`; backend (Tauri/Rust) reads `APP_CHANNEL`.
+- Debug builds default to `devel`, release builds default to `prod`.
+- Set `VITE_APP_CHANNEL=staging` and `APP_CHANNEL=staging` when building a staging desktop.
+- The desktop only uses the bundled daemon binary for the current build; it does not download artifacts at runtime.
+
+---
+
 ## Development Mode Details
 
 ### Dev Daemon Features

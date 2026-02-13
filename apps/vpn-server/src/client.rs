@@ -21,6 +21,20 @@ struct RegisterRequest {
     listen_port: u16,
     // Optional metadata about the node (region/country, etc.)
     metadata: Option<serde_json::Value>,
+    #[serde(rename = "wgEndpoint")]
+    wg_endpoint: Option<String>,
+    #[serde(rename = "wgPort")]
+    wg_port: Option<u16>,
+    #[serde(rename = "ovpnEndpoint")]
+    ovpn_endpoint: Option<String>,
+    #[serde(rename = "ovpnPort")]
+    ovpn_port: Option<u16>,
+    #[serde(rename = "ovpnCaBundle")]
+    ovpn_ca_bundle: Option<String>,
+    #[serde(rename = "ovpnPeerFingerprint")]
+    ovpn_peer_fingerprint: Option<String>,
+    #[serde(rename = "ikev2Remote")]
+    ikev2_remote: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,6 +63,41 @@ impl ControlPlaneClient {
         if let Ok(country) = std::env::var("VPN_COUNTRY") {
             meta.insert("country".to_string(), serde_json::Value::String(country));
         }
+        if let Ok(fp) = std::env::var("VPN_IKEV2_FINGERPRINT") {
+            meta.insert(
+                "ikev2Fingerprint".to_string(),
+                serde_json::Value::String(fp),
+            );
+        }
+        if let Ok(ca) = std::env::var("VPN_IKEV2_CA_BUNDLE") {
+            meta.insert("ikev2CaBundle".to_string(), serde_json::Value::String(ca));
+        }
+        if let Ok(fp) = std::env::var("VPN_IKEV2_FINGERPRINT") {
+            meta.insert(
+                "ikev2Fingerprint".to_string(),
+                serde_json::Value::String(fp),
+            );
+        }
+        if let Ok(ca) = std::env::var("VPN_IKEV2_CA_BUNDLE") {
+            meta.insert("ikev2CaBundle".to_string(), serde_json::Value::String(ca));
+        }
+
+        // Prefer explicit env for endpoints, otherwise fall back to detected public IP and listen_port
+        let wg_endpoint = std::env::var("VPN_WG_ENDPOINT").ok();
+        let mut wg_port = std::env::var("VPN_WG_PORT")
+            .ok()
+            .and_then(|v| v.parse::<u16>().ok());
+        let ovpn_endpoint = std::env::var("VPN_OVPN_ENDPOINT").ok();
+        let ovpn_port = std::env::var("VPN_OVPN_PORT")
+            .ok()
+            .and_then(|v| v.parse::<u16>().ok());
+        let ovpn_ca_bundle = std::env::var("VPN_OVPN_CA_BUNDLE").ok();
+        let ovpn_peer_fingerprint = std::env::var("VPN_OVPN_PEER_FINGERPRINT").ok();
+        let ikev2_remote = std::env::var("VPN_IKEV2_REMOTE").ok();
+
+        if wg_port.is_none() {
+            wg_port = Some(listen_port);
+        }
 
         let req = RegisterRequest {
             id: self.server_id.clone(),
@@ -59,6 +108,13 @@ impl ControlPlaneClient {
             } else {
                 Some(serde_json::Value::Object(meta))
             },
+            wg_endpoint,
+            wg_port,
+            ovpn_endpoint,
+            ovpn_port,
+            ovpn_ca_bundle,
+            ovpn_peer_fingerprint,
+            ikev2_remote,
         };
 
         info!(%url, ?req, "registering_with_control_plane");
@@ -109,7 +165,12 @@ impl ControlPlaneClient {
 
     /// Send heartbeat to control plane to stay marked as online
     /// This re-uses the /server/register endpoint which updates lastSeen
-    pub async fn heartbeat(&self, public_key: &str, listen_port: u16, public_ip: Option<String>) -> Result<()> {
+    pub async fn heartbeat(
+        &self,
+        public_key: &str,
+        listen_port: u16,
+        public_ip: Option<String>,
+    ) -> Result<()> {
         let url = format!("{}/server/register", self.base_url);
 
         let mut meta = serde_json::Map::new();
@@ -123,6 +184,18 @@ impl ControlPlaneClient {
             meta.insert("publicIp".to_string(), serde_json::Value::String(ip));
         }
 
+        let wg_endpoint = std::env::var("VPN_WG_ENDPOINT").ok();
+        let wg_port = std::env::var("VPN_WG_PORT")
+            .ok()
+            .and_then(|v| v.parse::<u16>().ok());
+        let ovpn_endpoint = std::env::var("VPN_OVPN_ENDPOINT").ok();
+        let ovpn_port = std::env::var("VPN_OVPN_PORT")
+            .ok()
+            .and_then(|v| v.parse::<u16>().ok());
+        let ovpn_ca_bundle = std::env::var("VPN_OVPN_CA_BUNDLE").ok();
+        let ovpn_peer_fingerprint = std::env::var("VPN_OVPN_PEER_FINGERPRINT").ok();
+        let ikev2_remote = std::env::var("VPN_IKEV2_REMOTE").ok();
+
         let req = RegisterRequest {
             id: self.server_id.clone(),
             public_key: public_key.to_string(),
@@ -132,6 +205,13 @@ impl ControlPlaneClient {
             } else {
                 Some(serde_json::Value::Object(meta))
             },
+            wg_endpoint,
+            wg_port,
+            ovpn_endpoint,
+            ovpn_port,
+            ovpn_ca_bundle,
+            ovpn_peer_fingerprint,
+            ikev2_remote,
         };
 
         debug!(%url, "sending_heartbeat");
@@ -193,12 +273,16 @@ impl ControlPlaneClient {
         }
 
         // Use ip-api.com (free, no rate limits for reasonable usage)
-        let url = format!("http://ip-api.com/json/{}?fields=status,countryCode,regionName,city", ip);
-        
+        let url = format!(
+            "http://ip-api.com/json/{}?fields=status,countryCode,regionName,city",
+            ip
+        );
+
         let timeout_duration = std::time::Duration::from_secs(5);
         let result = tokio::time::timeout(timeout_duration, async {
             self.client.get(&url).send().await
-        }).await;
+        })
+        .await;
 
         match result {
             Ok(Ok(resp)) => {

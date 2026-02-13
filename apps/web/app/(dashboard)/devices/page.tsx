@@ -1,8 +1,6 @@
 import { requirePaidUser } from "@/lib/requirePaidUser";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { Trash2, Edit2 } from "lucide-react";
-import AddDeviceModal from "@/components/AddDeviceModal";
 import RevokeDeviceButton from "@/components/RevokeDeviceButton";
 
 async function getUserDevices(userId: string) {
@@ -26,36 +24,33 @@ export default async function DevicesPage() {
   }
 
   const devices = await getUserDevices(gate.userId);
-  const canAddDevice = devices.length < gate.deviceLimit;
-
   return (
     <main className="mx-auto max-w-6xl p-6 text-slate-50">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-50">Devices</h1>
           <p className="mt-1 text-sm text-slate-400">
-            {devices.length} of {gate.deviceLimit} devices. Each device is a VPN
-            client: either the vpnVPN desktop app or a custom WireGuard
-            configuration connected to your account.
+            {devices.length} of {gate.deviceLimit} devices. Devices register
+            automatically when you sign in through the vpnVPN desktop app.
           </p>
         </div>
-        <AddDeviceModal
-          canAdd={canAddDevice}
-          current={devices.length}
-          limit={gate.deviceLimit}
-        />
+        <div className="max-w-md rounded-md border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-slate-300 shadow-sm shadow-slate-900/40">
+          <div className="text-xs font-semibold uppercase tracking-wide text-emerald-400">
+            How to add devices
+          </div>
+          <p className="mt-1">
+            Use the desktop app to connect. It registers the device for you; no
+            manual device creation in the web dashboard.
+          </p>
+        </div>
       </div>
 
       {devices.length === 0 ? (
         <div className="rounded-lg border border-slate-800 bg-slate-900/80 p-12 text-center shadow-sm shadow-slate-900/40">
           <p className="mb-4 text-slate-400">
-            No devices connected yet. Add your first device to get started.
+            No devices connected yet. Sign in via the desktop app to register
+            your first device and download its configuration automatically.
           </p>
-          <AddDeviceModal
-            canAdd={canAddDevice}
-            current={devices.length}
-            limit={gate.deviceLimit}
-          />
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900/80 shadow-sm shadow-slate-900/40">

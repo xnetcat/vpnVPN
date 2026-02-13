@@ -26,6 +26,8 @@ const addPeerSchema = z.object({
   serverId: z.string().optional(),
   country: z.string().optional(),
   region: z.string().optional(),
+  username: z.string().optional(),
+  password: z.string().optional(),
 });
 
 const revokeForUserSchema = z.object({
@@ -62,6 +64,13 @@ const registerServerSchema = z.object({
   publicKey: z.string(),
   listenPort: z.number(),
   metadata: z.unknown().optional(),
+  wgEndpoint: z.string().nullable().optional(),
+  wgPort: z.number().nullable().optional(),
+  ovpnEndpoint: z.string().nullable().optional(),
+  ovpnPort: z.number().nullable().optional(),
+  ovpnCaBundle: z.string().nullable().optional(),
+  ovpnPeerFingerprint: z.string().nullable().optional(),
+  ikev2Remote: z.string().nullable().optional(),
 });
 
 export async function buildServer(): Promise<FastifyInstance> {
@@ -137,7 +146,10 @@ export async function buildServer(): Promise<FastifyInstance> {
       });
 
       const now = new Date();
-      const metadata = (body.metadata as Record<string, unknown>) || {};
+      let metadata = (body.metadata as Record<string, unknown>) || {};
+      // Persist listenPort alongside any provided metadata
+      metadata = { listenPort: body.listenPort, ...metadata };
+
       const publicIp = metadata.publicIp as string | undefined;
 
       const server = await prisma.vpnServer.upsert({
@@ -146,14 +158,30 @@ export async function buildServer(): Promise<FastifyInstance> {
           status: "online",
           lastSeen: now,
           publicIp: publicIp || undefined,
+          publicKey: body.publicKey,
           metadata: body.metadata as object,
+          wgEndpoint: body.wgEndpoint ?? undefined,
+          wgPort: body.wgPort ?? undefined,
+          ovpnEndpoint: body.ovpnEndpoint ?? undefined,
+          ovpnPort: body.ovpnPort ?? undefined,
+          ovpnCaBundle: body.ovpnCaBundle ?? undefined,
+          ovpnPeerFingerprint: body.ovpnPeerFingerprint ?? undefined,
+          ikev2Remote: body.ikev2Remote ?? undefined,
         },
         create: {
           id: body.id,
           status: "online",
           lastSeen: now,
           publicIp: publicIp || undefined,
+          publicKey: body.publicKey,
           metadata: body.metadata as object,
+          wgEndpoint: body.wgEndpoint ?? undefined,
+          wgPort: body.wgPort ?? undefined,
+          ovpnEndpoint: body.ovpnEndpoint ?? undefined,
+          ovpnPort: body.ovpnPort ?? undefined,
+          ovpnCaBundle: body.ovpnCaBundle ?? undefined,
+          ovpnPeerFingerprint: body.ovpnPeerFingerprint ?? undefined,
+          ikev2Remote: body.ikev2Remote ?? undefined,
         },
       });
 
@@ -206,6 +234,8 @@ export async function buildServer(): Promise<FastifyInstance> {
           preshared_key: null as string | null,
           allowed_ips: p.allowedIps,
           endpoint: null as string | null,
+          username: p.username,
+          password: p.password,
         })),
       };
 
@@ -259,7 +289,15 @@ export async function buildServer(): Promise<FastifyInstance> {
         return {
           id: s.id,
           publicIp: s.publicIp,
+          publicKey: s.publicKey,
           metadata,
+          wgEndpoint: s.wgEndpoint,
+          wgPort: s.wgPort,
+          ovpnEndpoint: s.ovpnEndpoint,
+          ovpnPort: s.ovpnPort,
+          ovpnCaBundle: s.ovpnCaBundle,
+          ovpnPeerFingerprint: s.ovpnPeerFingerprint,
+          ikev2Remote: s.ikev2Remote,
           metrics: metric
             ? {
                 sessions: metric.activePeers ?? 0,
@@ -279,6 +317,39 @@ export async function buildServer(): Promise<FastifyInstance> {
     } catch (err: unknown) {
       const error = err as Error & { statusCode?: number };
       req.log.error({ err }, "listServers failed");
+      const status = error.statusCode ?? 500;
+      return reply
+        .code(status)
+        .send({ error: error.message ?? "Internal Error" });
+    }
+  });
+
+  fastify.delete("/servers/:id", async (req, reply) => {
+    try {
+      requireApiKey(req.headers as Record<string, unknown>);
+      const { id } = req.params as { id?: string };
+
+      if (!id) {
+        return reply.code(400).send({ error: "Server id required" });
+      }
+
+      const server = await prisma.vpnServer.findUnique({ where: { id } });
+      if (!server) {
+        return reply.code(404).send({ error: "Server not found" });
+      }
+
+      await prisma.vpnPeer.updateMany({
+        where: { serverId: id },
+        data: { serverId: null },
+      });
+
+      await prisma.vpnServer.delete({ where: { id } });
+
+      req.log.info({ id }, "delete_server");
+      return reply.code(204).send();
+    } catch (err: unknown) {
+      const error = err as Error & { statusCode?: number };
+      req.log.error({ err }, "deleteServer failed");
       const status = error.statusCode ?? 500;
       return reply
         .code(status)
@@ -306,6 +377,8 @@ export async function buildServer(): Promise<FastifyInstance> {
           serverId: body.serverId,
           country: body.country,
           region: body.region,
+          username: body.username,
+          password: body.password,
           active: true,
         },
       });
@@ -365,7 +438,37 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   // ----- Admin: Token Management -----
-  fastify.post("/admin/tokens", async (req, reply) => {
+  const classifyToken = (label: string | null | undefined) => {
+    const normalized = (label || "").toLowerCase();
+    if (normalized.includes("bootstrap") || normalized.startsWith("system")) {
+      return "system";
+    }
+    return "user";
+  };
+
+  fastify.get("/tokens", async (req, reply) => {
+    try {
+      requireApiKey(req.headers as Record<string, unknown>);
+
+      const tokens = await prisma.vpnToken.findMany({
+        orderBy: { createdAt: "desc" },
+      });
+
+      return reply.code(200).send(
+        tokens.map((token) => ({
+          ...token,
+          scope: classifyToken(token.label),
+        }))
+      );
+    } catch (err: unknown) {
+      const error = err as Error & { statusCode?: number };
+      req.log.error({ err }, "listTokens failed");
+      const status = error.statusCode ?? 400;
+      return reply.code(status).send({ error: error.message ?? "Bad Request" });
+    }
+  });
+
+  const createTokenHandler = async (req: any, reply: any) => {
     try {
       requireApiKey(req.headers as Record<string, unknown>);
       const body = z.object({ label: z.string() }).parse(req.body);
@@ -382,14 +485,54 @@ export async function buildServer(): Promise<FastifyInstance> {
       });
 
       req.log.info({ label: body.label }, "admin_token_created");
-      return reply.code(201).send(vpnToken);
+      return reply.code(201).send({
+        ...vpnToken,
+        scope: classifyToken(vpnToken.label),
+      });
     } catch (err: unknown) {
       const error = err as Error & { statusCode?: number };
       req.log.error({ err }, "createToken failed");
       const status = error.statusCode ?? 400;
       return reply.code(status).send({ error: error.message ?? "Bad Request" });
     }
-  });
+  };
+
+  fastify.post("/tokens", createTokenHandler);
+  fastify.post("/admin/tokens", createTokenHandler);
+
+  const revokeTokenHandler = async (req: any, reply: any) => {
+    try {
+      requireApiKey(req.headers as Record<string, unknown>);
+      const { token } = req.params as { token: string };
+
+      const existing = await prisma.vpnToken.findUnique({
+        where: { token },
+      });
+
+      if (!existing) {
+        return reply.code(404).send({ error: "Token not found" });
+      }
+
+      const revoked = await prisma.vpnToken.update({
+        where: { token },
+        data: { active: false },
+      });
+
+      req.log.info({ token }, "admin_token_revoked");
+      return reply.code(200).send({
+        ...revoked,
+        scope: classifyToken(revoked.label),
+      });
+    } catch (err: unknown) {
+      const error = err as Error & { statusCode?: number };
+      req.log.error({ err }, "revokeToken failed");
+      const status = error.statusCode ?? 400;
+      return reply.code(status).send({ error: error.message ?? "Bad Request" });
+    }
+  };
+
+  fastify.delete("/tokens/:token", revokeTokenHandler);
+  fastify.delete("/admin/tokens/:token", revokeTokenHandler);
 
   cachedServer = fastify;
   return fastify;

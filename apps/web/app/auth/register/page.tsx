@@ -20,11 +20,11 @@ function RegisterForm() {
 
   const defaultCallback =
     typeof window !== "undefined"
-      ? `${window.location.origin}/desktop`
-      : "/desktop";
+      ? `${window.location.origin}/dashboard`
+      : "/dashboard";
 
   const callbackUrl =
-    isDesktopParam && rawCallback === "/desktop"
+    isDesktopParam && rawCallback === "/dashboard"
       ? defaultCallback
       : rawCallback;
 

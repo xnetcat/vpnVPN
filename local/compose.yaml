@@ -6,7 +6,7 @@ services:
     build:
       context: ../apps/vpn-server
       dockerfile: Dockerfile
-    command: ["run"]
+    # Note: ENTRYPOINT is set in Dockerfile to ["/usr/local/bin/vpn-server", "run"]
     cap_add:
       - NET_ADMIN
     devices:
@@ -27,7 +27,10 @@ services:
       - LISTEN_UDP_PORT=51820
       - ADMIN_PORT=9090
       - RUST_LOG=info
-      - VPN_PROTOCOLS=wireguard
+      - VPN_PROTOCOLS=wireguard,openvpn,ikev2
+      - VPN_WG_ENDPOINT=127.0.0.1
+      - VPN_OVPN_ENDPOINT=127.0.0.1
+      - VPN_IKEV2_REMOTE=127.0.0.1:500
       - DISABLE_CLOUDWATCH_METRICS=1
       # Static peer for docker test client
       - STATIC_PEER_PUBLIC_KEY=${VPN_TEST_CLIENT_PUBLIC_KEY}
@@ -59,12 +62,13 @@ services:
   control-plane:
     build:
       context: ..
-      dockerfile: services/control-plane/Dockerfile
+      dockerfile: services/control-plane/Dockerfile.local
     env_file:
       - ../.env
     environment:
       - PORT=4000
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/vpnvpn
+      - JWT_SECRET=dev-secret
       - CONTROL_PLANE_API_KEY=${CONTROL_PLANE_API_KEY:-dev-control-plane-key}
       - PRISMA_MIGRATE_DEPLOY_ON_BOOT=1
       - CONTROL_PLANE_BOOTSTRAP_TOKEN=${VPN_TOKEN:-dummy-token}
@@ -121,7 +125,7 @@ services:
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/vpnvpn
       - NEXTAUTH_SECRET=supersecret
       - NEXTAUTH_URL=http://localhost:3000
-      - NEXT_PUBLIC_API_BASE_URL=http://control-plane:4000
+      - NEXT_PUBLIC_API_URL=http://control-plane:4000
       - CONTROL_PLANE_API_URL=http://control-plane:4000
       - CONTROL_PLANE_API_KEY=${CONTROL_PLANE_API_KEY:-dev-control-plane-key}
       - NEXT_PUBLIC_WG_ENDPOINT=localhost:51820

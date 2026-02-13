@@ -4,6 +4,9 @@ mod daemon_client;
 mod tray;
 
 use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::fs;
+use std::io::Read;
 use std::path::PathBuf;
 
 #[cfg(any(windows, target_os = "linux"))]
@@ -38,6 +41,22 @@ fn get_machine_id() -> String {
                 .unwrap_or_else(|_| "unknown-user".to_string());
             format!("{}@{}", username, hostname)
         }
+    }
+}
+
+// ============ Channel & daemon artifact resolution ============
+
+/// Resolve the active application channel.
+/// Priority: APP_CHANNEL env -> debug builds default to devel -> prod otherwise.
+fn app_channel() -> String {
+    let raw = std::env::var("APP_CHANNEL").ok().map(|v| v.to_lowercase());
+
+    match raw.as_deref() {
+        Some("prod") | Some("production") => "prod".into(),
+        Some("staging") | Some("stage") => "staging".into(),
+        Some("devel") | Some("dev") | Some("development") => "devel".into(),
+        _ if cfg!(debug_assertions) => "devel".into(),
+        _ => "prod".into(),
     }
 }
 
@@ -105,6 +124,25 @@ struct VpnToolsStatus {
     openvpn_path: Option<String>,
     ikev2_available: bool,
     ikev2_path: Option<String>,
+}
+
+/// Daemon status returned to the frontend with additional metadata.
+#[derive(Serialize, Clone, Default)]
+struct DaemonStatusWithMeta {
+    running: bool,
+    version: String,
+    uptime_secs: u64,
+    has_network_permission: bool,
+    has_firewall_permission: bool,
+    kill_switch_active: bool,
+    /// App channel (prod/staging/devel).
+    channel: String,
+    /// Where the binary was resolved from (downloaded/bundled/system/dev-socket).
+    source: String,
+    /// Resolved daemon binary path, if any.
+    binary_path: Option<String>,
+    /// Whether using the dev socket (/tmp/...).
+    using_dev_socket: bool,
 }
 
 /// Detect VPN tools - delegates to daemon if available, otherwise uses fallback detection.
@@ -556,15 +594,26 @@ fn disconnect_ikev2() -> Result<(), String> {
     Ok(())
 }
 
+/// Credentials for VPN authentication.
+#[derive(Deserialize)]
+struct VpnCredentials {
+    username: String,
+    password: String,
+}
+
 /// Apply VPN configuration - requires daemon to be running.
 /// The daemon handles all VPN operations for security and kill-switch support.
 #[tauri::command]
-fn apply_vpn_config(protocol: String, config: String) -> Result<(), String> {
+fn apply_vpn_config(
+    protocol: String, 
+    config: String, 
+    credentials: Option<VpnCredentials>
+) -> Result<(), String> {
     eprintln!("[apply_vpn_config] Called with protocol: {}", protocol);
     eprintln!("[apply_vpn_config] Config:\n{}", config);
 
     // Parse the config string to extract VPN parameters
-    let vpn_config = parse_vpn_config(&protocol, &config)?;
+    let vpn_config = parse_vpn_config(&protocol, &config, credentials)?;
 
     eprintln!(
         "[apply_vpn_config] Parsed config: endpoint={}:{}",
@@ -572,16 +621,42 @@ fn apply_vpn_config(protocol: String, config: String) -> Result<(), String> {
     );
 
     // Connect via daemon
-    daemon_client::connect_vpn(vpn_config)?;
+    if let Err(err) = daemon_client::connect_vpn(vpn_config) {
+        let logs = collect_daemon_log_tail(40);
+        let payload = json!({
+            "code": "connect_failed",
+            "message": err,
+            "logs": logs,
+        });
+        let msg = serde_json::to_string(&payload).unwrap_or_else(|_| {
+            "Failed to connect to VPN (and failed to serialize error payload)".to_string()
+        });
+        return Err(msg);
+    }
 
     eprintln!("[apply_vpn_config] Connection request sent successfully");
     Ok(())
 }
 
+fn collect_daemon_log_tail(limit: usize) -> Option<Vec<String>> {
+    match tail_daemon_logs(None) {
+        Ok(chunk) => {
+            let len = chunk.lines.len();
+            let start = len.saturating_sub(limit);
+            Some(chunk.lines[start..].to_vec())
+        }
+        Err(_) => None,
+    }
+}
+
 /// Parse VPN config string into daemon VpnConfig struct.
-fn parse_vpn_config(protocol: &str, config: &str) -> Result<daemon_client::VpnConfig, String> {
+fn parse_vpn_config(
+    protocol: &str, 
+    config: &str, 
+    credentials: Option<VpnCredentials>
+) -> Result<daemon_client::VpnConfig, String> {
     match protocol {
-        "wireguard" => parse_wireguard_config(config),
+        "wireguard" => parse_wireguard_config(config, credentials),
         "openvpn" => Ok(daemon_client::VpnConfig {
             protocol: "openvpn".to_string(),
             server_id: String::new(),
@@ -596,15 +671,20 @@ fn parse_vpn_config(protocol: &str, config: &str) -> Result<daemon_client::VpnCo
             ovpn_config: Some(config.to_string()),
             ikev2_identity: None,
             ikev2_remote_id: None,
+            username: credentials.as_ref().map(|c| c.username.clone()),
+            password: credentials.as_ref().map(|c| c.password.clone()),
             dns_servers: vec!["1.1.1.1".to_string()],
         }),
-        "ikev2" => parse_ikev2_config(config),
+        "ikev2" => parse_ikev2_config(config, credentials),
         other => Err(format!("unsupported protocol: {other}")),
     }
 }
 
 /// Parse WireGuard config into VpnConfig.
-fn parse_wireguard_config(config: &str) -> Result<daemon_client::VpnConfig, String> {
+fn parse_wireguard_config(
+    config: &str, 
+    credentials: Option<VpnCredentials>
+) -> Result<daemon_client::VpnConfig, String> {
     let mut private_key = None;
     let mut address = None;
     let mut dns = vec![];
@@ -673,6 +753,8 @@ fn parse_wireguard_config(config: &str) -> Result<daemon_client::VpnConfig, Stri
         ovpn_config: None,
         ikev2_identity: None,
         ikev2_remote_id: None,
+        username: credentials.as_ref().map(|c| c.username.clone()),
+        password: credentials.as_ref().map(|c| c.password.clone()),
         dns_servers: if dns.is_empty() {
             vec!["1.1.1.1".to_string()]
         } else {
@@ -682,7 +764,10 @@ fn parse_wireguard_config(config: &str) -> Result<daemon_client::VpnConfig, Stri
 }
 
 /// Parse IKEv2 config into VpnConfig.
-fn parse_ikev2_config(config: &str) -> Result<daemon_client::VpnConfig, String> {
+fn parse_ikev2_config(
+    config: &str, 
+    credentials: Option<VpnCredentials>
+) -> Result<daemon_client::VpnConfig, String> {
     // IKEv2 config is typically just server info
     // Format: server=endpoint;identity=...;remote_id=...
     let mut server_endpoint = String::new();
@@ -715,6 +800,8 @@ fn parse_ikev2_config(config: &str) -> Result<daemon_client::VpnConfig, String> 
         ovpn_config: None,
         ikev2_identity: identity,
         ikev2_remote_id: remote_id,
+        username: credentials.as_ref().map(|c| c.username.clone()),
+        password: credentials.as_ref().map(|c| c.password.clone()),
         dns_servers: vec!["1.1.1.1".to_string()],
     })
 }
@@ -848,7 +935,7 @@ fn disconnect_vpn(_protocol: Option<String>) -> Result<(), String> {
 // Backwards-compatible wrappers used by older frontends.
 #[tauri::command]
 fn apply_wireguard_config(config: String) -> Result<(), String> {
-    apply_vpn_config("wireguard".into(), config)
+    apply_vpn_config("wireguard".into(), config, None)
 }
 
 #[tauri::command]
@@ -880,18 +967,52 @@ fn is_daemon_available() -> bool {
 
 /// Get daemon status.
 #[tauri::command]
-fn get_daemon_status() -> Result<daemon_client::DaemonStatus, String> {
+fn get_daemon_status() -> Result<DaemonStatusWithMeta, String> {
     eprintln!("[get_daemon_status] Called");
+
+    let channel = app_channel();
+    let using_dev_socket = is_using_dev_socket(&channel);
+
+    let (binary_path, source) = match find_daemon_binary(&channel) {
+        Ok((path, src)) => (Some(path.display().to_string()), src),
+        Err(e) => {
+            eprintln!("[get_daemon_status] Daemon binary not found: {}", e);
+            (None, "missing".to_string())
+        }
+    };
+    let source = if using_dev_socket {
+        "dev-socket".to_string()
+    } else {
+        source
+    };
 
     if !daemon_client::is_daemon_available() {
         eprintln!("[get_daemon_status] Daemon not available, returning default status");
-        return Ok(daemon_client::DaemonStatus::default());
+        return Ok(DaemonStatusWithMeta {
+            channel,
+            source,
+            binary_path,
+            using_dev_socket,
+            ..Default::default()
+        });
     }
 
     eprintln!("[get_daemon_status] Daemon available, getting status");
     let result = daemon_client::get_status();
     eprintln!("[get_daemon_status] Result: {:?}", result);
-    result
+
+    result.map(|status| DaemonStatusWithMeta {
+        channel,
+        source,
+        binary_path,
+        using_dev_socket,
+        running: status.running,
+        version: status.version,
+        uptime_secs: status.uptime_secs,
+        has_network_permission: status.has_network_permission,
+        has_firewall_permission: status.has_firewall_permission,
+        kill_switch_active: status.kill_switch_active,
+    })
 }
 
 /// Get daemon logs (macOS only).
@@ -969,6 +1090,85 @@ fn get_daemon_logs() -> Result<String, String> {
     }
 }
 
+#[derive(Serialize)]
+struct LogChunk {
+    cursor: u64,
+    lines: Vec<String>,
+    truncated: bool,
+}
+
+#[tauri::command]
+fn tail_daemon_logs(cursor: Option<u64>) -> Result<LogChunk, String> {
+    const MAX_BYTES: u64 = 32 * 1024; // cap per read
+
+    #[cfg(target_os = "macos")]
+    {
+        let path = "/var/log/vpnvpn-daemon.log";
+        return tail_file(path, cursor, MAX_BYTES);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Fallback: use journalctl last 200 lines
+        let output = std::process::Command::new("journalctl")
+            .args(["-u", "vpnvpn-daemon", "-n", "200", "--no-pager"])
+            .output()
+            .map_err(|e| format!("Failed to get logs: {}", e))?;
+
+        let text = String::from_utf8_lossy(&output.stdout).to_string();
+        let lines: Vec<String> = text.lines().map(|l| l.to_string()).collect();
+        return Ok(LogChunk {
+            cursor: lines.len() as u64,
+            lines,
+            truncated: false,
+        });
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Ok(LogChunk {
+            cursor: 0,
+            lines: vec!["Windows log tail not implemented".to_string()],
+            truncated: false,
+        })
+    }
+}
+
+fn tail_file(path: &str, cursor: Option<u64>, max_bytes: u64) -> Result<LogChunk, String> {
+    let meta = fs::metadata(path).map_err(|e| format!("metadata {path}: {e}"))?;
+    let file_size = meta.len();
+    let start = cursor.unwrap_or_else(|| file_size.saturating_sub(max_bytes));
+
+    let mut file = fs::File::open(path).map_err(|e| format!("open {path}: {e}"))?;
+    let mut buf = Vec::new();
+
+    if start < file_size {
+        use std::io::{Seek, SeekFrom};
+        file.seek(SeekFrom::Start(start))
+            .map_err(|e| format!("seek {path}: {e}"))?;
+    } else {
+        // nothing new
+        return Ok(LogChunk {
+            cursor: file_size,
+            lines: vec![],
+            truncated: false,
+        });
+    }
+
+    file.take(max_bytes)
+        .read_to_end(&mut buf)
+        .map_err(|e| format!("read {path}: {e}"))?;
+
+    let text = String::from_utf8_lossy(&buf);
+    let lines: Vec<String> = text.lines().map(|l| l.to_string()).collect();
+
+    Ok(LogChunk {
+        cursor: file_size,
+        lines,
+        truncated: start > 0,
+    })
+}
+
 /// Enable kill switch via daemon.
 #[tauri::command]
 fn enable_kill_switch(allow_lan: bool) -> Result<(), String> {
@@ -982,7 +1182,10 @@ fn disable_kill_switch() -> Result<(), String> {
 }
 
 /// Check if we're using the development socket.
-fn is_using_dev_socket() -> bool {
+fn is_using_dev_socket(channel: &str) -> bool {
+    if !(channel == "devel" || cfg!(debug_assertions)) {
+        return false;
+    }
     std::path::Path::new("/tmp/vpnvpn-daemon.sock").exists()
 }
 
@@ -992,7 +1195,8 @@ fn restart_daemon() -> Result<(), String> {
     eprintln!("[restart_daemon] Starting daemon restart...");
 
     // Check if we're in dev mode (using /tmp socket)
-    if is_using_dev_socket() {
+    let channel = app_channel();
+    if is_using_dev_socket(&channel) {
         eprintln!("[restart_daemon] Dev mode detected - sending restart signal to daemon");
         // In dev mode, we can still send the restart request
         // The daemon will try to restart itself, but if it's running via cargo watch,
@@ -1023,7 +1227,8 @@ fn restart_daemon() -> Result<(), String> {
 fn stop_daemon() -> Result<(), String> {
     eprintln!("[stop_daemon] Stopping daemon...");
 
-    if is_using_dev_socket() {
+    let channel = app_channel();
+    if is_using_dev_socket(&channel) {
         eprintln!("[stop_daemon] Dev mode - daemon must be stopped manually (Ctrl+C in terminal)");
         return Err("In development mode, stop the daemon manually by pressing Ctrl+C in the terminal where it's running.".to_string());
     }
@@ -1087,10 +1292,11 @@ fn sidecar_binary_name() -> String {
     format!("vpnvpn-daemon-{}{}", triple, ext)
 }
 
-/// Find the daemon binary from multiple possible locations.
-/// In production builds, it's bundled as a Tauri sidecar.
-/// In development, we look for it in the cargo build output.
-fn find_daemon_binary() -> Result<PathBuf, String> {
+/// Find the daemon binary from controlled locations.
+/// Priority:
+/// 1. Bundled sidecar within the installed app
+/// 2. (devel only) workspace build outputs for developer builds
+fn find_daemon_binary(channel: &str) -> Result<(PathBuf, String), String> {
     let app_path = std::env::current_exe().map_err(|e| format!("Failed to get exe path: {e}"))?;
 
     // List of possible daemon binary locations (in order of priority)
@@ -1116,13 +1322,16 @@ fn find_daemon_binary() -> Result<PathBuf, String> {
             candidates.push(bundle_path.join("Contents/Resources/vpnvpn-daemon"));
             candidates.push(bundle_path.join(format!("Contents/MacOS/{}", sidecar_name)));
         }
-        // Development: cargo build output (release)
-        if let Some(workspace_root) = find_workspace_root(&app_path) {
-            candidates
-                .push(workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"));
-            candidates.push(workspace_root.join("apps/desktop/daemon/target/debug/vpnvpn-daemon"));
-            candidates.push(workspace_root.join("target/release/vpnvpn-daemon"));
-            candidates.push(workspace_root.join("target/debug/vpnvpn-daemon"));
+        // Development: cargo build output (only for devel/debug)
+        if channel == "devel" || cfg!(debug_assertions) {
+            if let Some(workspace_root) = find_workspace_root(&app_path) {
+                candidates
+                    .push(workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"));
+                candidates
+                    .push(workspace_root.join("apps/desktop/daemon/target/debug/vpnvpn-daemon"));
+                candidates.push(workspace_root.join("target/release/vpnvpn-daemon"));
+                candidates.push(workspace_root.join("target/debug/vpnvpn-daemon"));
+            }
         }
     }
 
@@ -1133,17 +1342,17 @@ fn find_daemon_binary() -> Result<PathBuf, String> {
             candidates.push(exe_dir.join(&sidecar_name));
             candidates.push(exe_dir.join("vpnvpn-daemon"));
         }
-        // Development: cargo build output
-        if let Some(workspace_root) = find_workspace_root(&app_path) {
-            candidates
-                .push(workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"));
-            candidates.push(workspace_root.join("apps/desktop/daemon/target/debug/vpnvpn-daemon"));
-            candidates.push(workspace_root.join("target/release/vpnvpn-daemon"));
-            candidates.push(workspace_root.join("target/debug/vpnvpn-daemon"));
+        // Development: cargo build output (only for devel/debug)
+        if channel == "devel" || cfg!(debug_assertions) {
+            if let Some(workspace_root) = find_workspace_root(&app_path) {
+                candidates
+                    .push(workspace_root.join("apps/desktop/daemon/target/release/vpnvpn-daemon"));
+                candidates
+                    .push(workspace_root.join("apps/desktop/daemon/target/debug/vpnvpn-daemon"));
+                candidates.push(workspace_root.join("target/release/vpnvpn-daemon"));
+                candidates.push(workspace_root.join("target/debug/vpnvpn-daemon"));
+            }
         }
-        // System paths (for AppImage or installed app)
-        candidates.push(PathBuf::from("/usr/lib/vpnvpn/vpnvpn-daemon"));
-        candidates.push(PathBuf::from("/opt/vpnvpn/vpnvpn-daemon"));
     }
 
     #[cfg(target_os = "windows")]
@@ -1153,21 +1362,36 @@ fn find_daemon_binary() -> Result<PathBuf, String> {
             candidates.push(exe_dir.join(&sidecar_name));
             candidates.push(exe_dir.join("vpnvpn-daemon.exe"));
         }
-        // Development: cargo build output
-        if let Some(workspace_root) = find_workspace_root(&app_path) {
-            candidates
-                .push(workspace_root.join(r"apps\desktop\daemon\target\release\vpnvpn-daemon.exe"));
-            candidates
-                .push(workspace_root.join(r"apps\desktop\daemon\target\debug\vpnvpn-daemon.exe"));
-            candidates.push(workspace_root.join(r"target\release\vpnvpn-daemon.exe"));
-            candidates.push(workspace_root.join(r"target\debug\vpnvpn-daemon.exe"));
+        // Development: cargo build output (only for devel/debug)
+        if channel == "devel" || cfg!(debug_assertions) {
+            if let Some(workspace_root) = find_workspace_root(&app_path) {
+                candidates.push(
+                    workspace_root.join(r"apps\desktop\daemon\target\release\vpnvpn-daemon.exe"),
+                );
+                candidates.push(
+                    workspace_root.join(r"apps\desktop\daemon\target\debug\vpnvpn-daemon.exe"),
+                );
+                candidates.push(workspace_root.join(r"target\release\vpnvpn-daemon.exe"));
+                candidates.push(workspace_root.join(r"target\debug\vpnvpn-daemon.exe"));
+            }
         }
     }
 
     // Find the first existing candidate
     for candidate in &candidates {
         if candidate.exists() {
-            return Ok(candidate.clone());
+            let source = if channel == "devel" || cfg!(debug_assertions) {
+                if candidate.to_string_lossy().contains("target/debug") {
+                    "dev-debug".to_string()
+                } else if candidate.to_string_lossy().contains("target/release") {
+                    "dev-release".to_string()
+                } else {
+                    "bundled".to_string()
+                }
+            } else {
+                "bundled".to_string()
+            };
+            return Ok((candidate.clone(), source));
         }
     }
 
@@ -1234,10 +1458,12 @@ fn install_daemon() -> Result<(), String> {
 fn install_daemon_macos() -> Result<(), String> {
     eprintln!("[install_daemon_macos] Starting daemon installation...");
 
-    let daemon_src = find_daemon_binary()?;
+    let channel = app_channel();
+    let (daemon_src, source) = find_daemon_binary(&channel)?;
     eprintln!(
-        "[install_daemon_macos] Found daemon binary at: {}",
-        daemon_src.display()
+        "[install_daemon_macos] Found daemon binary at: {} (source: {})",
+        daemon_src.display(),
+        source
     );
 
     // Check if we're in dev mode
@@ -1436,7 +1662,8 @@ PLIST
 
 #[cfg(target_os = "linux")]
 fn install_daemon_linux() -> Result<(), String> {
-    let daemon_src = find_daemon_binary()?;
+    let channel = app_channel();
+    let (daemon_src, source) = find_daemon_binary(&channel)?;
 
     let script = format!(
         r#"pkexec sh -c '
@@ -1479,7 +1706,8 @@ EOF
 
 #[cfg(target_os = "windows")]
 fn install_daemon_windows() -> Result<(), String> {
-    let daemon_src = find_daemon_binary()?;
+    let channel = app_channel();
+    let (daemon_src, _source) = find_daemon_binary(&channel)?;
 
     let install_dir = r"C:\Program Files\vpnVPN";
     let daemon_dst = format!(r"{}\vpnvpn-daemon.exe", install_dir);
@@ -1530,7 +1758,8 @@ fn uninstall_daemon() -> Result<(), String> {
     eprintln!("[uninstall_daemon] Starting daemon uninstallation...");
 
     // Check if we're in dev mode
-    if is_using_dev_socket() {
+    let channel = app_channel();
+    if is_using_dev_socket(&channel) {
         eprintln!("[uninstall_daemon] Dev mode detected - cleaning up dev socket");
         // In dev mode, just clean up the socket
         let _ = std::fs::remove_file("/tmp/vpnvpn-daemon.sock");
@@ -1845,6 +2074,7 @@ fn main() {
             is_daemon_available,
             get_daemon_status,
             get_daemon_logs,
+            tail_daemon_logs,
             enable_kill_switch,
             disable_kill_switch,
             restart_daemon,

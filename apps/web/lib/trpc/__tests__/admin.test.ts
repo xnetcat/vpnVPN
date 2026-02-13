@@ -135,4 +135,63 @@ describe("Admin Router", () => {
       expect(result.status).toBe("revoked");
     });
   });
+
+  describe("admin.deleteServer", () => {
+    it("should delete a server for admin", async () => {
+      const { getSession } = await import("@/lib/auth");
+      vi.mocked(getSession).mockResolvedValue(mockAdminSession);
+
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: "admin123",
+        role: "admin",
+      });
+
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        status: 204,
+        text: async () => "",
+      } as any);
+
+      const ctx = await createContext();
+      ctx.prisma = mockPrisma as any;
+      ctx.session = mockAdminSession;
+
+      const caller = appRouter.createCaller(ctx);
+      const result = await caller.admin.deleteServer({ id: "server-1" });
+
+      expect(fetch).toHaveBeenCalledWith(
+        "https://api.test.com/servers/server-1",
+        {
+          method: "DELETE",
+          headers: { "x-api-key": "test-key" },
+        },
+      );
+      expect(result.status).toBe("deleted");
+    });
+
+    it("should surface not found errors", async () => {
+      const { getSession } = await import("@/lib/auth");
+      vi.mocked(getSession).mockResolvedValue(mockAdminSession);
+
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: "admin123",
+        role: "admin",
+      });
+
+      vi.mocked(fetch).mockResolvedValue({
+        ok: false,
+        status: 404,
+        text: async () => "not found",
+      } as any);
+
+      const ctx = await createContext();
+      ctx.prisma = mockPrisma as any;
+      ctx.session = mockAdminSession;
+
+      const caller = appRouter.createCaller(ctx);
+      await expect(
+        caller.admin.deleteServer({ id: "missing" }),
+      ).rejects.toThrow("Server not found");
+    });
+  });
 });
