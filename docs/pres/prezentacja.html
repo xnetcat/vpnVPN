@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>vpnVPN - Raport z postepu</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+  :root {
+    --s950:#020617;--s900:#0f172a;--s800:#1e293b;--s700:#334155;
+    --s600:#475569;--s500:#64748b;--s400:#94a3b8;--s300:#cbd5e1;
+    --s200:#e2e8f0;--s50:#f8fafc;
+    --em:#10b981;--em-d:#059669;--em-dim:rgba(16,185,129,.12);
+    --bl:#3b82f6;--bl-dim:rgba(59,130,246,.12);
+    --am:#f59e0b;--am-dim:rgba(245,158,11,.12);
+    --rd:#ef4444;--rd-dim:rgba(239,68,68,.12);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  @page{size:1280px 720px;margin:0}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--s950);color:var(--s50);-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  .s{width:1280px;height:720px;position:relative;overflow:hidden;page-break-after:always;page-break-inside:avoid;background:var(--s950);padding:48px 64px;display:flex;flex-direction:column}
+  .s:last-child{page-break-after:auto}
+  .sh{display:flex;justify-content:space-between;align-items:center;padding-bottom:18px;border-bottom:1px solid var(--s800);margin-bottom:24px;flex-shrink:0}
+  .sh h2{font-size:26px;font-weight:700}
+  .sh .t{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--s400);letter-spacing:1px}
+  .sb{flex:1;display:flex;flex-direction:column}
+  .pg{position:absolute;bottom:20px;right:40px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--s600)}
+  h1{font-size:38px;font-weight:800;line-height:1.15;letter-spacing:-.5px}
+  h3{font-size:14px;font-weight:600;color:var(--s200);margin-bottom:8px}
+  p,li{font-size:13px;line-height:1.55;color:var(--s300)}
+  strong{color:var(--s100);font-weight:600}
+  .em{color:var(--em)}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+  .g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px}
+  .c{background:var(--s900);border:1px solid var(--s800);border-radius:8px;padding:18px}
+  .c h3{font-size:13px;margin-bottom:8px}
+  ul.b{list-style:none;padding:0}
+  ul.b li{padding-left:14px;position:relative;margin-bottom:5px;font-size:12.5px;color:var(--s300);line-height:1.5}
+  ul.b li::before{content:'';position:absolute;left:0;top:7px;width:4px;height:4px;border-radius:50%;background:var(--em)}
+  .pr{margin-bottom:12px}
+  .pr-t{display:flex;justify-content:space-between;margin-bottom:3px}
+  .pr-n{font-size:12px;font-weight:500;color:var(--s200)}
+  .pr-p{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600}
+  .pr-p.d{color:var(--em)}.pr-p.w{color:var(--am)}
+  .pr-b{height:4px;background:var(--s800);border-radius:2px;overflow:hidden}
+  .pr-f{height:100%;border-radius:2px;background:var(--em)}
+  .pr-f.w{background:var(--am)}
+  .p{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 7px;border-radius:3px;margin:1px;border:1px solid}
+  .pe{background:var(--em-dim);color:var(--em);border-color:rgba(16,185,129,.2)}
+  .pb{background:var(--bl-dim);color:var(--bl);border-color:rgba(59,130,246,.2)}
+  .pa{background:var(--am-dim);color:var(--am);border-color:rgba(245,158,11,.2)}
+  .pg2{background:rgba(100,116,139,.1);color:var(--s300);border-color:var(--s700)}
+  .d{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:5px}
+  .dg{background:var(--em)}.dy{background:var(--am)}.dr{background:var(--rd)}
+  .st{background:var(--s900);border:1px solid var(--s800);border-radius:8px;padding:14px;text-align:center}
+  .st-n{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:700;color:var(--em)}
+  .st-l{font-size:10px;color:var(--s400);margin-top:2px}
+  code{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--s200);background:var(--s800);padding:1px 5px;border-radius:3px}
+  pre.cb{font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.6;color:var(--s300);background:var(--s900);border:1px solid var(--s800);border-radius:6px;padding:12px 14px;overflow:hidden;white-space:pre;margin:0}
+  .cm{color:var(--s500)}
+  .kw{color:var(--em)}
+  .str{color:var(--am)}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{text-align:left;font-size:10px;font-weight:600;color:var(--s400);text-transform:uppercase;letter-spacing:.5px;padding:6px 8px;border-bottom:1px solid var(--s800)}
+  td{padding:6px 8px;color:var(--s300);border-bottom:1px solid rgba(30,41,59,.5)}
+  td:first-child{color:var(--s200);font-weight:500}
+  .pipe{display:flex;align-items:center}
+  .pipe-s{flex:1;background:var(--s900);border:1px solid var(--s800);padding:10px 8px;text-align:center}
+  .pipe-s:first-child{border-radius:6px 0 0 6px}.pipe-s:last-child{border-radius:0 6px 6px 0}
+  .pipe-n{font-size:11px;font-weight:600;color:var(--s200)}
+  .pipe-d{font-size:9px;color:var(--s500);margin-top:2px}
+  .pipe-a{width:0;height:0;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:7px solid var(--s600);flex-shrink:0;margin:0 -1px;z-index:1}
+  .mb8{margin-bottom:8px}.mb12{margin-bottom:12px}.mb16{margin-bottom:16px}.mb20{margin-bottom:20px}
+</style>
+</head>
+<body>
+
+<!-- 01: TYTUL -->
+<div class="s" style="justify-content:center;align-items:center;text-align:center">
+  <p style="font-size:12px;color:var(--s500);letter-spacing:2px;text-transform:uppercase;margin-bottom:20px">Praca licencjacka &middot; Raport z postepu</p>
+  <h1>Projekt i implementacja platformy<br>do zarzadzania <span class="em">usluga VPN</span></h1>
+  <p style="font-size:15px;color:var(--s400);margin-top:14px">vpnVPN &mdash; platforma SaaS do zarzadzania infrastruktura VPN</p>
+  <p style="font-size:11px;color:var(--s600);margin-top:32px">2024 / 2025</p>
+  <div class="pg">01 / 16</div>
+</div>
+
+<!-- 02: O PROJEKCIE -->
+<div class="s">
+  <div class="sh"><h2>O projekcie</h2><span class="t">KONTEKST</span></div>
+  <div class="sb">
+    <div class="g2" style="flex:1">
+      <div>
+        <h3>Cel pracy</h3>
+        <ul class="b mb16">
+          <li>Zaprojektowanie i realizacja <strong>platformy SaaS</strong> do zarzadzania usluga VPN</li>
+          <li>Centralne zarzadzanie <strong>flota serwerow VPN</strong> w chmurze AWS</li>
+          <li>Podejscie <strong>privacy-first</strong> &mdash; zero logowania ruchu sieciowego</li>
+          <li>Obsluga <strong>wielu protokolow</strong>: WireGuard, OpenVPN, IKEv2</li>
+          <li>Model subskrypcyjny z platnoscia online (Stripe)</li>
+        </ul>
+        <h3>Zakres</h3>
+        <ul class="b">
+          <li>Aplikacja webowa (panel uzytkownika + admin)</li>
+          <li>Backend &mdash; control plane + serwis metryk</li>
+          <li>Serwer VPN w Rust (agent na maszynach EC2)</li>
+          <li>Aplikacja desktopowa &mdash; klient VPN (Tauri + Rust daemon)</li>
+          <li>Infrastruktura w chmurze AWS (Infrastructure as Code)</li>
+        </ul>
+      </div>
+      <div>
+        <div class="c mb12">
+          <h3>Struktura monorepo</h3>
+          <pre class="cb">vpnVPN/
+  apps/
+    web/           <span class="cm"># Next.js 15, panel SaaS</span>
+    desktop/       <span class="cm"># Tauri + Rust daemon</span>
+    vpn-server/    <span class="cm"># Rust, agent VPN</span>
+  services/
+    control-plane/ <span class="cm"># Bun/Fastify REST API</span>
+    metrics/       <span class="cm"># Bun/Fastify, ingestion metryk</span>
+  packages/
+    db/            <span class="cm"># Prisma schema, 14 modeli</span>
+  infra/
+    pulumi/        <span class="cm"># IaC w TypeScript</span></pre>
+        </div>
+        <div class="c">
+          <h3>Narzedzia monorepo</h3>
+          <p><span class="p pe">Bun</span> runtime i package manager, <span class="p pe">Turborepo</span> orkiestracja buildow, <span class="p pe">Biome</span> linting/formatowanie, <span class="p pb">GitHub Actions</span> CI/CD.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pg">02 / 16</div>
+</div>
+
+<!-- 03: ARCHITEKTURA -->
+<div class="s">
+  <div class="sh"><h2>Architektura systemu</h2><span class="t">DESIGN</span></div>
+  <div class="sb">
+    <div class="g4 mb16">
+      <div class="c" style="text-align:center;border-top:2px solid var(--em)">
+        <h3 style="color:var(--em)">Frontend</h3>
+        <p style="font-size:11px">Panel uzytkownika, admin, platnosci, dashboard</p>
+        <div style="margin-top:6px"><span class="p pg2">Next.js 15</span><span class="p pg2">Vercel</span></div>
+      </div>
+      <div class="c" style="text-align:center;border-top:2px solid var(--bl)">
+        <h3 style="color:var(--bl)">Control Plane</h3>
+        <p style="font-size:11px">REST API, rejestracja serwerow, peery, tokeny</p>
+        <div style="margin-top:6px"><span class="p pg2">Bun/Fastify</span><span class="p pg2">Lambda</span></div>
+      </div>
+      <div class="c" style="text-align:center;border-top:2px solid var(--am)">
+        <h3 style="color:var(--am)">VPN Server</h3>
+        <p style="font-size:11px">Agent na EC2, tunele VPN, sync peerow co 2s</p>
+        <div style="margin-top:6px"><span class="p pg2">Rust</span><span class="p pg2">EC2</span></div>
+      </div>
+      <div class="c" style="text-align:center;border-top:2px solid #14b8a6">
+        <h3 style="color:#14b8a6">Desktop</h3>
+        <p style="font-size:11px">Klient VPN, daemon root, GUI, IPC</p>
+        <div style="margin-top:6px"><span class="p pg2">Tauri</span><span class="p pg2">Rust</span></div>
+      </div>
+    </div>
+    <div class="g2" style="flex:1">
+      <div class="c">
+        <h3>Przeplyw danych</h3>
+        <ul class="b">
+          <li>Uzytkownik rejestruje sie na stronie, oplaca subskrypcje przez <strong>Stripe</strong></li>
+          <li>Frontend tworzy peera w control plane (<code>POST /peer/add</code>, API key auth)</li>
+          <li>Serwery VPN co 2s pobieraja liste peerow (<code>GET /server/peers</code>, Bearer token)</li>
+          <li>Kazdy backend wywoluje <code>apply_peers()</code> &mdash; aktualizuje konfiguracje tuneli</li>
+          <li>Desktop laczy sie z wybranym serwerem przez <code>wg-quick</code>, <code>openvpn</code> lub <code>ipsec</code></li>
+        </ul>
+      </div>
+      <div class="c">
+        <h3>Bezpieczenstwo</h3>
+        <ul class="b">
+          <li><strong>Zero logowania ruchu</strong> &mdash; serwery nie zapisuja danych o pakietach</li>
+          <li><strong>Szyfrowanie</strong> &mdash; ChaCha20-Poly1305 (WG), AES-256-GCM (OVPN/IKEv2)</li>
+          <li><strong>Auth</strong> &mdash; OAuth 2.0 + magic link (web), OTP (desktop)</li>
+          <li><strong>Daemon</strong> &mdash; oddzielny proces root, GUI nie ma uprawnien sieciowych</li>
+          <li><strong>PKI</strong> &mdash; certyfikaty x509 generowane przez <code>rcgen</code> (Rust)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="pg">03 / 16</div>
+</div>
+
+<!-- 04: TECHNOLOGIE VPN - PRZEGLAD -->
+<div class="s">
+  <div class="sh"><h2>Technologie VPN &mdash; przeglad</h2><span class="t">PROTOKOLY</span></div>
+  <div class="sb">
+    <div class="g3 mb16">
+      <div class="c" style="border-top:2px solid var(--em)">
+        <h3 style="color:var(--em)">WireGuard</h3>
+        <ul class="b">
+          <li>Nowoczesny protokol &mdash; <strong>~4000 LOC</strong> w jadrze Linuxa</li>
+          <li>Warstwa 3 (IP), interfejs <strong>TUN</strong></li>
+          <li>Szyfrowanie: <strong>ChaCha20-Poly1305</strong></li>
+          <li>Wymiana kluczy: <strong>Curve25519</strong> (ECDH)</li>
+          <li>Auth: <strong>para kluczy publicznych</strong></li>
+          <li>Najszybszy, najnizszy narzut</li>
+        </ul>
+        <p style="font-size:10px;color:var(--em);margin-top:8px">Glowny protokol &mdash; domyslnie wlaczony</p>
+      </div>
+      <div class="c" style="border-top:2px solid var(--bl)">
+        <h3 style="color:var(--bl)">OpenVPN</h3>
+        <ul class="b">
+          <li>Dojrzaly protokol, dziala w <strong>user space</strong></li>
+          <li>Warstwa 3, interfejs <strong>TUN</strong> (tun1)</li>
+          <li>Szyfrowanie: <strong>AES-256-GCM</strong></li>
+          <li>Auth TLS: <strong>RSA 2048</strong> (self-signed)</li>
+          <li>Auth klienta: <strong>username/password</strong></li>
+          <li>Szeroka kompatybilnosc platform</li>
+        </ul>
+        <p style="font-size:10px;color:var(--bl);margin-top:8px">Drugi protokol &mdash; fallback</p>
+      </div>
+      <div class="c" style="border-top:2px solid var(--am)">
+        <h3 style="color:var(--am)">IKEv2 / IPsec</h3>
+        <ul class="b">
+          <li>Protokol IPsec z <strong>IKEv2</strong> key exchange</li>
+          <li>Warstwa kernela, <strong>strongSwan</strong> (serwer)</li>
+          <li>Szyfrowanie: <strong>AES-256-GCM</strong></li>
+          <li>Wymiana kluczy: <strong>ECP256</strong> (ECDH)</li>
+          <li>Wbudowany w OS (macOS, Windows)</li>
+          <li>Szybki <strong>reconnect</strong> &mdash; MOBIKE</li>
+        </ul>
+        <p style="font-size:10px;color:var(--am);margin-top:8px">Trzeci protokol &mdash; czesciowy</p>
+      </div>
+    </div>
+    <div class="c" style="flex:1">
+      <h3>Wspolna abstrakcja &mdash; trait <code>VpnBackend</code> (vpn/mod.rs)</h3>
+      <div class="g2">
+        <div>
+          <p style="font-size:11px;margin-bottom:6px"><strong>Strona serwera</strong> (apps/vpn-server/src/vpn/mod.rs)</p>
+          <pre class="cb"><span class="kw">pub trait</span> VpnBackend: Send + Sync {
+  <span class="kw">fn</span> protocol(&self) -> VpnProtocol;
+  <span class="kw">fn</span> start(&self) -> Result<()>;
+  <span class="kw">fn</span> stop(&self) -> Result<()>;
+  <span class="kw">fn</span> status(&self) -> Result&lt;BackendStatus&gt;;
+  <span class="kw">fn</span> apply_peers(&self, &[PeerSpec]) -> Result<()>;
+  <span class="kw">fn</span> public_key(&self) -> Option&lt;String&gt;;
+}</pre>
+        </div>
+        <div>
+          <p style="font-size:11px;margin-bottom:6px"><strong>Strona klienta</strong> (apps/desktop/daemon/src/vpn/mod.rs)</p>
+          <pre class="cb"><span class="kw">pub trait</span> VpnBackend: Send + Sync {
+  <span class="kw">fn</span> connect(&self, config: &VpnConfig)
+    -> impl Future&lt;Output = Result&lt;ConnectionStatus&gt;&gt;;
+  <span class="kw">fn</span> disconnect(&self)
+    -> impl Future&lt;Output = Result<()>&gt;;
+  <span class="kw">fn</span> status(&self)
+    -> impl Future&lt;Output = Result&lt;ConnectionStatus&gt;&gt;;
+}</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pg">04 / 16</div>
+</div>
+
+<!-- 05: WIREGUARD -->
+<div class="s">
+  <div class="sh"><h2>WireGuard &mdash; implementacja</h2><span class="t">PROTOKOL VPN</span></div>
+  <div class="sb">
+    <div class="g2 mb12">
+      <div class="c">
+        <h3>Serwer &mdash; <code>vpn/wireguard.rs</code></h3>
+        <ul class="b">
+          <li><code>WireGuardBackend::new(port)</code> &mdash; config dir: <code>/etc/wireguard</code></li>
+          <li>Klucz prywatny: <code>Command::new("wg").arg("genkey")</code> &rarr; <code>server.key</code></li>
+          <li>Klucz publiczny: <code>Command::new("wg").arg("pubkey")</code> (stdin: privkey)</li>
+          <li>Interfejs: <code>ip link add wg0 type wireguard</code> lub <strong>wireguard-go</strong> fallback</li>
+          <li>Konfiguracja: <code>wg setconf wg0 wg0.conf</code> + <code>ip addr add 10.8.0.1/24</code></li>
+          <li>Start: <code>ip link set up dev wg0</code></li>
+        </ul>
+      </div>
+      <div class="c">
+        <h3>apply_peers() &mdash; sync co 2s</h3>
+        <ul class="b">
+          <li>Control plane zwraca liste <code>PeerSpec</code> z <code>public_key</code> + <code>allowed_ips</code></li>
+          <li>Buduje nowy <code>wg0.conf</code> z sekcjami <code>[Peer]</code></li>
+          <li>Zapis do <code>wg0.conf.new</code> (atomowy swap)</li>
+          <li>Linux/macOS: <code>wg syncconf wg0 wg0.conf.new</code> &mdash; <strong>live update</strong> bez przerwy</li>
+          <li>Fallback: pelny <code>wg setconf</code> jesli syncconf zawiedzie</li>
+          <li>Windows: podmiana conf + restart serwisu</li>
+        </ul>
+      </div>
+    </div>
+    <div class="g2" style="flex:1">
+      <div>
+        <h3 class="mb8">Serwer &mdash; start() (wireguard.rs:151)</h3>
+        <pre class="cb"><span class="kw">fn</span> start(&self) -> Result<()> {
+  self.ensure_keys_and_config()?;
+  <span class="cm">// wg genkey → /etc/wireguard/server.key</span>
+  <span class="cm">// wg0.conf: [Interface] PrivateKey + ListenPort</span>
+
+  <span class="kw">let</span> nm = get_network_manager();
+  nm.configure_wireguard(
+    <span class="str">"wg0"</span>, <span class="str">"10.8.0.1/24"</span>, self.listen_port,
+    &self.conf_path()
+  )?; <span class="cm">// ip link add + wg setconf</span>
+  nm.bring_up_interface(<span class="str">"wg0"</span>)?;
+  <span class="cm">// ip link set up dev wg0</span>
+}</pre>
+      </div>
+      <div>
+        <h3 class="mb8">Klient &mdash; connect() (daemon/vpn/wireguard.rs:61)</h3>
+        <pre class="cb"><span class="kw">let</span> wg_config = build_config(config)?;
+<span class="cm">// [Interface] PrivateKey, Address, DNS</span>
+<span class="cm">// [Peer] PublicKey, AllowedIPs=0.0.0.0/0,::/0</span>
+<span class="cm">//        Endpoint, PersistentKeepalive=25</span>
+fs::write(&config_path, &wg_config)?; <span class="cm">// chmod 0o600</span>
+
+<span class="cm">// macOS/Linux:</span>
+Command::new(&wg_quick).args([<span class="str">"up"</span>, path]);
+<span class="cm">// Windows:</span>
+Command::new(<span class="str">"wireguard.exe"</span>)
+  .args([<span class="str">"/installtunnelservice"</span>, path]);
+<span class="cm">// Weryfikacja: wg show → "latest handshake:"</span>
+<span class="cm">// Rollback jesli brak handshake po 6 probach</span></pre>
+      </div>
+    </div>
+  </div>
+  <div class="pg">05 / 16</div>
+</div>
+
+<!-- 06: OPENVPN -->
+<div class="s">
+  <div class="sh"><h2>OpenVPN &mdash; implementacja</h2><span class="t">PROTOKOL VPN</span></div>
+  <div class="sb">
+    <div class="g2 mb12">
+      <div class="c">
+        <h3>Serwer &mdash; <code>vpn/openvpn.rs</code></h3>
+        <ul class="b">
+          <li>Self-signed cert: <code>openssl req -x509 -newkey rsa:2048 -sha256 -days 3650</code></li>
+          <li>Serwer nasuchuje na porcie <strong>1194/UDP</strong> (env <code>OPENVPN_PORT</code>)</li>
+          <li>Auth klienta: <code>auth-user-pass-verify verify.sh via-env</code></li>
+          <li>Skrypt <code>verify.sh</code>: <code>grep -F -x "$username $password" secrets.txt</code></li>
+          <li>Management interface na <code>127.0.0.1:7505</code> do monitoringu</li>
+          <li>Status: parsowanie <code>/var/run/openvpn-status.log</code> (wersja 3)</li>
+        </ul>
+      </div>
+      <div class="c">
+        <h3>apply_peers() &mdash; aktualizacja credentials</h3>
+        <ul class="b">
+          <li>Iteruje po <code>PeerSpec</code> &mdash; filtruje peery z <code>username</code> + <code>password</code></li>
+          <li>Zapisuje do <code>/etc/openvpn/secrets.txt</code>: <code>"user pass\n"</code> per linia</li>
+          <li>OpenVPN czyta plik przy kazdej probie auth &mdash; <strong>nie wymaga reloadu</strong></li>
+          <li>Metryki: <code>CLIENT_LIST,CN,Addr,BytesRx,BytesTx</code> z status.log</li>
+        </ul>
+        <p style="font-size:10px;margin-top:6px"><strong>Konfiguracja serwera:</strong> <code>proto udp</code>, <code>dev tun1</code>, <code>server 10.9.0.0/24</code>, <code>topology subnet</code>, <code>verify-client-cert none</code>, <code>username-as-common-name</code></p>
+      </div>
+    </div>
+    <div class="g2" style="flex:1">
+      <div>
+        <h3 class="mb8">Serwer &mdash; konfiguracja (openvpn.rs:52)</h3>
+        <pre class="cb"><span class="cm">// Generowana dynamicznie w ensure_certs_and_conf()</span>
+port 1194
+proto udp
+dev tun1
+server 10.9.0.0 255.255.255.0
+verify-client-cert none
+username-as-common-name
+script-security 2
+<span class="kw">auth-user-pass-verify</span> /etc/openvpn/verify.sh via-env
+management 127.0.0.1 7505
+status /var/run/openvpn-status.log 5
+status-version 3
+
+<span class="cm">// Start: openvpn --config server.conf --daemon</span>
+<span class="cm">// Stop:  pkill openvpn</span></pre>
+      </div>
+      <div>
+        <h3 class="mb8">Klient &mdash; connect() (daemon/vpn/openvpn.rs:8)</h3>
+        <pre class="cb"><span class="kw">fn</span> build_config(cfg: &VpnConfig) -> String {
+  <span class="str">"client
+dev tun
+proto udp
+remote {endpoint} {port}
+cipher AES-256-GCM
+auth SHA256
+remote-cert-tls server
+keepalive 10 60"</span>
+}
+<span class="cm">// Auth: zapisuje username + password</span>
+<span class="cm">// do vpnvpn-auth.txt (chmod 0o600)</span>
+
+<span class="cm">// Unix:  openvpn --config ... --daemon</span>
+<span class="cm">//        --log /var/log/vpnvpn-openvpn.log</span>
+<span class="cm">// Win:   openvpn.exe --config ...</span>
+<span class="cm">// Stop:  pkill -SIGTERM openvpn (Unix)</span>
+<span class="cm">//        taskkill /IM openvpn.exe (Win)</span></pre>
+      </div>
+    </div>
+  </div>
+  <div class="pg">06 / 16</div>
+</div>
+
+<!-- 07: IKEV2 -->
+<div class="s">
+  <div class="sh"><h2>IKEv2 / IPsec &mdash; implementacja</h2><span class="t">PROTOKOL VPN</span></div>
+  <div class="sb">
+    <div class="g2 mb12">
+      <div class="c">
+        <h3>Serwer &mdash; <code>ikev2.rs</code> + <code>vpn/ipsec.rs</code></h3>
+        <ul class="b">
+          <li><code>setup_ikev2()</code> kopiuje certyfikaty PKI do <code>/etc/ipsec.d/</code></li>
+          <li>CA &rarr; <code>/etc/ipsec.d/cacerts/ca.pem</code></li>
+          <li>Server cert &rarr; <code>/etc/ipsec.d/certs/server.pem</code></li>
+          <li>Klucz prywatny &rarr; <code>/etc/ipsec.d/private/server.key</code></li>
+          <li>Generuje <code>/etc/ipsec.conf</code> i <code>/etc/ipsec.secrets</code></li>
+          <li>Start: <code>ipsec start --nofork</code> (spawn jako child process)</li>
+          <li>Status: <code>swanctl -l</code> &rarr; zlicza <code>ESTABLISHED</code> / <code>INSTALLED</code></li>
+        </ul>
+      </div>
+      <div class="c">
+        <h3>Konfiguracja strongSwan (ikev2.rs:58)</h3>
+        <pre class="cb">conn ikev2-eaptls
+  keyexchange=ikev2
+  <span class="kw">ike</span>=aes256gcm16-prfsha256-ecp256!
+  <span class="kw">esp</span>=aes256gcm16-prfsha256-ecp256!
+  leftcert=server.pem
+  leftsendcert=always
+  leftsubnet=0.0.0.0/0,::/0
+  leftauth=pubkey
+  rightauth=pubkey
+  rightsourceip=<span class="str">10.9.0.0/24,fd42:42:42::/64</span>
+  mobike=yes        <span class="cm"># szybki reconnect</span>
+  forceencaps=yes   <span class="cm"># NAT traversal</span>
+  <span class="cm"># Secrets: : RSA /etc/ipsec.d/private/server.key</span></pre>
+      </div>
+    </div>
+    <div class="g3" style="flex:1">
+      <div>
+        <h3 class="mb8">Klient &mdash; macOS (ikev2.rs:103)</h3>
+        <pre class="cb"><span class="cm">// Generuje .mobileconfig (XML plist)</span>
+&lt;dict&gt;
+  &lt;key&gt;IKEv2&lt;/key&gt;
+  &lt;dict&gt;
+    &lt;key&gt;AuthenticationMethod&lt;/key&gt;
+    &lt;string&gt;SharedSecret&lt;/string&gt;
+    &lt;key&gt;RemoteAddress&lt;/key&gt;
+    &lt;string&gt;{endpoint}&lt;/string&gt;
+  &lt;/dict&gt;
+&lt;/dict&gt;
+<span class="cm">// Connect: networksetup</span>
+<span class="cm">//   -connectpppoeservice "vpnVPN-IKEv2"</span>
+<span class="cm">// Status: scutil --nc status</span></pre>
+      </div>
+      <div>
+        <h3 class="mb8">Klient &mdash; Linux (ikev2.rs:253)</h3>
+        <pre class="cb"><span class="cm">// strongSwan client config</span>
+conn vpnvpn
+  keyexchange=ikev2
+  type=tunnel
+  left=%any
+  leftauth=psk
+  right={endpoint}
+  rightsubnet=0.0.0.0/0
+  ike=aes256-sha256-modp2048!
+  esp=aes256-sha256!
+
+<span class="cm">// ipsec reload → ipsec up vpnvpn</span>
+<span class="cm">// Status: ipsec status vpnvpn</span>
+<span class="cm">//   → "ESTABLISHED" = connected</span></pre>
+      </div>
+      <div>
+        <h3 class="mb8">Klient &mdash; Windows (ikev2.rs:348)</h3>
+        <pre class="cb"><span class="cm">// Wbudowany klient Windows</span>
+<span class="cm">// PowerShell:</span>
+Add-VpnConnection
+  -Name <span class="str">"vpnVPN-IKEv2"</span>
+  -ServerAddress <span class="str">"{endpoint}"</span>
+  -TunnelType IKEv2
+  -AuthenticationMethod EAP
+  -EncryptionLevel Required
+
+<span class="cm">// Polaczenie:</span>
+rasdial <span class="str">"vpnVPN-IKEv2"</span>
+<span class="cm">// Disconnect:</span>
+rasdial <span class="str">"vpnVPN-IKEv2"</span> /disconnect</pre>
+      </div>
+    </div>
+  </div>
+  <div class="pg">07 / 16</div>
+</div>
+
+<!-- 08: PKI + KRYPTOGRAFIA -->
+<div class="s">
+  <div class="sh"><h2>PKI i kryptografia</h2><span class="t">BEZPIECZENSTWO</span></div>
+  <div class="sb">
+    <div class="g2 mb16">
+      <div class="c">
+        <h3>Generowanie certyfikatow &mdash; <code>pki.rs</code></h3>
+        <pre class="cb"><span class="kw">use</span> rcgen::{Certificate, CertificateParams,
+            IsCa, BasicConstraints, SanType};
+<span class="kw">use</span> sha2::{Digest, Sha256};
+
+<span class="cm">// 1. CA certificate (self-signed)</span>
+<span class="kw">let</span> ca_params = CertificateParams::default();
+ca_params.is_ca = IsCa::Ca(Unconstrained);
+ca_params.distinguished_name
+  .push(DnType::CommonName, <span class="str">"vpnvpn-ca"</span>);
+<span class="kw">let</span> ca = Certificate::from_params(ca_params)?;
+
+<span class="cm">// 2. Server cert (signed by CA)</span>
+<span class="kw">let</span> srv = CertificateParams::new(vec![<span class="str">"vpnvpn-server"</span>]);
+srv.subject_alt_names.push(SanType::IpAddress(ip));
+<span class="kw">let</span> pem = srv.serialize_pem_with_signer(&ca)?;
+
+<span class="cm">// 3. Fingerprint (SHA-256, hex format)</span>
+<span class="kw">let</span> digest = Sha256::digest(&der);
+<span class="cm">// "AA:BB:CC:..." → rejestrowany w control plane</span></pre>
+      </div>
+      <div class="c">
+        <h3>Biblioteki kryptograficzne (Cargo.toml)</h3>
+        <table style="font-size:11px">
+          <tr><th>Biblioteka</th><th>Zastosowanie</th></tr>
+          <tr><td><span class="p pe">rcgen 0.12</span></td><td>Generowanie certyfikatow x509 (CA + server) w czystym Rust</td></tr>
+          <tr><td><span class="p pe">sha2 0.10</span></td><td>SHA-256 fingerprint certyfikatow serwera</td></tr>
+          <tr><td><span class="p pe">x25519-dalek 2.0</span></td><td>Krzywe eliptyczne Curve25519 (klucze WireGuard)</td></tr>
+          <tr><td><span class="p pe">base64 0.22</span></td><td>Kodowanie/dekodowanie kluczy i certyfikatow PEM</td></tr>
+          <tr><td><span class="p pb">nix 0.29</span></td><td>Sprawdzanie uprawnien root (euid) na Unix</td></tr>
+          <tr><td><span class="p pb">security-framework</span></td><td>Keychain macOS &mdash; credentials storage</td></tr>
+          <tr><td><span class="p pg2">openssl CLI</span></td><td>Self-signed cert dla OpenVPN (<code>req -x509</code>)</td></tr>
+        </table>
+        <p style="font-size:10px;color:var(--s400);margin-top:8px">PKI uzywane przez: OpenVPN (CA bundle + fingerprint) i IKEv2 (certyfikaty w /etc/ipsec.d/)</p>
+      </div>
+    </div>
+    <div class="c" style="flex:1">
+      <h3>Przeplyw PKI w systemie</h3>
+      <div class="pipe">
+        <div class="pipe-s"><div class="pipe-n">pki::ensure_pki()</div><div class="pipe-d">rcgen: CA + server cert</div></div>
+        <div class="pipe-a"></div>
+        <div class="pipe-s"><div class="pipe-n">Env vars</div><div class="pipe-d">VPN_OVPN_CA_BUNDLE<br>VPN_OVPN_PEER_FINGERPRINT</div></div>
+        <div class="pipe-a"></div>
+        <div class="pipe-s"><div class="pipe-n">register()</div><div class="pipe-d">CA + fingerprint &rarr; control plane</div></div>
+        <div class="pipe-a"></div>
+        <div class="pipe-s"><div class="pipe-n">setup_ikev2()</div><div class="pipe-d">Kopiuje do /etc/ipsec.d/</div></div>
+        <div class="pipe-a"></div>
+        <div class="pipe-s"><div class="pipe-n">Desktop</div><div class="pipe-d">Weryfikuje trust material</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="pg">08 / 16</div>
+</div>
+
+<!-- 09: POROWNANIE + WYWOLANIA -->
+<div class="s">
+  <div class="sh"><h2>Porownanie protokolow i wywolania systemowe</h2><span class="t">PODSUMOWANIE VPN</span></div>
+  <div class="sb">
+    <div class="c mb16">
+      <h3>Porownanie protokolow w projekcie</h3>
+      <table>
+        <tr><th>Cecha</th><th>WireGuard</th><th>OpenVPN</th><th>IKEv2 / IPsec</th></tr>
+        <tr><td>Szyfrowanie</td><td>ChaCha20-Poly1305</td><td>AES-256-GCM</td><td>AES-256-GCM (ECP256)</td></tr>
+        <tr><td>Wymiana kluczy</td><td>Curve25519 (Noise)</td><td>RSA 2048 (TLS handshake)</td><td>ECDH P-256 (IKEv2 SA)</td></tr>
+        <tr><td>Auth klienta</td><td>Klucz publiczny (wg genkey)</td><td>Username/password (verify.sh)</td><td>PSK / pubkey / EAP</td></tr>
+        <tr><td>Interfejs sieciowy</td><td><code>wg0</code> (kernel/wireguard-go)</td><td><code>tun1</code> (userspace daemon)</td><td>kernel IPsec (strongSwan)</td></tr>
+        <tr><td>Peer management</td><td><code>wg syncconf</code> (live, 0 downtime)</td><td><code>secrets.txt</code> (no reload)</td><td>Statyczna konfiguracja</td></tr>
+        <tr><td>Serwer start</td><td><code>ip link add</code> + <code>wg setconf</code></td><td><code>openvpn --config --daemon</code></td><td><code>ipsec start --nofork</code></td></tr>
+        <tr><td>Klient (macOS/Linux)</td><td><code>wg-quick up {conf}</code></td><td><code>openvpn --config --daemon</code></td><td><code>networksetup</code> / <code>ipsec up</code></td></tr>
+        <tr><td>Klient (Windows)</td><td><code>wireguard.exe /installtunnelservice</code></td><td><code>openvpn.exe --config</code></td><td><code>Add-VpnConnection</code> + <code>rasdial</code></td></tr>
+        <tr><td>Status</td><td><span class="p pe">gotowy</span></td><td><span class="p pe">gotowy</span></td><td><span class="p pa">czesciowy</span></td></tr>
+      </table>
+    </div>
+    <div class="c" style="flex:1">
+      <h3>Sync loop &mdash; main.rs (petla synchronizacji peerow)</h3>
+      <pre class="cb"><span class="cm">// main.rs:468 - Peer Sync Loop (uruchamiany jako tokio::spawn)</span>
+<span class="kw">let</span> protos_env = env::var(<span class="str">"VPN_PROTOCOLS"</span>).unwrap_or(<span class="str">"wireguard,openvpn,ikev2"</span>);
+<span class="kw">let</span> node = VpnNode::new(&enabled, args.listen_port)?;   <span class="cm">// tworzy WireGuardBackend + OpenVpnBackend + IpsecBackend</span>
+node.start_all();                                        <span class="cm">// start() na kazdym backendzie</span>
+setup_nat_and_forwarding()?;                             <span class="cm">// sysctl ip_forward=1 + iptables MASQUERADE</span>
+
+<span class="kw">loop</span> {
+    tokio::time::sleep(Duration::from_secs(<span class="str">2</span>)).await;
+    <span class="kw">let</span> peers = client.fetch_peers().await?;             <span class="cm">// GET /server/peers (Bearer token)</span>
+    node.apply_peers(&peers)?;                           <span class="cm">// iteruje po backendach: wg syncconf / secrets.txt</span>
+}</pre>
+    </div>
+  </div>
+  <div class="pg">09 / 16</div>
+</div>
+
+<!-- 10: TECHNOLOGIE -->
+<div class="s">
+  <div class="sh"><h2>Wykorzystane technologie</h2><span class="t">STACK</span></div>
+  <div class="sb">
+    <table>
+      <tr><th style="width:130px">Komponent</th><th style="width:200px">Technologia</th><th>Do czego sluzy</th></tr>
+      <tr><td>Frontend</td><td><span class="p pe">Next.js 15</span> <span class="p pg2">TypeScript</span></td><td>App Router, SSR, panel uzytkownika i admina, strony marketingowe</td></tr>
+      <tr><td></td><td><span class="p pb">tRPC v11</span></td><td>Typesafe RPC miedzy frontendem a API routes Next.js (8 routerow)</td></tr>
+      <tr><td></td><td><span class="p pb">NextAuth.js</span> <span class="p pb">Stripe</span></td><td>Autentykacja (GitHub, Google, magic link) + subskrypcje i checkout</td></tr>
+      <tr><td>Control Plane</td><td><span class="p pe">Bun</span> <span class="p pg2">Fastify</span></td><td>Lekki runtime JS + framework HTTP &mdash; REST API (~540 LOC)</td></tr>
+      <tr><td></td><td><span class="p pb">Prisma</span> <span class="p pg2">PostgreSQL</span></td><td>ORM + baza danych (Neon serverless), wspoldzielony schemat miedzy serwisami</td></tr>
+      <tr><td>VPN Server</td><td><span class="p pa">Rust</span> <span class="p pg2">Tokio</span> <span class="p pg2">Axum</span></td><td>Async agent VPN &mdash; Tokio (I/O, timery), Axum (admin HTTP API)</td></tr>
+      <tr><td></td><td><span class="p pg2">x25519-dalek</span> <span class="p pg2">rcgen</span> <span class="p pg2">sha2</span></td><td>Kryptografia: klucze WG (Curve25519), certyfikaty x509 (PKI), fingerprint (SHA-256)</td></tr>
+      <tr><td>Desktop</td><td><span class="p pe">Tauri</span> <span class="p pg2">React</span> <span class="p pg2">Vite</span></td><td>Natywna aplikacja z webowym GUI &mdash; lekka alternatywa dla Electron</td></tr>
+      <tr><td></td><td><span class="p pa">Rust Daemon</span></td><td>Osobny proces root &mdash; operacje sieciowe, IPC przez Unix Socket (JSON-RPC)</td></tr>
+      <tr><td>Infra</td><td><span class="p pe">Pulumi</span> <span class="p pg2">TypeScript</span></td><td>Infrastructure as Code &mdash; VPC, EC2, Lambda, S3, API Gateway, ECR</td></tr>
+      <tr><td>CI/CD</td><td><span class="p pb">GitHub Actions</span></td><td>3 workflows: CI (lint+test), desktop build (3 platformy), backend deploy (ECR+Pulumi)</td></tr>
+    </table>
+  </div>
+  <div class="pg">10 / 16</div>
+</div>
+
+<!-- 11: STATUS -->
+<div class="s">
+  <div class="sh"><h2>Status realizacji</h2><span class="t">PROGRESS</span></div>
+  <div class="sb">
+    <div class="g2" style="flex:1">
+      <div>
+        <div class="pr"><div class="pr-t"><span class="pr-n">apps/web &mdash; Frontend SaaS</span><span class="pr-p d">~90%</span></div><div class="pr-b"><div class="pr-f" style="width:90%"></div></div></div>
+        <div class="pr"><div class="pr-t"><span class="pr-n">services/control-plane</span><span class="pr-p d">~95%</span></div><div class="pr-b"><div class="pr-f" style="width:95%"></div></div></div>
+        <div class="pr"><div class="pr-t"><span class="pr-n">apps/vpn-server &mdash; Agent VPN</span><span class="pr-p d">~85%</span></div><div class="pr-b"><div class="pr-f" style="width:85%"></div></div></div>
+        <div class="pr"><div class="pr-t"><span class="pr-n">apps/desktop &mdash; Klient VPN</span><span class="pr-p w">~80%</span></div><div class="pr-b"><div class="pr-f w" style="width:80%"></div></div></div>
+        <div class="pr"><div class="pr-t"><span class="pr-n">services/metrics</span><span class="pr-p w">~70%</span></div><div class="pr-b"><div class="pr-f w" style="width:70%"></div></div></div>
+        <div class="pr"><div class="pr-t"><span class="pr-n">packages/db &mdash; Prisma schema</span><span class="pr-p d">100%</span></div><div class="pr-b"><div class="pr-f" style="width:100%"></div></div></div>
+        <div class="pr"><div class="pr-t"><span class="pr-n">infra/pulumi &mdash; IaC</span><span class="pr-p w">~60%</span></div><div class="pr-b"><div class="pr-f w" style="width:60%"></div></div></div>
+        <div class="pr"><div class="pr-t"><span class="pr-n">CI/CD (GitHub Actions)</span><span class="pr-p d">~90%</span></div><div class="pr-b"><div class="pr-f" style="width:90%"></div></div></div>
+      </div>
+      <div>
+        <div class="c mb12">
+          <h3>Legenda</h3>
+          <p><span class="d dg"></span><span style="color:var(--em);font-size:12px">Zrobione / blisko konca</span> &nbsp; <span class="d dy"></span><span style="color:var(--am);font-size:12px">W trakcie</span></p>
+          <p style="font-size:11px;color:var(--s500);margin-top:4px">Procenty na podstawie przegladu kodu, nie deklaracji.</p>
+        </div>
+        <div class="c">
+          <h3>Co wplywa na procenty</h3>
+          <ul class="b">
+            <li><strong>Web 90%</strong> &mdash; wszystkie strony dzialaja, proxy i analityka to placeholder</li>
+            <li><strong>Control Plane 95%</strong> &mdash; pelne API, brakuje kilku edge case'ow</li>
+            <li><strong>VPN Server 85%</strong> &mdash; WG i OpenVPN gotowe, IKEv2 czesciowy (~3 KB vs ~11 KB)</li>
+            <li><strong>Desktop 80%</strong> &mdash; GUI i auth ok, integracja daemon &harr; sidecar w toku</li>
+            <li><strong>Metrics 70%</strong> &mdash; ingestion dziala, brak API do odczytu metryk</li>
+            <li><strong>Infra 60%</strong> &mdash; global stack gotowy, 2 z planowanych regionow skonfigurowane</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pg">11 / 16</div>
+</div>
+
+<!-- 12: FRONTEND + BACKEND -->
+<div class="s">
+  <div class="sh"><h2>Frontend i backend &mdash; co zrobione</h2><span class="t">DONE</span></div>
+  <div class="sb">
+    <div class="g2" style="flex:1">
+      <div>
+        <div class="c mb12">
+          <h3 style="color:var(--em)">Frontend SaaS <span class="p pe">~90%</span></h3>
+          <ul class="b">
+            <li><strong>Auth</strong> &mdash; NextAuth.js (GitHub, Google, Email magic link)</li>
+            <li><strong>Stripe</strong> &mdash; checkout, subskrypcje (Basic/Pro/Enterprise), billing portal, webhooks</li>
+            <li><strong>Panel uzytkownika</strong> &mdash; dashboard, zarzadzanie urzadzeniami, konfiguracje VPN</li>
+            <li><strong>Panel admina</strong> &mdash; tokeny, uzytkownicy, provisioning, metryki serwerow</li>
+            <li><strong>tRPC</strong> &mdash; 8 routerow (device, billing, admin, servers, account, desktop, analytics, proxies)</li>
+            <li><strong>Email</strong> &mdash; Resend (powiadomienia, welcome)</li>
+          </ul>
+          <p style="font-size:11px;color:var(--am);margin-top:6px">Brakuje: proxy (placeholder), admin analytics (pusta strona)</p>
+        </div>
+      </div>
+      <div>
+        <div class="c mb12">
+          <h3 style="color:var(--em)">Control Plane <span class="p pe">~95%</span></h3>
+          <table style="font-size:11px">
+            <tr><th>Endpoint</th><th>Auth</th><th></th></tr>
+            <tr><td>POST /server/register</td><td>Bearer</td><td><span class="d dg"></span></td></tr>
+            <tr><td>GET /server/peers</td><td>Bearer</td><td><span class="d dg"></span></td></tr>
+            <tr><td>GET /servers, DELETE /servers/:id</td><td>API key</td><td><span class="d dg"></span></td></tr>
+            <tr><td>POST /peer/add, /peers/revoke</td><td>API key</td><td><span class="d dg"></span></td></tr>
+            <tr><td>CRUD /tokens</td><td>API key</td><td><span class="d dg"></span></td></tr>
+          </table>
+          <p style="font-size:11px;color:var(--s400);margin-top:6px">~540 LOC, Zod walidacja, rate limiting, bootstrap tokena z env.</p>
+        </div>
+        <div class="c">
+          <h3 style="color:var(--am)">Metrics <span class="p pa">~70%</span></h3>
+          <ul class="b">
+            <li><span class="d dg"></span> <code>POST /metrics/vpn</code> &mdash; ingestion metryk z serwerow</li>
+            <li><span class="d dg"></span> <code>GET /health</code> &mdash; health check</li>
+            <li><span class="d dr"></span> <code>GET /metrics</code> &mdash; brak API do odczytu</li>
+          </ul>
+          <p style="font-size:11px;color:var(--s500);margin-top:4px">Frontend czyta metryki bezposrednio z bazy przez tRPC.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pg">12 / 16</div>
+</div>
+
+<!-- 13: DESKTOP -->
+<div class="s">
+  <div class="sh"><h2>Desktop &mdash; klient VPN</h2><span class="t">~80%</span></div>
+  <div class="sb">
+    <div class="g2" style="flex:1">
+      <div>
+        <div class="c mb12">
+          <h3 style="color:var(--em)">Zrobione</h3>
+          <ul class="b">
+            <li><strong>Tauri shell</strong> &mdash; natywne okno, buildy macOS/Linux/Windows</li>
+            <li><strong>React GUI</strong> &mdash; login, dashboard, wybor serwera, mapa, ustawienia</li>
+            <li><strong>Auth</strong> &mdash; email + OTP, deep link (<code>vpnvpn://</code>)</li>
+            <li><strong>Daemon client</strong> &mdash; IPC przez Unix Socket / Named Pipe</li>
+            <li><strong>WireGuard klient</strong> &mdash; keygen, connect, status, disconnect</li>
+            <li><strong>OpenVPN klient</strong> &mdash; config gen, auth file, process management</li>
+            <li><strong>IKEv2 klient</strong> &mdash; 3 implementacje (macOS/Linux/Windows)</li>
+            <li><strong>Kill switch</strong>, <strong>system tray</strong>, detekcja narzedzi VPN</li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <div class="c mb12">
+          <h3 style="color:var(--am)">W trakcie</h3>
+          <ul class="b">
+            <li><strong>Daemon sidecar</strong> &mdash; pobieranie i zarzadzanie binarki daemon</li>
+            <li>Testy E2E polaczen na wszystkich platformach</li>
+            <li>Auto-update mechanizm</li>
+          </ul>
+        </div>
+        <div class="c">
+          <h3>Architektura daemon</h3>
+          <pre class="cb">+------------------+
+|   Tauri GUI      |  React + Vite
+|   (user space)   |  tRPC client
++--------+---------+
+         | IPC (Unix Socket / Named Pipe)
+         | JSON-RPC
++--------+---------+
+|   Rust Daemon    |  root / admin
+|   (privileged)   |  wg-quick, openvpn,
++------------------+  ipsec, networksetup
+
+<span class="cm">// Daemon nasluchuje na:</span>
+<span class="cm">// prod: /var/run/vpnvpn-daemon.sock</span>
+<span class="cm">// dev:  /tmp/vpnvpn-daemon.sock</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pg">13 / 16</div>
+</div>
+
+<!-- 14: INFRA + CI/CD -->
+<div class="s">
+  <div class="sh"><h2>Infrastruktura i CI/CD</h2><span class="t">DEVOPS</span></div>
+  <div class="sb">
+    <div class="g2 mb16">
+      <div class="c">
+        <h3>Pulumi IaC <span class="p pa">~60%</span></h3>
+        <ul class="b">
+          <li><strong>Global stack</strong> (gotowy) &mdash; ECR, S3, Lambda + API GW, AMP workspace</li>
+          <li><strong>Regional stacks</strong> &mdash; VPC, statyczna pula EC2, Elastic IP, Security Groups</li>
+          <li><strong>Skonfigurowane:</strong> <span class="p pe">eu-west-1</span> <span class="p pe">us-east-1</span></li>
+          <li style="color:var(--am)">Pozostale 8 regionow &mdash; kod komponentow gotowy, brak stack files</li>
+        </ul>
+      </div>
+      <div class="c">
+        <h3>CI/CD <span class="p pe">~90%</span></h3>
+        <ul class="b">
+          <li><strong>ci.yml</strong> &mdash; lint (Biome), testy, build na push/PR</li>
+          <li><strong>desktop-build.yml</strong> &mdash; macOS arm64/x64, Linux, Windows + S3 upload</li>
+          <li><strong>deploy-backend.yml</strong> &mdash; ECR push, Pulumi deploy, path-based triggers</li>
+          <li>Srodowiska: <span class="p pg2">staging</span> <span class="p pg2">production</span></li>
+        </ul>
+      </div>
+    </div>
+    <h3 class="mb8">Pipeline deploy</h3>
+    <div class="pipe mb16">
+      <div class="pipe-s"><div class="pipe-n">Push</div><div class="pipe-d">main / staging</div></div>
+      <div class="pipe-a"></div>
+      <div class="pipe-s"><div class="pipe-n">Lint + Test</div><div class="pipe-d">Biome, Jest</div></div>
+      <div class="pipe-a"></div>
+      <div class="pipe-s"><div class="pipe-n">Build</div><div class="pipe-d">Docker, Rust, Tauri</div></div>
+      <div class="pipe-a"></div>
+      <div class="pipe-s"><div class="pipe-n">Push artefakty</div><div class="pipe-d">ECR + S3</div></div>
+      <div class="pipe-a"></div>
+      <div class="pipe-s"><div class="pipe-n">Deploy</div><div class="pipe-d">Pulumi + Lambda</div></div>
+    </div>
+    <div class="c">
+      <h3>Siec na serwerze VPN (main.rs:100)</h3>
+      <pre class="cb" style="font-size:10px"><span class="cm">// setup_nat_and_forwarding() - wywolywane po node.start_all()</span>
+sysctl -w net.ipv4.ip_forward=1                          <span class="cm">// wlaczenie forwarding pakietow</span>
+ip route show default | grep "dev"                        <span class="cm">// detekcja interfejsu (eth0/en0)</span>
+iptables -t nat -C POSTROUTING -o eth0 -j MASQUERADE      <span class="cm">// sprawdz czy regula istnieje</span>
+iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE      <span class="cm">// NAT dla ruchu VPN → internet</span>
+<span class="cm">// Interfejsy VPN tworzene przez backendy: wg0 (WireGuard), tun1 (OpenVPN), ipsec (IKEv2)</span></pre>
+    </div>
+  </div>
+  <div class="pg">14 / 16</div>
+</div>
+
+<!-- 15: TODO / BACKLOG -->
+<div class="s">
+  <div class="sh"><h2>Co zostalo do zrobienia</h2><span class="t">TODO / BACKLOG</span></div>
+  <div class="sb">
+    <div class="g3" style="flex:1">
+      <div class="c" style="border-left:3px solid var(--am)">
+        <h3 style="color:var(--am)">Priorytet</h3>
+        <ul class="b">
+          <li>Dokonczenie integracji <strong>daemon &harr; GUI</strong> (sidecar download)</li>
+          <li><strong>IKEv2 backend</strong> &mdash; dokonczenie implementacji, testy</li>
+          <li><strong>Metrics read API</strong> &mdash; endpointy do odczytu metryk</li>
+          <li>Konfiguracja <strong>pozostalych 8 regionow</strong> AWS</li>
+          <li><strong>Testy E2E</strong> produkcja: signup &rarr; platnosc &rarr; VPN</li>
+          <li>Admin <strong>analytics</strong> &mdash; wizualizacja danych</li>
+        </ul>
+      </div>
+      <div class="c" style="border-left:3px solid var(--bl)">
+        <h3 style="color:var(--bl)">Backlog</h3>
+        <ul class="b">
+          <li><strong>Proxy</strong> &mdash; obsluga SOCKS5 / HTTP</li>
+          <li>Deploy wezlow VPN <strong>z panelu admina</strong></li>
+          <li><strong>Auto-update</strong> desktopa</li>
+          <li>Testy obciazeniowe serwerow VPN</li>
+          <li>Metryki per-user (transfer)</li>
+        </ul>
+      </div>
+      <div class="c" style="border-left:3px solid var(--em)">
+        <h3 style="color:var(--em)">Zrobione ostatnio</h3>
+        <ul class="b">
+          <li>Dodanie <strong>IKEv2</strong> z generowaniem PKI</li>
+          <li><strong>Username/password</strong> auth (OVPN, IKEv2)</li>
+          <li>Zamiana ASG na <strong>statyczna pule EC2</strong></li>
+          <li>Refaktor desktop na <strong>tRPC client</strong></li>
+          <li>Rollback interfejsu przy bledzie <strong>WG handshake</strong></li>
+          <li><strong>Dockerfile.local</strong> &mdash; testy integracyjne</li>
+          <li>Usuniecie legacy envs</li>
+        </ul>
+      </div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:14px">
+      <div class="st" style="flex:1"><div class="st-n">~83%</div><div class="st-l">szacowany postep calkowity</div></div>
+      <div class="st" style="flex:1"><div class="st-n" style="color:var(--am)">6</div><div class="st-l">zadania priorytetowe</div></div>
+      <div class="st" style="flex:1"><div class="st-n" style="color:var(--bl)">5</div><div class="st-l">backlog</div></div>
+      <div class="st" style="flex:1"><div class="st-n">14</div><div class="st-l">modeli w bazie (Prisma)</div></div>
+      <div class="st" style="flex:1"><div class="st-n">3</div><div class="st-l">protokoly VPN</div></div>
+    </div>
+  </div>
+  <div class="pg">15 / 16</div>
+</div>
+
+<!-- 16: KONIEC -->
+<div class="s" style="justify-content:center;align-items:center;text-align:center">
+  <h1 style="font-size:34px;margin-bottom:10px">Dziekuje za uwage</h1>
+  <p style="font-size:17px;color:var(--s400)">Pytania?</p>
+  <p style="font-size:11px;color:var(--s600);margin-top:36px">Projekt i implementacja platformy do zarzadzania usluga VPN</p>
+  <div class="pg">16 / 16</div>
+</div>
+
+</body>
+</html>
