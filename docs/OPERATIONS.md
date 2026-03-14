@@ -6,26 +6,33 @@ This guide covers the operational aspects of vpnVPN, including VPN node manageme
 
 ### Architecture
 
-VPN Nodes run on EC2 instances managed by an Auto Scaling Group (ASG). They register with the **Control Plane** via an Admin API (`:8080`) and report metrics to the **Metrics Service**.
+VPN Nodes run as Docker containers on manually provisioned VMs. They register with the **Control Plane** (Railway) and report metrics via `POST /metrics/vpn`. Optional Grafana Alloy scrapes Prometheus metrics.
 
-### Scaling
-
-Scaling is managed by Pulumi configuration for the regional stack.
+### Adding a Node
 
 ```bash
-# Scale Up/Down
-pulumi stack select region-us-east-1-production
-pulumi config set region:desiredInstances 5
-pulumi up -y
+# On the target VM
+export CONTROL_PLANE_URL="https://api.vpnvpn.dev"
+export VPN_TOKEN="your-token"
+sudo -E bash scripts/setup-vpn-node.sh
 ```
 
-**Auto-Scaling:** Configured to track average active sessions per instance (Target Tracking).
+### Removing a Node
+
+```bash
+# Stop the container
+docker stop vpn-server && docker rm vpn-server
+
+# Remove from control plane
+curl -X DELETE "https://api.vpnvpn.dev/servers/<server-id>" -H "X-API-Key: <key>"
+```
 
 ### Monitoring
 
 - **Health Check:** `http://<NODE_IP>:8080/health`
 - **Metrics:** `http://<NODE_IP>:8080/metrics` (Prometheus format)
-- **Logs:** CloudWatch Logs (`/vpnvpn/vpn-server`)
+- **Logs:** `docker logs vpn-server`
+- **Grafana Cloud:** Dashboards for node health, protocol distribution (if Alloy configured)
 
 ---
 
@@ -33,27 +40,28 @@ pulumi up -y
 
 ### Backup & Recovery
 
-| Component        | Method                  | Frequency  | Retention |
-| :--------------- | :---------------------- | :--------- | :-------- |
-| **Database**     | Neon Auto-Backup (PITR) | Continuous | 30 Days   |
-| **Pulumi State** | Pulumi Cloud            | Continuous | Unlimited |
-| **Secrets**      | AWS Secrets Manager     | N/A        | N/A       |
+| Component    | Method                  | Frequency  | Retention |
+| :----------- | :---------------------- | :--------- | :-------- |
+| **Database** | Neon Auto-Backup (PITR) | Continuous | 30 Days   |
 
-**Database Restore:** Use Neon Console to create a branch from a point-in-time or restore from a scheduled dump.
+**Database Restore:** Use Neon Console to create a branch from a point-in-time.
 
 ### Certificate Rotation
 
-- **ACM Certificates:** Automatically managed and renewed by AWS/Pulumi.
-- **VPN Server Keys:** Persisted on nodes. To rotate, update `NEXT_PUBLIC_WG_SERVER_PUBLIC_KEY` and trigger a rolling replacement of nodes.
+- **VPN Server Keys:** Persisted in `/etc/vpnvpn/pki/` on nodes. To rotate, delete the PKI directory and restart the container.
 - **VPN Tokens:**
-  1.  Generate new token via Admin API.
-  2.  Update Pulumi secret: `pulumi config set --secret vpnToken "NEW_TOKEN"`.
-  3.  Redeploy regional stacks to roll instances.
+  1. Generate new token via Admin API (`POST /tokens`).
+  2. Update `VPN_TOKEN` on each node and restart.
 
 ### Updates
 
-- **VPN Server:** Push new image tag -> Update Pulumi `imageTag` -> `pulumi up` (triggers rolling update).
-- **Lambda:** `pulumi up` updates function code automatically.
+- **VPN Server:** Pull new image from GHCR and restart the container.
+  ```bash
+  docker pull ghcr.io/xnetcat/vpnvpn/vpn-server:latest
+  docker stop vpn-server && docker rm vpn-server
+  # Re-run docker run command from setup
+  ```
+- **Control Plane:** Push to main/staging branch (Railway auto-deploys).
 
 ---
 
@@ -66,22 +74,23 @@ pulumi up -y
 - **Symptom:** Logs show `registration_failed`.
 - **Check:**
   - Is `VPN_TOKEN` correct?
-  - Is `API_URL` reachable from the node? (Check Security Groups/NACLs).
+  - Is `API_URL` reachable from the node?
   - Is the Control Plane healthy? (`curl https://api.vpnvpn.dev/health`)
 
 #### Clients Can't Connect
 
 - **Symptom:** Handshake fails.
 - **Check:**
-  - Security Group allowing UDP 51820?
+  - Firewall allowing UDP 51820 (WireGuard), 1194 (OpenVPN), 500/4500 (IKEv2)?
   - Client config matches Server Public Key?
-  - Node healthy?
+  - Node healthy? (`curl http://localhost:8080/health`)
 
 #### Database Connection Errors
 
-- **Symptom:** Lambda timeouts / 500 errors.
+- **Symptom:** Control plane 500 errors.
 - **Check:**
   - Neon status.
+  - Railway service logs.
   - Connection pool exhaustion (check Neon dashboard).
 
 ### Diagnostic Commands
@@ -90,16 +99,22 @@ pulumi up -y
 # Check Node Health
 curl http://<NODE_IP>:8080/health
 
+# Check Node Status
+curl http://<NODE_IP>:8080/status
+
+# Check Node Metrics
+curl http://<NODE_IP>:8080/metrics
+
 # Check Control Plane Health
 curl https://api.vpnvpn.dev/health
 
-# Check Logs (AWS CLI)
-aws logs tail /aws/lambda/control-plane --follow
+# View Node Logs
+docker logs vpn-server --tail 100
 ```
 
 ### Escalation
 
-1.  Check CloudWatch Dashboards.
-2.  Review recent deployments/changes.
-3.  Check Database status.
-4.  Contact Platform Lead.
+1. Check Grafana Cloud dashboards (if configured).
+2. Review Railway deployment logs.
+3. Check Database status (Neon).
+4. Contact Platform Lead.

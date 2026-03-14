@@ -10,6 +10,7 @@ pub const CA_PEM: &str = "ca.pem";
 pub const CA_KEY: &str = "ca.key";
 pub const SERVER_PEM: &str = "server.pem";
 pub const SERVER_KEY: &str = "server.key";
+pub const TLS_CRYPT_KEY: &str = "tls-crypt.key";
 
 pub struct PkiArtifacts {
     pub ca_pem: String,
@@ -92,6 +93,30 @@ pub fn ensure_pki(public_ip: Option<String>) -> Result<PkiArtifacts> {
         server_pem,
         server_fingerprint: fingerprint,
     })
+}
+
+pub fn ensure_tls_crypt_key() -> Result<String> {
+    let key_path = Path::new(PKI_DIR).join(TLS_CRYPT_KEY);
+    if key_path.exists() {
+        return fs::read_to_string(&key_path).context("read existing tls-crypt key");
+    }
+
+    fs::create_dir_all(PKI_DIR).context("create pki dir")?;
+
+    let key_path_str = key_path
+        .to_str()
+        .ok_or_else(|| anyhow!("invalid tls-crypt key path"))?;
+
+    let status = std::process::Command::new("openvpn")
+        .args(["--genkey", "secret", key_path_str])
+        .status()
+        .context("run openvpn --genkey")?;
+
+    if !status.success() {
+        return Err(anyhow!("openvpn --genkey failed"));
+    }
+
+    fs::read_to_string(&key_path).context("read generated tls-crypt key")
 }
 
 fn pem_to_der(pem: &str) -> Result<Vec<u8>> {

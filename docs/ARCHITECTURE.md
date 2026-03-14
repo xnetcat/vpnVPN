@@ -50,10 +50,14 @@ See `apps/desktop/DEVELOPMENT.md` for daemon development details.
 Rust VPN node binary supporting WireGuard, OpenVPN, and IKEv2.
 
 - Generates and persists WireGuard server keys
+- Shared PKI for OpenVPN and IKEv2 certificates
 - Registers with control plane via `POST /server/register`
 - Periodically fetches peers via `GET /server/peers`
 - Applies peers to WireGuard/OpenVPN/IKEv2 backends
 - Exposes admin API (`/health`, `/metrics`, `/status`, `/pubkey`) on `ADMIN_PORT`
+- IKEv2 uses EAP-MSCHAPv2 for username/password auth
+- OpenVPN uses tls-crypt and hashed credentials
+- WireGuard supports PersistentKeepalive, MTU 1420, IPv6
 
 ## Services
 
@@ -61,11 +65,7 @@ Rust VPN node binary supporting WireGuard, OpenVPN, and IKEv2.
 
 Bun + Fastify HTTP API backed by Postgres via `@vpnvpn/db`.
 
-**Deployment Options:**
-
-1. **AWS Lambda + API Gateway** (production)
-2. **Docker container** (self-hosted)
-3. **Direct execution** (development)
+**Deployment:** Railway (auto-deploys from GitHub).
 
 **Endpoints:**
 
@@ -81,22 +81,9 @@ Bun + Fastify HTTP API backed by Postgres via `@vpnvpn/db`.
 | `GET /tokens`                 | List all VPN node tokens (API key auth)              |
 | `POST /tokens`                | Create a new token (API key auth)                    |
 | `DELETE /tokens/:token`       | Revoke a token (API key auth)                        |
+| `POST /metrics/vpn`           | Ingest VPN server metrics                            |
 
 **Security:** Bearer tokens for VPN nodes, `x-api-key` header for web app calls.
-
-### `services/metrics`
-
-Bun + Fastify HTTP API for vpn-server metrics ingestion.
-
-**Deployment Options:**
-
-1. **AWS Lambda + API Gateway** (production)
-2. **Docker container** (self-hosted)
-3. **Direct execution** (development)
-
-**Endpoint:** `POST /metrics/vpn` — accepts CPU, memory, active peers, and region data.
-
-Persists metrics to Postgres for dashboard views.
 
 ## Shared Database
 
@@ -106,9 +93,22 @@ Prisma schema and client for:
 
 - **SaaS data:** users, sessions, accounts, subscriptions, devices, notification preferences
 - **Control plane:** VpnServer, VpnPeer, VpnToken, VpnMetric
-- **Desktop:** DesktopLoginCode
 
 Uses `DATABASE_URL` (Neon in production, Postgres in local Docker).
+
+## Observability
+
+### Grafana Cloud
+
+- VPN node metrics scraped via Grafana Alloy (Prometheus agent)
+- Alloy scrapes `localhost:8080/metrics` on each VPN node
+- Remote-writes to Grafana Cloud Prometheus
+- Dashboards for node health, protocol distribution, transfer bytes
+
+### Control Plane Metrics
+
+- `POST /metrics/vpn` endpoint stores metrics in PostgreSQL
+- Web dashboard queries VpnMetric table for real-time data
 
 ## Frontend Integration
 
@@ -131,54 +131,33 @@ The web app uses tRPC routers to:
 
 Deployed to Vercel with environment variables configured in the Vercel dashboard.
 
-### Control Plane & Metrics (Lambda)
+### Control Plane (Railway)
 
-Deployed as AWS Lambda functions with API Gateway:
+Deployed as a Docker container on Railway:
 
-- Docker images built and pushed to ECR
-- Uses Fastify's `inject()` method for Lambda compatibility
-- Same code runs locally as standalone servers
-
-### Control Plane & Metrics (Self-hosted)
-
-Can also be deployed as containers:
-
-- Docker images available via Dockerfile
-- Requires PostgreSQL database access
-- Environment variables for configuration
+- Auto-deploys from GitHub on push to main/staging
+- `railway.toml` configures the build and health check
+- Custom domain: `api.vpnvpn.dev`
+- Environment variables: `DATABASE_URL`, `CONTROL_PLANE_API_KEY`, `CONTROL_PLANE_BOOTSTRAP_TOKEN`, `PORT`
 
 ### VPN Server
 
-Deployed via Pulumi to AWS using `VpnStaticPool`:
+Docker images pushed to GHCR (`ghcr.io/xnetcat/vpnvpn/vpn-server`).
 
-- ECR repository for Docker images
-- EC2 instances with Elastic IPs (stable public addresses)
-- Security groups for VPN protocols:
-  - WireGuard (UDP 51820)
-  - OpenVPN (UDP 1194)
-  - IKEv2/IPsec (UDP 500, 4500)
-- User data script configures NAT/masquerading for VPN client internet access
+VPN nodes are deployed manually on cloud VMs:
 
-Pulumi reads `controlPlaneApiUrl` from global stack to connect VPN nodes to the control plane.
+- Use `scripts/setup-vpn-node.sh` to provision a new node
+- Each node runs the VPN server container with host networking
+- Nodes self-register with the control plane
+- Grafana Alloy (optional) scrapes metrics for Grafana Cloud
 
 ### Desktop App
 
-Built and distributed via S3:
+Built and distributed via GitHub Releases:
 
 - Multi-platform builds (macOS, Linux, Windows)
 - Automated builds via GitHub Actions
 - Download links on web app landing page
-
-### Multi-Environment Support
-
-The same containers can run on:
-
-- AWS (EC2, ECS, EKS, Lambda)
-- Kubernetes
-- Docker Compose (local development)
-- On-premises servers
-
-No AWS-specific services are required for the control plane or metrics services.
 
 ## Data Flow
 
@@ -196,15 +175,11 @@ No AWS-specific services are required for the control plane or metrics services.
                     │               │               │
                     └───────────────┼───────────────┘
                                     │
-                    ┌───────────────┼───────────────┐
-                    ▼               ▼               ▼
-            ┌───────────┐   ┌───────────┐   ┌───────────┐
-            │  Control  │   │  Metrics  │   │    NLB    │
-            │   Plane   │   │  Service  │   │           │
-            │ (Lambda)  │   │ (Lambda)  │   │           │
-            └───────────┘   └───────────┘   └───────────┘
-                    │               │               │
-                    └───────────────┼───────────────┘
+                            ┌───────▼───────┐
+                            │   Control     │
+                            │   Plane       │
+                            │  (Railway)    │
+                            └───────┬───────┘
                                     │
                             ┌───────▼───────┐
                             │   PostgreSQL  │
@@ -214,7 +189,7 @@ No AWS-specific services are required for the control plane or metrics services.
                                     │
                             ┌───────┴───────┐
                             │  VPN Servers  │
-                            │  (EC2 ASG)    │
+                            │  (Manual VMs) │
                             └───────────────┘
 ```
 
@@ -225,7 +200,10 @@ No AWS-specific services are required for the control plane or metrics services.
 1. **Web App:** NextAuth.js with OAuth providers and magic links
 2. **Control Plane (Web):** API key in `x-api-key` header
 3. **Control Plane (VPN):** Bearer token for node registration
-4. **VPN Protocol:** WireGuard/OpenVPN encryption
+4. **VPN Protocols:**
+   - WireGuard: public key + optional PSK encryption
+   - OpenVPN: tls-crypt + hashed username/password auth
+   - IKEv2: EAP-MSCHAPv2 over pubkey-authenticated tunnel
 
 ### Data Protection
 
@@ -233,3 +211,4 @@ No AWS-specific services are required for the control plane or metrics services.
 - Minimal metadata collection (session counts, public keys)
 - End-to-end encryption for all VPN traffic
 - TLS for all API communication
+- OpenVPN credentials stored as SHA-256 hashes

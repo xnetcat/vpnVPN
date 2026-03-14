@@ -356,6 +356,8 @@ async fn run_server(
             preshared_key: None,
             allowed_ips,
             endpoint: args.static_peer_endpoint.clone(),
+            username: None,
+            password: None,
         };
 
         match node_arc.apply_peers(&[static_peer]) {

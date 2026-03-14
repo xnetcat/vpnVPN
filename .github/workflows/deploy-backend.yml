@@ -1,6 +1,10 @@
 name: Deploy Backend
 
 on:
+  push:
+    branches: [main, staging]
+    paths:
+      - "apps/vpn-server/**"
   workflow_dispatch:
     inputs:
       environment:
@@ -12,196 +16,42 @@ on:
           - staging
           - production
 
-env:
-  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-  PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
-  # VPN Node Configuration
-  VPN_DESIRED_INSTANCES: ${{ vars.VPN_DESIRED_INSTANCES || '1' }}
-  VPN_MIN_INSTANCES: ${{ vars.VPN_MIN_INSTANCES || '1' }}
-  VPN_MAX_INSTANCES: ${{ vars.VPN_MAX_INSTANCES || '10' }}
-
 jobs:
-  changes:
+  build-vpn-server:
     runs-on: ubuntu-latest
-    outputs:
-      vpn_server: ${{ steps.filter.outputs.vpn_server }}
-      services: ${{ steps.filter.outputs.services }}
-      infra: ${{ steps.filter.outputs.infra }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v2
-        id: filter
-        with:
-          filters: |
-            vpn_server:
-              - 'apps/vpn-server/**'
-            services:
-              - 'services/**'
-              - 'packages/db/**'
-            infra:
-              - 'infra/pulumi/**'
-
-  build-rust:
-    needs: changes
-    if: needs.changes.outputs.vpn_server == 'true' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
+    permissions:
+      packages: write
     env:
-      AWS_REGION: ${{ vars.AWS_REGION || secrets.AWS_REGION || 'us-east-1' }}
-    outputs:
-      image_tag: ${{ steps.meta.outputs.image_tag }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set defaults
-        run: |
-          echo "ECR_REPO_NAME=${ECR_REPO_NAME:-vpnvpn/rust-server}" >> $GITHUB_ENV
-          echo "AWS_REGION=${AWS_REGION:-us-east-1}" >> $GITHUB_ENV
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.environment }}" ]; then
-             echo "DEPLOY_ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
-             if [ "${{ github.event.inputs.environment }}" = "production" ]; then
-               echo "ECR_REPO_NAME=vpnvpn/production" >> $GITHUB_ENV
-             else
-               echo "ECR_REPO_NAME=vpnvpn/staging" >> $GITHUB_ENV
-             fi
-          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
-             echo "DEPLOY_ENV=production" >> $GITHUB_ENV
-             echo "ECR_REPO_NAME=vpnvpn/production" >> $GITHUB_ENV
-          else
-             echo "DEPLOY_ENV=staging" >> $GITHUB_ENV
-             echo "ECR_REPO_NAME=vpnvpn/staging" >> $GITHUB_ENV
-          fi
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: aws-actions/amazon-ecr-login@v2
-        id: ecr
-
-      - name: Compute image meta
-        id: meta
-        run: |
-          ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}"
-          IMAGE_TAG="sha-${GITHUB_SHA}"
-          if [ "${DEPLOY_ENV}" = "production" ]; then
-            ENV_TAG="prod-${IMAGE_TAG}"
-          else
-            ENV_TAG="staging-${IMAGE_TAG}"
-          fi
-          echo "ecr_uri=${ECR_URI}" >> $GITHUB_OUTPUT
-          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
-          echo "env_tag=${ENV_TAG}" >> $GITHUB_OUTPUT
-
-      - name: Build and Push
-        working-directory: apps/vpn-server
-        run: |
-          docker build -t ${{ steps.meta.outputs.ecr_uri }}:${{ steps.meta.outputs.image_tag }} .
-          docker push ${{ steps.meta.outputs.ecr_uri }}:${{ steps.meta.outputs.image_tag }}
-          docker tag ${{ steps.meta.outputs.ecr_uri }}:${{ steps.meta.outputs.image_tag }} ${{ steps.meta.outputs.ecr_uri }}:${{ steps.meta.outputs.env_tag }}
-          docker push ${{ steps.meta.outputs.ecr_uri }}:${{ steps.meta.outputs.env_tag }}
-
-  deploy-infra:
-    needs: [changes, build-rust]
-    if: always() && (needs.changes.outputs.infra == 'true' || needs.changes.outputs.vpn_server == 'true' || needs.changes.outputs.services == 'true' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
-    env:
-      AWS_REGION: ${{ vars.AWS_REGION || secrets.AWS_REGION || 'us-east-1' }}
+      INPUT_ENVIRONMENT: ${{ github.event.inputs.environment }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Set environment
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.environment }}" ]; then
-             echo "DEPLOY_ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
-          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
-             echo "DEPLOY_ENV=production" >> $GITHUB_ENV
+          if [ -n "$INPUT_ENVIRONMENT" ]; then
+            echo "DEPLOY_ENV=$INPUT_ENVIRONMENT" >> $GITHUB_ENV
+          elif [ "$GITHUB_REF" == "refs/heads/main" ]; then
+            echo "DEPLOY_ENV=production" >> $GITHUB_ENV
           else
-             echo "DEPLOY_ENV=staging" >> $GITHUB_ENV
-          fi
-          echo "ECR_REPO_NAME=${ECR_REPO_NAME:-vpnvpn/rust-server}" >> $GITHUB_ENV
-          echo "AWS_REGION=${AWS_REGION:-us-east-1}" >> $GITHUB_ENV
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: "1.1.38"
-
-      - name: Cache Bun install cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: pulumi-bun-cache-${{ runner.os }}-${{ hashFiles('infra/pulumi/bun.lockb') }}
-
-      - name: Cache Pulumi node_modules
-        uses: actions/cache@v4
-        with:
-          path: infra/pulumi/node_modules
-          key: pulumi-node-modules-${{ runner.os }}-${{ hashFiles('infra/pulumi/bun.lockb') }}
-      - uses: pulumi/actions@v5
-        with:
-          pulumi-version: latest
-
-      - name: Install Pulumi deps
-        working-directory: infra/pulumi
-        run: bun install
-
-      - name: Pulumi login
-        working-directory: infra/pulumi
-        run: pulumi login
-
-      - name: Deploy Global Stack
-        working-directory: infra/pulumi
-        run: |
-          STACK_NAME="global-${DEPLOY_ENV}"
-          pulumi stack select "${STACK_NAME}" || pulumi stack init "${STACK_NAME}"
-
-          pulumi config set aws:region $AWS_REGION --stack "${STACK_NAME}"
-          pulumi config set global:ecrRepoName $ECR_REPO_NAME --stack "${STACK_NAME}"
-
-          # Check if controlPlaneApiKey is already set
-          CURRENT_API_KEY=$(pulumi config get controlPlaneApiKey --stack "${STACK_NAME}" 2>/dev/null || echo "")
-
-          if [[ -z "$CURRENT_API_KEY" ]]; then
-            echo "Generating new Control Plane API Key..."
-            # Generate a random 32-byte hex string (64 chars)
-            NEW_API_KEY=$(openssl rand -hex 32)
-            pulumi config set --secret controlPlaneApiKey "${NEW_API_KEY}" --stack "${STACK_NAME}"
-            echo "Generated and configured new Control Plane API Key"
-          else
-            echo "Using existing Control Plane API Key"
+            echo "DEPLOY_ENV=staging" >> $GITHUB_ENV
           fi
 
-          pulumi up -y --stack "${STACK_NAME}"
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Deploy Region Stack
-        working-directory: infra/pulumi
+      - name: Build and push VPN server image
+        working-directory: apps/vpn-server
         env:
-          IMAGE_TAG: ${{ needs.build-rust.outputs.image_tag }}
+          GH_REPO_OWNER: ${{ github.repository_owner }}
+          GH_SHA: ${{ github.sha }}
         run: |
-          STACK_NAME="region-us-east-1-${DEPLOY_ENV}"
-          pulumi stack select "${STACK_NAME}" || pulumi stack init "${STACK_NAME}"
-
-          pulumi config set aws:region $AWS_REGION --stack "${STACK_NAME}"
-          pulumi config set global:ecrRepoName $ECR_REPO_NAME --stack "${STACK_NAME}"
-
-          # Only update image tag if it was rebuilt
-          if [ -n "$IMAGE_TAG" ]; then pulumi config set region:imageTag "$IMAGE_TAG" --stack "${STACK_NAME}"; fi
-
-          pulumi config set region:desiredInstances ${VPN_DESIRED_INSTANCES:-2} --stack "${STACK_NAME}"
-          pulumi config set region:minInstances ${VPN_MIN_INSTANCES:-1} --stack "${STACK_NAME}"
-          pulumi config set region:maxInstances ${VPN_MAX_INSTANCES:-10} --stack "${STACK_NAME}"
-          pulumi config set region:adminCidr 0.0.0.0/0 --stack "${STACK_NAME}"
-
-          pulumi up -y --stack "${STACK_NAME}"
+          IMAGE="ghcr.io/${GH_REPO_OWNER}/vpnvpn/vpn-server"
+          SHORT_SHA="${GH_SHA::7}"
+          TAG="sha-${SHORT_SHA}"
+          docker build -t "${IMAGE}:${TAG}" -t "${IMAGE}:${DEPLOY_ENV}-latest" .
+          docker push "${IMAGE}:${TAG}"
+          docker push "${IMAGE}:${DEPLOY_ENV}-latest"

@@ -1,19 +1,17 @@
 ## vpnVPN - Privacy-First VPN SaaS Platform
 
-Modern monorepo for a VPN SaaS, built with Bun + Turborepo, Next.js, Rust, and in-house services for the control plane and metrics. The stack is deployable to AWS but not tied to AWS‑only services.
+Modern monorepo for a VPN SaaS, built with Bun + Turborepo, Next.js, Rust, and an in-house control plane. Control plane deploys to Railway, VPN server images to GHCR, desktop apps to GitHub Releases.
 
 ### High-Level Architecture
 
 - **Apps**
-  - `apps/web`: Next.js 15 SaaS frontend (Vercel-ready) with tRPC, Stripe, NextAuth, Prisma.
+  - `apps/web`: Next.js 15 SaaS frontend (Vercel) with tRPC, Stripe, NextAuth, Prisma.
   - `apps/desktop`: Tauri desktop app with a privileged Rust daemon for VPN management. Supports WireGuard, OpenVPN, and IKEv2.
   - `apps/vpn-server`: Rust VPN node agent supporting WireGuard, OpenVPN, and IKEv2 with control-plane integration.
 - **Services**
-  - `services/control-plane`: Bun/Fastify HTTP API for servers, peers, tokens, and registration. Deployed as Lambda via Docker.
-  - `services/metrics`: Bun/Fastify metrics ingestion API for vpn-server stats. Deployed as Lambda via Docker.
+  - `services/control-plane`: Bun/Fastify HTTP API for servers, peers, tokens, metrics, and registration. Deployed to Railway.
 - **Shared**
   - `packages/db`: Shared Prisma/Postgres client and schema (Neon in prod, Postgres in dev).
-  - `infra/pulumi`: AWS infrastructure (Lambda, API Gateway, EC2 with Elastic IPs, ECR, S3).
 
 ### Quick Start (Monorepo)
 
@@ -24,7 +22,7 @@ cd vpnVPN
 # Install dependencies with Bun
 bun install
 
-# Start the full local stack (Postgres + control-plane + metrics + vpn-node + web)
+# Start the full local stack (Postgres + control-plane + vpn-node + web)
 # plus the Tauri desktop shell and Stripe listener:
 bun run dev
 
@@ -32,35 +30,24 @@ bun run dev
 bun run dev:turbo      # turbo run dev --parallel
 ```
 
-See `docs/LOCAL_DEV.md` for full local stack instructions and `docs/ARCHITECTURE.md` for a deeper architecture overview.
+See `docs/ARCHITECTURE.md` for a deeper architecture overview.
 
 ### Deployment
 
-```bash
-# Deploy to staging
-./scripts/deploy.sh staging
+- **Control Plane:** Auto-deploys via Railway on push to main/staging.
+- **VPN Server:** Docker images pushed to GHCR via GitHub Actions. Nodes provisioned manually with `scripts/setup-vpn-node.sh`.
+- **Desktop App:** Built via GitHub Actions and uploaded to GitHub Releases.
+- **Web App:** Auto-deploys via Vercel.
 
-# Deploy to production
-./scripts/deploy.sh production
-```
-
-The deployment script:
-
-- Loads environment from root `.env`
-- Deploys global infrastructure to us-east-1
-- Builds and pushes vpn-server Docker image
-- Deploys VPN nodes to regions in `scripts/regions.json`
-- Builds desktop apps with hardcoded API endpoints
-- Uploads desktop executables to S3
-
-See `docs/CI_CD.md` for detailed deployment documentation.
+See `docs/DEPLOYMENT.md` for detailed deployment documentation.
 
 ### Tests & CI
 
 - Unit/integration tests live under each app/service (Vitest for TS, `cargo test` for Rust).
+- E2E tests in `e2e/` run Docker-based connectivity tests for all VPN protocols.
 - Turbo tasks:
   - `bun run lint` → `turbo run lint`
   - `bun run test` → `turbo run test`
-  - `bun run build` → `turbo run build`
+  - `bash e2e/run-e2e.sh` → full E2E test suite
 
-See `docs/CI_CD.md` for the GitHub Actions workflow and how Docker images are built and deployed.
+See `docs/DEPLOYMENT.md` for the GitHub Actions workflow details.

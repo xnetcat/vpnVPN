@@ -1,4 +1,5 @@
 use super::{BackendStatus, VpnBackend, VpnProtocol};
+use crate::pki::{PKI_DIR, CA_PEM, SERVER_PEM, SERVER_KEY, TLS_CRYPT_KEY};
 use anyhow::{anyhow, Context, Result};
 use std::fs;
 use std::path::Path;
@@ -27,72 +28,89 @@ impl OpenVpnBackend {
 
     fn ensure_certs_and_conf(&self) -> Result<()> {
         fs::create_dir_all(OVPN_DIR).context("create /etc/openvpn")?;
-        let key_path = format!("{}/server.key", OVPN_DIR);
-        let crt_path = format!("{}/server.crt", OVPN_DIR);
-        if !Path::new(&key_path).exists() || !Path::new(&crt_path).exists() {
-            // Self-signed for development
-            let subj = "/CN=vpnvpn-openvpn";
-            let status = Command::new("openssl")
-                .args([
-                    "req", "-x509", "-newkey", "rsa:2048", "-sha256", "-days", "3650", "-nodes",
-                    "-keyout", &key_path, "-out", &crt_path, "-subj", subj,
-                ])
-                .status()?;
-            if !status.success() {
-                return Err(anyhow!("openssl self-signed cert failed"));
-            }
+
+        // Use shared PKI certificates instead of self-generating
+        let pki_ca = Path::new(PKI_DIR).join(CA_PEM);
+        let pki_cert = Path::new(PKI_DIR).join(SERVER_PEM);
+        let pki_key = Path::new(PKI_DIR).join(SERVER_KEY);
+
+        let ovpn_ca = format!("{}/ca.pem", OVPN_DIR);
+        let ovpn_cert = format!("{}/server.pem", OVPN_DIR);
+        let ovpn_key = format!("{}/server.key", OVPN_DIR);
+
+        if pki_ca.exists() {
+            fs::copy(&pki_ca, &ovpn_ca).context("copy CA cert to openvpn dir")?;
+        }
+        if pki_cert.exists() {
+            fs::copy(&pki_cert, &ovpn_cert).context("copy server cert to openvpn dir")?;
+        }
+        if pki_key.exists() {
+            fs::copy(&pki_key, &ovpn_key).context("copy server key to openvpn dir")?;
         }
 
-            if !status.success() {
-                return Err(anyhow!("openssl self-signed cert failed"));
-            }
-        }
+        // Set up tls-crypt if key exists
+        let tls_crypt_src = Path::new(PKI_DIR).join(TLS_CRYPT_KEY);
+        let tls_crypt_line = if tls_crypt_src.exists() {
+            let dest = format!("{}/tls-crypt.key", OVPN_DIR);
+            fs::copy(&tls_crypt_src, &dest).context("copy tls-crypt key")?;
+            format!("tls-crypt {}\n", dest)
+        } else {
+            String::new()
+        };
 
-        // Always overwrite config to ensure updates to auth script path
         let conf = format!(
-            "port {port}\nproto udp\ndev tun1\nuser root\ngroup root\n\
-persist-key\npersist-tun\n\
-topology subnet\nserver 10.9.0.0 255.255.255.0\n\
-keepalive 10 60\n\
-dh none\n\
-tls-server\nca {ov}/server.crt\ncert {ov}/server.crt\nkey {ov}/server.key\n\
-verify-client-cert none\n\
-username-as-common-name\n\
-script-security 2\n\
-auth-user-pass-verify {auth_script} via-env\n\
-status {status_path} 5\nstatus-version 3\n\
-management 127.0.0.1 {mgmt}\nverb 3\n",
+            "port {port}\nproto udp\ndev tun1\nuser nobody\ngroup nogroup\n\
+            persist-key\npersist-tun\n\
+            topology subnet\nserver 10.9.0.0 255.255.255.0\n\
+            keepalive 10 60\n\
+            dh none\n\
+            tls-server\nca {ov}/ca.pem\ncert {ov}/server.pem\nkey {ov}/server.key\n\
+            {tls_crypt}\
+            verify-client-cert none\n\
+            username-as-common-name\n\
+            script-security 2\n\
+            auth-user-pass-verify {auth_script} via-env\n\
+            status {status_path} 5\nstatus-version 3\n\
+            management 127.0.0.1 {mgmt}\nverb 3\n",
             port = self.listen_port,
             ov = OVPN_DIR,
+            tls_crypt = tls_crypt_line,
             auth_script = OVPN_AUTH_SCRIPT,
             status_path = OVPN_STATUS,
             mgmt = OVPN_MGMT_PORT,
         );
         fs::write(OVPN_CONF, conf).context("write openvpn server.conf")?;
-        
+
         Ok(())
     }
 
     fn ensure_auth_script(&self) -> Result<()> {
+        // Use SHA-256 hashed credential verification instead of plaintext
         let script = r#"#!/bin/sh
 [ ! -f /etc/openvpn/secrets.txt ] && exit 1
-# Expect alphanumeric username/password (safe for grep)
-grep -F -x "$username $password" /etc/openvpn/secrets.txt >/dev/null
+HASH=$(printf '%s' "$password" | sha256sum | cut -d' ' -f1)
+grep -F -x "$username $HASH" /etc/openvpn/secrets.txt >/dev/null
 exit $?
 "#;
         fs::write(OVPN_AUTH_SCRIPT, script).context("write verify.sh")?;
-        
+
         use std::os::unix::fs::PermissionsExt;
         let mut perms = fs::metadata(OVPN_AUTH_SCRIPT)?.permissions();
         perms.set_mode(0o755);
         fs::set_permissions(OVPN_AUTH_SCRIPT, perms)?;
-        
-        // Ensure secrets file exists (empty initially)
+
         if !Path::new(OVPN_SECRETS).exists() {
             fs::write(OVPN_SECRETS, "").context("create empty secrets.txt")?;
         }
-        
+
         Ok(())
+    }
+
+    fn hash_password(password: &str) -> String {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(password.as_bytes());
+        format!("{:x}", hasher.finalize())
     }
 
     fn parse_status() -> BackendStatus {
@@ -101,7 +119,6 @@ exit $?
         let mut tx_total: u64 = 0;
         if let Ok(text) = fs::read_to_string(OVPN_STATUS) {
             for line in text.lines() {
-                // CLIENT_LIST,CommonName,RealAddress,BytesReceived,BytesSent,ConnectedSince,ConnectedSinceTime,Username
                 if line.starts_with("CLIENT_LIST,") {
                     let parts: Vec<&str> = line.split(',').collect();
                     if parts.len() >= 6 {
@@ -130,7 +147,6 @@ impl VpnBackend for OpenVpnBackend {
     fn start(&self) -> Result<()> {
         self.ensure_auth_script()?;
         self.ensure_certs_and_conf()?;
-        // Run as daemonized process
         let status = Command::new("openvpn")
             .args(["--config", OVPN_CONF, "--daemon"])
             .status()?;
@@ -142,8 +158,6 @@ impl VpnBackend for OpenVpnBackend {
     }
 
     fn stop(&self) -> Result<()> {
-        // Best effort: try management interface to signal exit
-        // Fallback to killall openvpn
         let _ = Command::new("pkill").arg("openvpn").status();
         Ok(())
     }
@@ -156,11 +170,11 @@ impl VpnBackend for OpenVpnBackend {
         let mut content = String::new();
         for p in peers {
             if let (Some(u), Some(pw)) = (&p.username, &p.password) {
-                content.push_str(&format!("{} {}\n", u, pw));
+                let hashed = Self::hash_password(pw);
+                content.push_str(&format!("{} {}\n", u, hashed));
             }
         }
-        
-        // Write atomically if possible, but straight write is fine for now
+
         fs::write(OVPN_SECRETS, content).context("write secrets.txt")?;
         info!(peer_count = peers.len(), "updated_openvpn_secrets");
         Ok(())

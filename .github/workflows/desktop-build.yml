@@ -17,9 +17,6 @@ on:
           - staging
           - production
 
-env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}
-
 jobs:
   build:
     strategy:
@@ -48,27 +45,32 @@ jobs:
       - name: Set environment
         id: env
         shell: bash
+        env:
+          INPUT_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          GH_REF: ${{ github.ref }}
         run: |
-          if [ "${{ github.event.inputs.environment }}" != "" ]; then
-            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
-            echo "environment=production" >> $GITHUB_OUTPUT
+          if [ -n "$INPUT_ENVIRONMENT" ]; then
+            echo "environment=$INPUT_ENVIRONMENT" >> "$GITHUB_OUTPUT"
+          elif [ "$GH_REF" == "refs/heads/main" ]; then
+            echo "environment=production" >> "$GITHUB_OUTPUT"
           else
-            echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "environment=staging" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set environment URLs
         id: urls
         shell: bash
+        env:
+          BUILD_ENV: ${{ steps.env.outputs.environment }}
         run: |
-          if [ "${{ steps.env.outputs.environment }}" == "production" ]; then
-            echo "web_url=https://vpnvpn.dev" >> $GITHUB_OUTPUT
-            echo "desktop_url=https://vpnvpn.dev/desktop?desktop=1" >> $GITHUB_OUTPUT
-            echo "app_channel=prod" >> $GITHUB_OUTPUT
+          if [ "$BUILD_ENV" == "production" ]; then
+            echo "web_url=https://vpnvpn.dev" >> "$GITHUB_OUTPUT"
+            echo "desktop_url=https://vpnvpn.dev/desktop?desktop=1" >> "$GITHUB_OUTPUT"
+            echo "app_channel=prod" >> "$GITHUB_OUTPUT"
           else
-            echo "web_url=https://staging.vpnvpn.dev" >> $GITHUB_OUTPUT
-            echo "desktop_url=https://staging.vpnvpn.dev/desktop?desktop=1" >> $GITHUB_OUTPUT
-            echo "app_channel=staging" >> $GITHUB_OUTPUT
+            echo "web_url=https://staging.vpnvpn.dev" >> "$GITHUB_OUTPUT"
+            echo "desktop_url=https://staging.vpnvpn.dev/desktop?desktop=1" >> "$GITHUB_OUTPUT"
+            echo "app_channel=staging" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Setup Bun
@@ -167,103 +169,45 @@ jobs:
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
           if-no-files-found: warn
 
-  upload-to-s3:
+  upload-release:
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
 
     steps:
       - name: Set environment
         id: env
+        env:
+          INPUT_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          GH_REF: ${{ github.ref }}
         run: |
-          if [ "${{ github.event.inputs.environment }}" != "" ]; then
-            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
-            echo "environment=production" >> $GITHUB_OUTPUT
+          if [ -n "$INPUT_ENVIRONMENT" ]; then
+            echo "environment=$INPUT_ENVIRONMENT" >> "$GITHUB_OUTPUT"
+          elif [ "$GH_REF" == "refs/heads/main" ]; then
+            echo "environment=production" >> "$GITHUB_OUTPUT"
           else
-            echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "environment=staging" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Upload to S3
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         env:
-          S3_BUCKET: ${{ secrets.DESKTOP_S3_BUCKET || format('vpnvpn-desktop-{0}', steps.env.outputs.environment) }}
-          ENVIRONMENT: ${{ steps.env.outputs.environment }}
-        run: |
-          S3_PREFIX="releases/${ENVIRONMENT}"
-
-          # Find and upload all artifacts
-          for artifact_dir in artifacts/*/; do
-            echo "Processing $artifact_dir"
-
-            # Upload DMG files
-            for file in $(find "$artifact_dir" -name "*.dmg" 2>/dev/null || true); do
-              echo "Uploading $file"
-              aws s3 cp "$file" "s3://${S3_BUCKET}/${S3_PREFIX}/$(basename $file)"
-            done
-
-            # Upload AppImage files
-            for file in $(find "$artifact_dir" -name "*.AppImage" 2>/dev/null || true); do
-              echo "Uploading $file"
-              aws s3 cp "$file" "s3://${S3_BUCKET}/${S3_PREFIX}/$(basename $file)"
-            done
-
-            # Upload DEB files
-            for file in $(find "$artifact_dir" -name "*.deb" 2>/dev/null || true); do
-              echo "Uploading $file"
-              aws s3 cp "$file" "s3://${S3_BUCKET}/${S3_PREFIX}/$(basename $file)"
-            done
-
-            # Upload MSI files
-            for file in $(find "$artifact_dir" -name "*.msi" 2>/dev/null || true); do
-              echo "Uploading $file"
-              aws s3 cp "$file" "s3://${S3_BUCKET}/${S3_PREFIX}/$(basename $file)"
-            done
-
-            # Upload EXE files (NSIS installer)
-            for file in $(find "$artifact_dir" -name "*.exe" 2>/dev/null || true); do
-              echo "Uploading $file"
-              aws s3 cp "$file" "s3://${S3_BUCKET}/${S3_PREFIX}/$(basename $file)"
-            done
-          done
-
-          # Create latest symlinks
-          echo "Creating latest symlinks..."
-
-          # macOS
-          LATEST_DMG=$(aws s3 ls "s3://${S3_BUCKET}/${S3_PREFIX}/" | grep "\.dmg$" | sort -r | head -n1 | awk '{print $4}')
-          if [ -n "$LATEST_DMG" ]; then
-            aws s3 cp "s3://${S3_BUCKET}/${S3_PREFIX}/${LATEST_DMG}" \
-              "s3://${S3_BUCKET}/${S3_PREFIX}/vpnvpn-desktop-latest.dmg"
-          fi
-
-          # Linux AppImage
-          LATEST_APPIMAGE=$(aws s3 ls "s3://${S3_BUCKET}/${S3_PREFIX}/" | grep "\.AppImage$" | sort -r | head -n1 | awk '{print $4}')
-          if [ -n "$LATEST_APPIMAGE" ]; then
-            aws s3 cp "s3://${S3_BUCKET}/${S3_PREFIX}/${LATEST_APPIMAGE}" \
-              "s3://${S3_BUCKET}/${S3_PREFIX}/vpnvpn-desktop-latest.AppImage"
-          fi
-
-          # Windows
-          LATEST_EXE=$(aws s3 ls "s3://${S3_BUCKET}/${S3_PREFIX}/" | grep "\.exe$" | sort -r | head -n1 | awk '{print $4}')
-          if [ -n "$LATEST_EXE" ]; then
-            aws s3 cp "s3://${S3_BUCKET}/${S3_PREFIX}/${LATEST_EXE}" \
-              "s3://${S3_BUCKET}/${S3_PREFIX}/vpnvpn-desktop-latest.exe"
-          fi
-
-          echo "Upload complete!"
-          echo "Download URLs:"
-          echo "  macOS: https://${S3_BUCKET}.s3.amazonaws.com/${S3_PREFIX}/vpnvpn-desktop-latest.dmg"
-          echo "  Linux: https://${S3_BUCKET}.s3.amazonaws.com/${S3_PREFIX}/vpnvpn-desktop-latest.AppImage"
-          echo "  Windows: https://${S3_BUCKET}.s3.amazonaws.com/${S3_PREFIX}/vpnvpn-desktop-latest.exe"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: desktop-${{ steps.env.outputs.environment }}-${{ github.sha }}
+          name: Desktop (${{ steps.env.outputs.environment }}) ${{ github.sha }}
+          draft: false
+          prerelease: ${{ steps.env.outputs.environment == 'staging' }}
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.AppImage
+            artifacts/**/*.deb
+            artifacts/**/*.msi
+            artifacts/**/*.exe

@@ -1,7 +1,10 @@
-use super::{BackendStatus, VpnBackend, VpnProtocol};
-use anyhow::Result;
+use super::{BackendStatus, PeerSpec, VpnBackend, VpnProtocol};
+use anyhow::{Context, Result};
+use std::fs;
 use std::process::Command;
 use tracing::info;
+
+const IPSEC_SECRETS: &str = "/etc/ipsec.secrets";
 
 pub struct IpsecBackend;
 
@@ -12,12 +15,41 @@ impl IpsecBackend {
 
     fn parse_status() -> BackendStatus {
         let mut active = 0usize;
+        let mut rx_total: u64 = 0;
+        let mut tx_total: u64 = 0;
         if let Ok(output) = Command::new("swanctl").arg("-l").output() {
             if output.status.success() {
                 let text = String::from_utf8_lossy(&output.stdout);
                 for line in text.lines() {
-                    if line.contains("ESTABLISHED") || line.contains("INSTALLED") {
+                    if line.contains("ESTABLISHED") {
                         active += 1;
+                    }
+                    // Parse byte counts from lines like:
+                    //   ... bytes_i (12345 ...) bytes_o (67890 ...) ...
+                    let trimmed = line.trim();
+                    if let Some(pos) = trimmed.find("bytes_i") {
+                        let after = &trimmed[pos..];
+                        if let Some(start) = after.find('(') {
+                            let num_start = start + 1;
+                            let rest = &after[num_start..];
+                            let num_str: String =
+                                rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+                            if let Ok(val) = num_str.parse::<u64>() {
+                                rx_total = rx_total.saturating_add(val);
+                            }
+                        }
+                    }
+                    if let Some(pos) = trimmed.find("bytes_o") {
+                        let after = &trimmed[pos..];
+                        if let Some(start) = after.find('(') {
+                            let num_start = start + 1;
+                            let rest = &after[num_start..];
+                            let num_str: String =
+                                rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+                            if let Ok(val) = num_str.parse::<u64>() {
+                                tx_total = tx_total.saturating_add(val);
+                            }
+                        }
                     }
                 }
             }
@@ -25,8 +57,8 @@ impl IpsecBackend {
         BackendStatus {
             protocol: "ikev2".into(),
             active_sessions: active,
-            egress_bytes: 0,
-            ingress_bytes: 0,
+            egress_bytes: tx_total,
+            ingress_bytes: rx_total,
             running: true,
         }
     }
@@ -50,5 +82,36 @@ impl VpnBackend for IpsecBackend {
 
     fn status(&self) -> Result<BackendStatus> {
         Ok(Self::parse_status())
+    }
+
+    fn apply_peers(&self, peers: &[PeerSpec]) -> Result<()> {
+        // Preserve existing RSA key line from ipsec.secrets
+        let existing = fs::read_to_string(IPSEC_SECRETS).unwrap_or_default();
+        let rsa_line = existing
+            .lines()
+            .find(|l| l.contains(": RSA"))
+            .unwrap_or("")
+            .to_string();
+
+        let mut secrets = String::new();
+        if !rsa_line.is_empty() {
+            secrets.push_str(&rsa_line);
+            secrets.push('\n');
+        }
+
+        for p in peers {
+            if let (Some(u), Some(pw)) = (&p.username, &p.password) {
+                // EAP credentials for EAP-MSCHAPv2
+                secrets.push_str(&format!("{u} : EAP \"{pw}\"\n"));
+            }
+        }
+
+        fs::write(IPSEC_SECRETS, &secrets).context("write ipsec.secrets")?;
+
+        // Reload strongSwan to pick up new credentials
+        let _ = Command::new("swanctl").arg("--load-all").output();
+
+        info!(peer_count = peers.len(), "updated_ipsec_peers");
+        Ok(())
     }
 }

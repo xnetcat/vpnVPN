@@ -73,7 +73,8 @@ conn ikev2-eaptls
     leftauth=pubkey
     right=%any
     rightid=%any
-    rightauth=pubkey
+    rightauth=eap-mschapv2
+    eap_identity=%identity
     rightsourceip={pool_v4},{pool_v6}
     dpdaction=clear
     dpddelay=30s

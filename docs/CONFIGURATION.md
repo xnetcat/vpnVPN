@@ -1,14 +1,14 @@
 # Configuration & Setup Guide
 
-This guide covers the configuration for **Local**, **Staging**, and **Production** environments, including secrets management and initial setup.
+This guide covers the configuration for **Local**, **Staging**, and **Production** environments.
 
 ## Environments
 
-| Environment    | Domain               | Branch    | Database                | API URL                          |
-| :------------- | :------------------- | :-------- | :---------------------- | :------------------------------- |
-| **Local**      | `localhost:3000`     | N/A       | Local Docker / Neon Dev | `http://localhost:4000`          |
-| **Staging**    | `staging.vpnvpn.dev` | `staging` | Neon Staging            | `https://api.staging.vpnvpn.dev` |
-| **Production** | `vpnvpn.dev`         | `main`    | Neon Production         | `https://api.vpnvpn.dev`         |
+| Environment    | Domain               | Branch    | Database                | API URL                 |
+| :------------- | :------------------- | :-------- | :---------------------- | :---------------------- |
+| **Local**      | `localhost:3000`     | N/A       | Local Docker Postgres   | `http://localhost:4000` |
+| **Staging**    | `staging.vpnvpn.dev` | `staging` | Neon Staging            | `https://api.vpnvpn.dev` |
+| **Production** | `vpnvpn.dev`         | `main`    | Neon Production         | `https://api.vpnvpn.dev` |
 
 ---
 
@@ -29,22 +29,26 @@ This guide covers the configuration for **Local**, **Staging**, and **Production
 | `GITHUB_ID` / `SECRET`  | GitHub OAuth               | Test App Credentials    |
 | `GOOGLE_ID` / `SECRET`  | Google OAuth               | Test App Credentials    |
 
-### Control Plane & Metrics (`services/*`)
+### Control Plane (`services/control-plane`)
 
-| Variable                | Description                    |
-| :---------------------- | :----------------------------- |
-| `DATABASE_URL`          | Postgres connection string     |
-| `CONTROL_PLANE_API_KEY` | API Key for internal auth      |
-| `VPN_TOKEN`             | Bootstrap token for VPN nodes  |
-| `AWS_REGION`            | AWS Region (e.g., `us-east-1`) |
+| Variable                         | Description                         |
+| :------------------------------- | :---------------------------------- |
+| `DATABASE_URL`                   | Postgres connection string          |
+| `CONTROL_PLANE_API_KEY`          | API Key for internal auth           |
+| `CONTROL_PLANE_BOOTSTRAP_TOKEN`  | Bootstrap token for VPN nodes       |
+| `PORT`                           | HTTP port (default: 4000)           |
 
 ### VPN Nodes (`apps/vpn-server`)
 
-| Variable      | Description           |
-| :------------ | :-------------------- |
-| `API_URL`     | Control Plane API URL |
-| `VPN_TOKEN`   | Authentication Token  |
-| `METRICS_URL` | Metrics Service URL   |
+| Variable         | Description                             |
+| :--------------- | :-------------------------------------- |
+| `API_URL`        | Control Plane API URL                   |
+| `VPN_TOKEN`      | Authentication Token                    |
+| `SERVER_ID`      | Unique server identifier                |
+| `METRICS_URL`    | Metrics endpoint (control plane URL)    |
+| `VPN_PROTOCOLS`  | Enabled protocols (wireguard,openvpn,ikev2) |
+| `LISTEN_UDP_PORT`| WireGuard listen port (default: 51820)  |
+| `ADMIN_PORT`     | Admin API port (default: 8080)          |
 
 ---
 
@@ -55,27 +59,14 @@ This guide covers the configuration for **Local**, **Staging**, and **Production
 - **Production/Staging:** Set variables in Vercel Project Settings.
 - **Local:** Use `.env.local` (do not commit!).
 
-### AWS & Pulumi (Infrastructure)
+### Railway (Control Plane)
 
-We use **AWS Secrets Manager** and **Pulumi Secrets** for infrastructure credentials.
+Set environment variables in the Railway dashboard:
 
-#### Pulumi Secrets
-
-Set secrets for the active stack (encrypted in `Pulumi.<stack>.yaml`):
-
-```bash
-pulumi config set --secret databaseUrl "postgresql://..."
-pulumi config set --secret controlPlaneApiKey "..."
-pulumi config set --secret vpnToken "..."
-```
-
-#### AWS Secrets Manager
-
-Used for critical secrets like database credentials that may need rotation.
-
-```bash
-aws secretsmanager create-secret --name vpnvpn/production/database --secret-string '{"url":"..."}'
-```
+- `DATABASE_URL`
+- `CONTROL_PLANE_API_KEY`
+- `CONTROL_PLANE_BOOTSTRAP_TOKEN`
+- `PORT`
 
 ---
 
@@ -96,13 +87,13 @@ aws secretsmanager create-secret --name vpnvpn/production/database --secret-stri
     ```
 
 2.  **Environment Setup:**
-    Copy `.env.local.example` to `.env.local` in `apps/web` and fill in values.
+    Copy `env.example` to `.env` and fill in values.
 
 3.  **Run Full Stack:**
     ```bash
     bun run dev
     ```
-    This starts Postgres, Control Plane, Metrics, VPN Node, and Web App via Docker Compose.
+    This starts Postgres, Control Plane, VPN Node, and Web App via Docker Compose.
 
 ### Manual Service Run
 
@@ -114,33 +105,26 @@ aws secretsmanager create-secret --name vpnvpn/production/database --secret-stri
 
 ## 4. Staging & Production Setup
 
-### Initial Infrastructure (Pulumi)
+### Control Plane (Railway)
 
-1.  **Global Stack (Control Plane, Metrics, DB):**
+1. Create a Railway project linked to GitHub.
+2. Set service root to use `services/control-plane/Dockerfile`.
+3. Configure environment variables (see Section 1).
+4. Add custom domain: `api.vpnvpn.dev`.
 
-    ```bash
-    cd infra/pulumi
-    pulumi stack select global-staging # or global-production
-    pulumi config set aws:region us-east-1
-    pulumi config set --secret databaseUrl "..."
-    pulumi config set --secret controlPlaneApiKey "..."
-    pulumi up -y
-    ```
+### VPN Nodes
 
-2.  **Regional Stack (VPN Nodes):**
-    ```bash
-    pulumi stack select region-us-east-1-staging
-    pulumi config set region:imageTag "staging-latest"
-    pulumi config set region:desiredInstances 2
-    pulumi up -y
-    ```
+Use `scripts/setup-vpn-node.sh` to provision nodes on any cloud provider.
+See `docs/DEPLOYMENT.md` for details.
 
-### DNS Configuration (Route53)
+### Grafana Cloud (Optional)
 
-Ensure `api.vpnvpn.dev` and `metrics.vpnvpn.dev` (and staging variants) are aliased to the correct API Gateway/ALB endpoints. Pulumi handles ACM certificate generation and validation automatically.
+1. Create a Grafana Cloud account (free tier: 10k metrics).
+2. Configure VPN nodes with Grafana Alloy for Prometheus scraping.
+3. Create dashboards for VPN node health, protocol distribution, and transfer bytes.
 
 ### Vercel Configuration
 
-1.  Import project from GitHub.
-2.  Configure Environment Variables (see Section 1).
-3.  Deploy `main` (Prod) or `staging` (Staging).
+1. Import project from GitHub.
+2. Configure Environment Variables (see Section 1).
+3. Deploy `main` (Prod) or `staging` (Staging).

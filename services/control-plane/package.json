@@ -4,8 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "bun run src/index.ts",
-    "build": "rm -rf dist && bun build src/index.ts --target=node --outfile=dist/index.mjs && bun build src/lambda.ts --target=node --outfile=dist/lambda/lambda.mjs --minify --external @prisma/client",
-    "build:lambda": "bun build src/lambda.ts --target=node --outfile=dist/lambda/lambda.mjs --minify --external @prisma/client",
+    "build": "rm -rf dist && bun build src/index.ts --target=node --outfile=dist/index.mjs",
     "start": "node dist/index.mjs",
     "lint": "biome lint .",
     "test": "vitest run",
@@ -21,7 +20,6 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.8.0",
-    "@types/aws-lambda": "^8.10.145",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
   }

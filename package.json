@@ -9,8 +9,8 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:stack:build": "cd local && docker compose build web-app control-plane metrics vpn-node",
-    "dev:stack:up": "cd local && docker compose up -d postgres control-plane metrics web-app vpn-node",
+    "dev:stack:build": "cd local && docker compose build web-app control-plane vpn-node",
+    "dev:stack:up": "cd local && docker compose up -d postgres control-plane web-app vpn-node",
     "dev:stack:down": "cd local && docker compose down",
     "dev:stack:watch": "cd local && (docker compose watch || echo '[dev:stack] docker compose watch not available')",
     "dev:desktop": "cd apps/desktop && dotenv -e ../../.env -- bun run dev",

@@ -4,99 +4,127 @@ This guide details the CI/CD pipelines and manual deployment procedures for vpnV
 
 ## CI/CD Pipelines (GitHub Actions)
 
-We use GitHub Actions for automated testing, building, and deployment.
-
 ### 1. Backend Deployment (`deploy-backend.yml`)
 
 **Triggers:**
 
-- Push to `main` (Production) or `staging` (Staging).
-- Changes in: `apps/vpn-server`, `services`, `packages/db`, `infra/pulumi`.
+- Push to `main` or `staging` (when `apps/vpn-server/**` changes).
+- Manual `workflow_dispatch`.
 
 **Workflow:**
 
-1.  **`changes`**: Detects which components (Rust Server, Services, Infra) have changed.
-2.  **`build-rust`**: Builds Docker image, pushes to ECR with tags (`staging-latest` or `prod-latest`).
-3.  **`build-services`**: Builds Lambda functions, zips them, and uploads to S3.
-4.  **`deploy-infra`**: Runs `pulumi up` for:
-    - **Global Stack:** Updates Control Plane & Metrics Service (using new Lambda code).
-    - **Region Stack:** Updates VPN ASGs (using new Docker image tag).
+1. Builds VPN server Docker image.
+2. Pushes to GHCR (`ghcr.io/xnetcat/vpnvpn/vpn-server`).
 
-### 2. Web Deployment (`web-deploy.yml`)
+The control plane auto-deploys via Railway when code is pushed to main/staging.
+
+### 2. Desktop Build (`desktop-build.yml`)
 
 **Triggers:**
 
-- Push to `main` or `staging` affecting `apps/web`.
+- Push to `main` or `staging` affecting `apps/desktop`.
+- Manual `workflow_dispatch`.
 
 **Workflow:**
 
-- **Staging:** Deploys to Vercel Preview/Staging (`staging.vpnvpn.dev`).
-- **Production:** Deploys to Vercel Production (`vpnvpn.dev`).
+1. Matrix builds for macOS (arm64/x64), Linux x64, Windows x64.
+2. Builds Tauri app with signing.
+3. Uploads artifacts to GitHub Releases.
 
-### 3. CI Checks (`ci.yml`)
+### 3. E2E Tests (`e2e.yml`)
 
 **Triggers:**
 
-- Push to `main` or `staging`.
+- Push to `main` or `staging` and PRs.
 
 **Workflow:**
 
-- Runs `lint`, `test`, and `build` (type-check) for the entire monorepo to ensure code quality.
+1. Runs Rust unit tests (`cargo test`).
+2. Runs TypeScript tests (`bun run test`).
+3. Runs Docker-based E2E test suite (`e2e/run-e2e.sh`).
+
+### 4. CI Checks (`ci.yml`)
+
+**Triggers:**
+
+- Push to `main` or `staging` and PRs.
+
+**Workflow:**
+
+- Runs `lint`, `test`, and `build` for the entire monorepo.
 
 ---
 
-## Manual Deployment
+## Control Plane Deployment (Railway)
 
-If GitHub Actions is unavailable, you can deploy manually.
+The control plane deploys automatically via Railway's GitHub integration.
 
-### Prerequisites
+### Setup
 
-- Pulumi CLI installed and logged in.
-- AWS Credentials configured (`AWS_PROFILE` or env vars).
-- Docker installed (for VPN server build).
+1. Create a Railway project and link it to the GitHub repository.
+2. Configure the service to use `services/control-plane/Dockerfile`.
+3. Set environment variables:
+   - `DATABASE_URL` - PostgreSQL connection string (Neon)
+   - `CONTROL_PLANE_API_KEY` - API key for web app auth
+   - `CONTROL_PLANE_BOOTSTRAP_TOKEN` - Initial VPN node token
+   - `PORT` - 4000
+4. Configure custom domain: `api.vpnvpn.dev` → control-plane service.
 
-### Deployment Script
+The `railway.toml` at the project root configures build settings and health checks.
 
-Use the helper script to deploy the full stack:
+---
+
+## VPN Node Deployment (Manual)
+
+VPN nodes are deployed manually on cloud VMs (any provider).
+
+### Quick Setup
 
 ```bash
-# Deploy Staging
-./scripts/deploy.sh staging
+# Set required environment variables
+export CONTROL_PLANE_URL="https://api.vpnvpn.dev"
+export VPN_TOKEN="your-vpn-node-token"
 
-# Deploy Production
-./scripts/deploy.sh production
+# Optional: Grafana Cloud metrics
+export GRAFANA_REMOTE_URL="https://prometheus-prod-xxx.grafana.net/api/prom/push"
+export GRAFANA_USER="123456"
+export GRAFANA_API_KEY="your-grafana-api-key"
+
+# Run the setup script
+sudo -E bash scripts/setup-vpn-node.sh
 ```
 
-### Manual Steps
+### What the Script Does
 
-#### 1. Deploy Global Infrastructure
+1. Installs Docker.
+2. Enables IP forwarding and configures NAT masquerading.
+3. Optionally installs Grafana Alloy for Prometheus metrics.
+4. Pulls and runs the VPN server container with host networking.
+
+### Manual VPN Server
 
 ```bash
-cd infra/pulumi
-pulumi stack select global-staging
-pulumi up -y
+docker pull ghcr.io/xnetcat/vpnvpn/vpn-server:latest
+
+docker run -d \
+    --name vpn-server \
+    --restart unless-stopped \
+    --network host \
+    --cap-add NET_ADMIN \
+    --device /dev/net/tun:/dev/net/tun \
+    -e API_URL="https://api.vpnvpn.dev" \
+    -e VPN_TOKEN="your-token" \
+    -e SERVER_ID="$(hostname)" \
+    -e METRICS_URL="https://api.vpnvpn.dev/metrics/vpn" \
+    -e VPN_PROTOCOLS=wireguard,openvpn,ikev2 \
+    ghcr.io/xnetcat/vpnvpn/vpn-server:latest
 ```
 
-#### 2. Build & Push VPN Server
+### Verify
 
 ```bash
-cd apps/vpn-server
-# Authenticate ECR
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
-
-# Build & Push
-docker build -t vpn-server .
-docker tag vpn-server <ECR_URI>:staging-latest
-docker push <ECR_URI>:staging-latest
-```
-
-#### 3. Deploy Regional Infrastructure
-
-```bash
-cd infra/pulumi
-pulumi stack select region-us-east-1-staging
-pulumi config set region:imageTag "staging-latest"
-pulumi up -y
+curl http://localhost:8080/health
+curl http://localhost:8080/metrics
 ```
 
 ---

@@ -23,6 +23,8 @@ fn test_peer_spec_serialization() {
         preshared_key: None,
         allowed_ips: vec!["10.8.0.10/32".to_string()],
         endpoint: Some("1.2.3.4:51820".to_string()),
+        username: None,
+        password: None,
     };
 
     let json = serde_json::to_string(&peer).unwrap();

@@ -4,17 +4,20 @@
 
 - **Frontend & Desktop:**
   - Install deps (monorepo): `bun install`
-  - Start full local stack + desktop app: `bun run dev` (Docker: web, control-plane, metrics, vpn-server + local Tauri desktop, Stripe listener)
+  - Start full local stack + desktop app: `bun run dev` (Docker: web, control-plane, vpn-server + local Tauri desktop, Stripe listener)
   - Start web app only: `cd apps/web && bun run dev`
   - Start desktop app only: `cd apps/desktop && bun run dev`
   - Run tests: `bun run test` or `cd apps/web && bun run test`
   - Lint: `bun run lint` or `cd apps/web && bun run lint`
-- **Infra (Control Plane):**
-  - Deploy: `cd infra/pulumi && pulumi up`
-  - Install deps: `cd infra/pulumi && bun install`
+- **Control Plane:**
+  - Dev: `cd services/control-plane && bun run dev`
+  - Deploy: Push to main/staging (Railway auto-deploys)
 - **VPN Server (Rust):**
   - Build: `cd apps/vpn-server && cargo build`
   - Run: `cd apps/vpn-server && cargo run -- --help`
+  - Test: `cd apps/vpn-server && cargo test`
+- **E2E Tests:**
+  - Run: `cd e2e && bash run-e2e.sh`
 
 ## Deployment
 
@@ -22,13 +25,18 @@
   - Hosted on **Vercel**.
   - Environment variables configured in Vercel Dashboard.
   - Database (Postgres/Neon) connection string required.
-- **Backend (Control Plane & Metrics):**
-  - Implemented as in-house Bun/TypeScript HTTP services in `services/control-plane` and `services/metrics`.
+- **Backend (Control Plane):**
+  - Implemented as a Bun/TypeScript HTTP service in `services/control-plane`.
   - Backed by Postgres via the shared Prisma schema in `packages/db`.
-  - Deployed as generic containers (AWS is used only as a hosting platform, via Pulumi/ECR/EC2 or ECS).
+  - Deployed to Railway as a Docker container (auto-deploys from GitHub).
+  - Includes metrics ingestion endpoint (`POST /metrics/vpn`).
 - **Data Plane (VPN Nodes):**
-  - Infrastructure-agnostic (EC2, VPS, etc.).
-  - Deployed via Docker or binary.
+  - Infrastructure-agnostic (any cloud VM, VPS, etc.).
+  - Deployed via Docker using `scripts/setup-vpn-node.sh`.
+  - Images stored on GHCR (`ghcr.io/xnetcat/vpnvpn/vpn-server`).
+- **Desktop App:**
+  - Built via GitHub Actions.
+  - Uploaded to GitHub Releases.
 
 ## Code style
 
@@ -46,11 +54,6 @@
     - **Auth:** NextAuth.js (SSO: Google, GitHub; Email: Magic Link).
     - **Billing:** Stripe (Multi-tier Subscriptions: Basic, Pro, Enterprise; Webhooks).
     - **Notifications:** Resend for transactional emails (welcome, subscription changes, device alerts).
-- **Backend (Pulumi/AWS):**
-  - **Directory:** `infra/pulumi/`
-  - TypeScript for IaC.
-  - Provisions AWS networking/compute for the Rust `vpn-server` container and observability (AMP/Grafana).
-  - Reads the control-plane URL (`controlPlaneApiUrl` config) instead of creating Lambda/APIGW/DynamoDB resources.
 - **Rust (VPN Server):**
   - **Directory:** `apps/vpn-server/`
   - `clippy` must pass.
@@ -71,10 +74,11 @@
 
 ### Control Plane API
 
-- **Architecture:** AWS Serverless.
+- **Architecture:** Railway (Docker).
 - **Endpoints:**
   - `POST /server/register`: Node self-registration.
   - `GET /server/peers`: Sync allowed peers.
+  - `POST /metrics/vpn`: Metrics ingestion.
   - `POST /webhooks/stripe`: Billing events.
 - **Security:** Signed requests or Bearer tokens.
 
@@ -89,7 +93,8 @@
 
 - **Frontend:** `cd apps/web && bun run test` (Vitest).
 - **Rust:** `cd apps/vpn-server && cargo test`.
-- **Integration:** `bun run test:local` to verify full system flow (Signup -> Connect) using the local Docker Compose stack.
+- **E2E:** `cd e2e && bash run-e2e.sh` (Docker-based protocol connectivity tests).
+- **Integration:** `bun run test:local` to verify full system flow using the local Docker Compose stack.
 
 ## Development Workflow
 

@@ -171,6 +171,17 @@ impl VpnBackend for WireGuardBackend {
         nm.bring_up_interface(WG_IFACE)?;
         info!(interface = WG_IFACE, "wireguard_interface_up");
 
+        // Set MTU to 1420 for WireGuard overhead
+        let _ = std::process::Command::new("ip")
+            .args(["link", "set", "dev", WG_IFACE, "mtu", "1420"])
+            .status();
+
+        // Add IPv6 address alongside IPv4
+        let _ = std::process::Command::new("ip")
+            .args(["-6", "addr", "add", "fd42:42:42::1/64", "dev", WG_IFACE])
+            .status();
+        info!(interface = WG_IFACE, "wireguard_mtu_and_ipv6_configured");
+
         Ok(())
     }
 
@@ -261,6 +272,7 @@ impl VpnBackend for WireGuardBackend {
                 if let Some(ep) = &peer.endpoint {
                     conf.push_str(&format!("Endpoint = {}\n", ep));
                 }
+                conf.push_str("PersistentKeepalive = 25\n");
             }
         }
 
