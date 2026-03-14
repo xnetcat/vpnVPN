@@ -267,7 +267,10 @@ impl VpnBackend for WireGuardBackend {
             if let Some(pk) = &peer.public_key {
                 // Validate WireGuard public key format (44 chars base64)
                 if pk.len() != 44 || pk.contains('\n') {
-                    warn!(peer_index = i, "skipping_peer_with_invalid_public_key_format");
+                    warn!(
+                        peer_index = i,
+                        "skipping_peer_with_invalid_public_key_format"
+                    );
                     continue;
                 }
                 debug!(

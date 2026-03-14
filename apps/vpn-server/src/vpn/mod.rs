@@ -63,7 +63,10 @@ impl std::fmt::Debug for PeerSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PeerSpec")
             .field("public_key", &self.public_key)
-            .field("preshared_key", &self.preshared_key.as_ref().map(|_| "[REDACTED]"))
+            .field(
+                "preshared_key",
+                &self.preshared_key.as_ref().map(|_| "[REDACTED]"),
+            )
             .field("allowed_ips", &self.allowed_ips)
             .field("endpoint", &self.endpoint)
             .field("username", &self.username)

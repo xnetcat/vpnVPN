@@ -149,7 +149,9 @@ fn setup_nat_and_forwarding() -> Result<(), i32> {
     });
 
     // Validate interface name to prevent iptables argument injection
-    if !default_iface.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
+    if !default_iface
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
         || default_iface.is_empty()
         || default_iface.len() > 15
     {
@@ -656,7 +658,8 @@ async fn run_admin(port: u16, log_buffer: std::sync::Arc<logging::LogBuffer>) {
 
     // Admin token for sensitive endpoints (logs, status, pubkey).
     // If not set, these endpoints return 403.
-    let admin_token: Option<String> = std::env::var("ADMIN_API_TOKEN").ok()
+    let admin_token: Option<String> = std::env::var("ADMIN_API_TOKEN")
+        .ok()
         .filter(|t| !t.trim().is_empty());
 
     fn check_admin_auth(headers: &axum::http::HeaderMap, expected: &Option<String>) -> bool {

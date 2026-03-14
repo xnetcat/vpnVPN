@@ -105,7 +105,10 @@ impl VpnBackend for IpsecBackend {
             if let (Some(u), Some(pw)) = (&p.username, &p.password) {
                 // Validate username/password don't contain config-breaking characters
                 if u.contains('\n') || u.contains(':') || u.contains('"') {
-                    warn!(username = u.as_str(), "skipping_peer_with_invalid_username_chars");
+                    warn!(
+                        username = u.as_str(),
+                        "skipping_peer_with_invalid_username_chars"
+                    );
                     continue;
                 }
                 if pw.contains('\n') || pw.contains('"') {

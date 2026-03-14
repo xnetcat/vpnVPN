@@ -38,9 +38,14 @@ describe("Device Router", () => {
     device: {
       create: vi.fn(),
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       findMany: vi.fn(),
       count: vi.fn(),
       delete: vi.fn(),
+      update: vi.fn(),
+    },
+    vpnServer: {
+      findUnique: vi.fn(),
     },
   };
 
@@ -112,13 +117,21 @@ describe("Device Router", () => {
         status: "active",
       });
 
+      mockPrisma.vpnServer.findUnique.mockResolvedValue({
+        id: "server1",
+        publicKey: "c2VydmVyLXB1YmxpYy1rZXktYmFzZTY0LWVuY29kZWQ=",
+        publicIp: "1.2.3.4",
+        metadata: { listenPort: 51820 },
+      });
+
       mockPrisma.device.count.mockResolvedValue(2); // Under pro limit of 5
+      mockPrisma.device.findMany.mockResolvedValue([]); // No old pending devices
       mockPrisma.device.create.mockResolvedValue({
         id: "device123",
         userId: "user123",
         name: "New Device",
         publicKey: "new-key",
-        serverId: null,
+        serverId: "server1",
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -136,12 +149,13 @@ describe("Device Router", () => {
       const caller = appRouter.createCaller(ctx);
       const result = await caller.device.register({
         name: "New Device",
+        serverId: "server1",
       });
 
       expect(result.deviceId).toBe("device123");
       expect(result.assignedIp).toBeDefined();
-      expect(result.publicKey).toBeDefined();
-      expect(result.privateKey).toBeDefined();
+      expect(result.wireguardConfig).toBeDefined();
+      expect(result.openvpnConfig).toBeDefined();
       expect(addPeerForDevice).toHaveBeenCalled();
       expect(revokePeersForUser).toHaveBeenCalledWith("user123");
     });
@@ -157,6 +171,13 @@ describe("Device Router", () => {
         status: "active",
       });
 
+      mockPrisma.vpnServer.findUnique.mockResolvedValue({
+        id: "server1",
+        publicKey: "c2VydmVyLXB1YmxpYy1rZXktYmFzZTY0LWVuY29kZWQ=",
+        publicIp: "1.2.3.4",
+        metadata: { listenPort: 51820 },
+      });
+
       mockPrisma.device.count.mockResolvedValue(1); // At basic limit of 1
 
       const ctx = await createContext();
@@ -167,6 +188,7 @@ describe("Device Router", () => {
       await expect(
         caller.device.register({
           name: "New Device",
+          serverId: "server1",
         }),
       ).rejects.toThrow("Device limit reached");
     });

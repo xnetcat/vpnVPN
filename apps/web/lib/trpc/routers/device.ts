@@ -12,7 +12,7 @@ import { getTierConfig } from "@/lib/tiers";
 import { sendEmail } from "@/lib/email";
 import { revalidatePath } from "next/cache";
 import nacl from "tweetnacl";
-import { prisma } from "@vpnvpn/db";
+
 
 /**
  * Generate a WireGuard-compatible keypair using wg genkey.
@@ -206,7 +206,7 @@ export const deviceRouter = router({
       const { name, serverId, machineId } = input;
 
       const serverRecord = serverId
-        ? await prisma.vpnServer.findUnique({ where: { id: serverId } })
+        ? await ctx.prisma.vpnServer.findUnique({ where: { id: serverId } })
         : null;
 
       if (!serverRecord) {

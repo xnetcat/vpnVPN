@@ -1,5 +1,5 @@
 use super::{BackendStatus, VpnBackend, VpnProtocol};
-use crate::pki::{PKI_DIR, CA_PEM, SERVER_PEM, SERVER_KEY, TLS_CRYPT_KEY};
+use crate::pki::{CA_PEM, PKI_DIR, SERVER_KEY, SERVER_PEM, TLS_CRYPT_KEY};
 use anyhow::{anyhow, Context, Result};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;

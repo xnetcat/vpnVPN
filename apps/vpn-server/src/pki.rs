@@ -26,8 +26,7 @@ fn restrict_permissions(path: &Path) -> Result<()> {
         .with_context(|| format!("stat {}", path.display()))?
         .permissions();
     perms.set_mode(0o600);
-    fs::set_permissions(path, perms)
-        .with_context(|| format!("chmod 0600 {}", path.display()))?;
+    fs::set_permissions(path, perms).with_context(|| format!("chmod 0600 {}", path.display()))?;
     Ok(())
 }
 
@@ -37,8 +36,7 @@ fn restrict_dir_permissions(path: &Path) -> Result<()> {
         .with_context(|| format!("stat {}", path.display()))?
         .permissions();
     perms.set_mode(0o700);
-    fs::set_permissions(path, perms)
-        .with_context(|| format!("chmod 0700 {}", path.display()))?;
+    fs::set_permissions(path, perms).with_context(|| format!("chmod 0700 {}", path.display()))?;
     Ok(())
 }
 
@@ -112,8 +110,7 @@ pub fn ensure_pki(public_ip: Option<String>) -> Result<PkiArtifacts> {
     fs::write(&server_pem_path, &server_pem).context("write server pem")?;
     // Wrap server key in Zeroizing to clear from memory after write
     let server_key_pem = Zeroizing::new(server_cert.serialize_private_key_pem());
-    fs::write(&server_key_path, server_key_pem.as_str())
-        .context("write server key")?;
+    fs::write(&server_key_path, server_key_pem.as_str()).context("write server key")?;
     drop(server_key_pem);
     restrict_permissions(&server_key_path)?;
 

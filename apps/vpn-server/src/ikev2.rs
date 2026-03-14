@@ -42,7 +42,7 @@ pub fn setup_ikev2(
     fs::write(&server_path, server_pem).context("write ikev2 server pem")?;
     let stored_key = Zeroizing::new(
         fs::read_to_string(Path::new(PKI_DIR).join(SERVER_KEY))
-            .context("read generated server key")?
+            .context("read generated server key")?,
     );
     fs::write(&key_path, stored_key.as_str()).context("write ikev2 server key")?;
     drop(stored_key);
