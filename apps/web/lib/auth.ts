@@ -9,7 +9,10 @@ import { createDesktopCode } from "@/lib/desktopCodes";
 import { stripe } from "@/lib/stripe";
 import { WEB_ENV } from "@/env";
 
-export const authOptions: NextAuthOptions = {
+let _authOptions: NextAuthOptions | null = null;
+function buildAuthOptions(): NextAuthOptions {
+  if (_authOptions) return _authOptions;
+  _authOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
     GitHubProvider({
@@ -140,7 +143,16 @@ export const authOptions: NextAuthOptions = {
     signIn: "/auth/signin",
   },
   secret: WEB_ENV.NEXTAUTH_SECRET,
-};
+  };
+  return _authOptions;
+}
+
+// Lazy accessor so the options object is built at runtime, not import time.
+export const authOptions: NextAuthOptions = new Proxy({} as NextAuthOptions, {
+  get(_target, prop) {
+    return (buildAuthOptions() as any)[prop];
+  },
+});
 
 // NextAuth route handler factory (for app router)
 export const getSession = () => getServerSession(authOptions);

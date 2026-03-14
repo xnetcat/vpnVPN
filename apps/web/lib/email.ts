@@ -3,10 +3,16 @@
 import { Resend } from "resend";
 import { WEB_ENV } from "@/env";
 
-const resend = new Resend(WEB_ENV.RESEND_API_KEY);
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) {
+    _resend = new Resend(WEB_ENV.RESEND_API_KEY);
+  }
+  return _resend;
+}
 
-const FROM_EMAIL = WEB_ENV.EMAIL_FROM;
-const WEB_BASE_URL = WEB_ENV.NEXTAUTH_URL;
+function getFromEmail() { return WEB_ENV.EMAIL_FROM; }
+function getBaseUrl() { return WEB_ENV.NEXTAUTH_URL; }
 
 export type EmailTemplate =
   | "welcome"
@@ -112,7 +118,7 @@ function buildEmailContent(
   switch (template) {
     case "welcome": {
       const name = data.name || "there";
-      const dashboardUrl = data.dashboardUrl || `${WEB_BASE_URL}/dashboard`;
+      const dashboardUrl = data.dashboardUrl || `${getBaseUrl()}/dashboard`;
 
       const content = `
         <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#f8fafc;">Welcome to vpnVPN!</h1>
@@ -261,7 +267,7 @@ function buildEmailContent(
       const plan = data.plan || "Pro";
       const deviceLimit = data.deviceLimit || "5";
       const nextBillingDate = data.nextBillingDate || "N/A";
-      const dashboardUrl = data.dashboardUrl || `${WEB_BASE_URL}/dashboard`;
+      const dashboardUrl = data.dashboardUrl || `${getBaseUrl()}/dashboard`;
 
       const content = `
         <div style="text-align:center;margin-bottom:24px;">
@@ -320,7 +326,7 @@ function buildEmailContent(
 
     case "subscription_cancelled": {
       const name = data.name || "there";
-      const pricingUrl = data.pricingUrl || `${WEB_BASE_URL}/pricing`;
+      const pricingUrl = data.pricingUrl || `${getBaseUrl()}/pricing`;
 
       const content = `
         <div style="text-align:center;margin-bottom:24px;">
@@ -366,7 +372,7 @@ function buildEmailContent(
     case "device_added": {
       const name = data.name || "there";
       const deviceName = data.deviceName || "Unknown Device";
-      const dashboardUrl = data.dashboardUrl || `${WEB_BASE_URL}/dashboard`;
+      const dashboardUrl = data.dashboardUrl || `${getBaseUrl()}/dashboard`;
 
       const content = `
         <div style="text-align:center;margin-bottom:24px;">
@@ -408,7 +414,7 @@ function buildEmailContent(
     case "device_revoked": {
       const name = data.name || "there";
       const deviceName = data.deviceName || "Unknown Device";
-      const dashboardUrl = data.dashboardUrl || `${WEB_BASE_URL}/dashboard`;
+      const dashboardUrl = data.dashboardUrl || `${getBaseUrl()}/dashboard`;
 
       const content = `
         <div style="text-align:center;margin-bottom:24px;">
@@ -453,27 +459,11 @@ function buildEmailContent(
 }
 
 export async function sendEmail(context: EmailContext): Promise<void> {
-  if (!resend) {
-    console.warn("[email] Skipping email send (no API key)", {
-      template: context.template,
-      to: context.to,
-    });
-
-    // For auth emails we want the caller to know this is a hard failure
-    // so the frontend can surface an error instead of pretending success.
-    if (context.template === "magic_link" || context.template === "otp_code") {
-      throw new Error(
-        "RESEND_API_KEY is not configured; cannot send authentication email",
-      );
-    }
-    return;
-  }
-
   try {
     const content = buildEmailContent(context.template, context.data);
 
-    await resend.emails.send({
-      from: FROM_EMAIL,
+    await getResend().emails.send({
+      from: getFromEmail(),
       to: context.to,
       subject: content.subject,
       html: content.html,
