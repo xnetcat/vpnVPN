@@ -89,11 +89,8 @@ export const paidProcedure = protectedProcedure.use(async (opts) => {
   const { ctx } = opts;
 
   // Admin bypass: admins get enterprise-level access without a subscription
-  const user = await ctx.prisma.user.findUnique({
-    where: { id: ctx.userId },
-    select: { role: true },
-  });
-  if (user?.role === "admin") {
+  const role = (ctx.session?.user as any)?.role;
+  if (role === "admin") {
     return opts.next({
       ctx: {
         ...ctx,
