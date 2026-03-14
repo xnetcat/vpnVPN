@@ -10,7 +10,7 @@ COPY services ./services
 COPY packages ./packages
 
 RUN npm install -g bun
-RUN bun install --frozen-lockfile
+RUN bun install
 
 # Ensure Prisma client is generated for the shared DB package
 ENV DATABASE_URL="postgresql://localhost:5432/placeholder"

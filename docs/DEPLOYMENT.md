@@ -85,11 +85,6 @@ VPN nodes are deployed manually on cloud VMs (any provider).
 export CONTROL_PLANE_URL="https://api.vpnvpn.dev"
 export VPN_TOKEN="your-vpn-node-token"
 
-# Optional: Grafana Cloud metrics
-export GRAFANA_REMOTE_URL="https://prometheus-prod-xxx.grafana.net/api/prom/push"
-export GRAFANA_USER="123456"
-export GRAFANA_API_KEY="your-grafana-api-key"
-
 # Run the setup script
 sudo -E bash scripts/setup-vpn-node.sh
 ```
@@ -98,8 +93,7 @@ sudo -E bash scripts/setup-vpn-node.sh
 
 1. Installs Docker.
 2. Enables IP forwarding and configures NAT masquerading.
-3. Optionally installs Grafana Alloy for Prometheus metrics.
-4. Pulls and runs the VPN server container with host networking.
+3. Pulls and runs the VPN server container with host networking.
 
 ### Manual VPN Server
 

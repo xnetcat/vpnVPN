@@ -117,12 +117,6 @@ Set environment variables in the Railway dashboard:
 Use `scripts/setup-vpn-node.sh` to provision nodes on any cloud provider.
 See `docs/DEPLOYMENT.md` for details.
 
-### Grafana Cloud (Optional)
-
-1. Create a Grafana Cloud account (free tier: 10k metrics).
-2. Configure VPN nodes with Grafana Alloy for Prometheus scraping.
-3. Create dashboards for VPN node health, protocol distribution, and transfer bytes.
-
 ### Vercel Configuration
 
 1. Import project from GitHub.

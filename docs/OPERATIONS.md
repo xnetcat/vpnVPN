@@ -6,7 +6,7 @@ This guide covers the operational aspects of vpnVPN, including VPN node manageme
 
 ### Architecture
 
-VPN Nodes run as Docker containers on manually provisioned VMs. They register with the **Control Plane** (Railway) and report metrics via `POST /metrics/vpn`. Optional Grafana Alloy scrapes Prometheus metrics.
+VPN Nodes run as Docker containers on manually provisioned VMs. They register with the **Control Plane** (Railway) and report metrics via `POST /metrics/vpn` → stored in PostgreSQL.
 
 ### Adding a Node
 
@@ -32,8 +32,6 @@ curl -X DELETE "https://api.vpnvpn.dev/servers/<server-id>" -H "X-API-Key: <key>
 - **Health Check:** `http://<NODE_IP>:8080/health`
 - **Metrics:** `http://<NODE_IP>:8080/metrics` (Prometheus format)
 - **Logs:** `docker logs vpn-server`
-- **Grafana Cloud:** Dashboards for node health, protocol distribution (if Alloy configured)
-
 ---
 
 ## 2. Maintenance Procedures
@@ -114,7 +112,6 @@ docker logs vpn-server --tail 100
 
 ### Escalation
 
-1. Check Grafana Cloud dashboards (if configured).
-2. Review Railway deployment logs.
+1. Review Railway deployment logs.
 3. Check Database status (Neon).
 4. Contact Platform Lead.

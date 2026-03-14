@@ -100,7 +100,6 @@
 ### Feature Development
 
 - [ ] Proxy support (SOCKS5/HTTP proxy servers)
-- [ ] Grafana Cloud dashboards (node health, protocol distribution)
 
 ---
 

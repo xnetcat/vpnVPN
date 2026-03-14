@@ -98,17 +98,9 @@ Uses `DATABASE_URL` (Neon in production, Postgres in local Docker).
 
 ## Observability
 
-### Grafana Cloud
+VPN nodes periodically POST metrics (CPU, memory, active peers) to the control plane's `POST /metrics/vpn` endpoint. These are stored in the `VpnMetric` table in PostgreSQL (Railway). The web dashboard queries this table for real-time server status, protocol distribution, and usage trends.
 
-- VPN node metrics scraped via Grafana Alloy (Prometheus agent)
-- Alloy scrapes `localhost:8080/metrics` on each VPN node
-- Remote-writes to Grafana Cloud Prometheus
-- Dashboards for node health, protocol distribution, transfer bytes
-
-### Control Plane Metrics
-
-- `POST /metrics/vpn` endpoint stores metrics in PostgreSQL
-- Web dashboard queries VpnMetric table for real-time data
+Each VPN node also exposes a Prometheus-format `/metrics` endpoint on its admin port for local debugging.
 
 ## Frontend Integration
 
@@ -149,7 +141,7 @@ VPN nodes are deployed manually on cloud VMs:
 - Use `scripts/setup-vpn-node.sh` to provision a new node
 - Each node runs the VPN server container with host networking
 - Nodes self-register with the control plane
-- Grafana Alloy (optional) scrapes metrics for Grafana Cloud
+- Metrics POSTed to control plane and stored in Postgres
 
 ### Desktop App
 

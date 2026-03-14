@@ -1,19 +1,16 @@
 #!/usr/bin/env bash
 # =============================================================================
-# VPN Node Setup Script (Template)
+# VPN Node Setup Script
 # =============================================================================
-# This script sets up a VPN node on a fresh Linux server.
-# It installs Docker, configures NAT, sets up Grafana Alloy for metrics,
-# and starts the VPN server container.
+# Sets up a VPN node on a fresh Linux server.
+# Installs Docker, configures NAT, and starts the VPN server container.
+# Metrics are sent to the control plane (POST /metrics/vpn → Postgres).
 #
-# Usage: sudo bash setup-vpn-node.sh
+# Usage: sudo -E bash setup-vpn-node.sh
 #
 # Required environment variables:
-#   CONTROL_PLANE_URL   - Control plane API URL (e.g., https://api.vpnvpn.dev)
+#   CONTROL_PLANE_URL   - Control plane API URL (e.g., https://control-plane-production-xxx.up.railway.app)
 #   VPN_TOKEN           - VPN node registration token
-#   GRAFANA_REMOTE_URL  - Grafana Cloud Prometheus remote write URL
-#   GRAFANA_USER        - Grafana Cloud metrics user/instance ID
-#   GRAFANA_API_KEY     - Grafana Cloud API key
 #
 # Optional:
 #   VPN_IMAGE           - Docker image (default: ghcr.io/xnetcat/vpnvpn/vpn-server:latest)
@@ -65,43 +62,6 @@ elif command -v iptables-save &>/dev/null; then
     iptables-save > /etc/iptables.rules
 fi
 
-# --- Install Grafana Alloy (optional) ---
-if [ -n "${GRAFANA_REMOTE_URL:-}" ] && [ -n "${GRAFANA_USER:-}" ] && [ -n "${GRAFANA_API_KEY:-}" ]; then
-    echo "Setting up Grafana Alloy for metrics..."
-
-    # Install Alloy
-    if ! command -v alloy &>/dev/null; then
-        curl -fsSL https://apt.grafana.com/gpg.key | gpg --dearmor -o /etc/apt/keyrings/grafana.gpg
-        echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" > /etc/apt/sources.list.d/grafana.list
-        apt-get update && apt-get install -y alloy
-    fi
-
-    # Configure Alloy to scrape VPN server metrics
-    mkdir -p /etc/alloy
-    cat > /etc/alloy/config.alloy <<ALLOY_EOF
-prometheus.scrape "vpn_server" {
-    targets = [{"__address__" = "localhost:8080"}]
-    forward_to = [prometheus.remote_write.grafana_cloud.receiver]
-    scrape_interval = "15s"
-}
-
-prometheus.remote_write "grafana_cloud" {
-    endpoint {
-        url = "${GRAFANA_REMOTE_URL}"
-        basic_auth {
-            username = "${GRAFANA_USER}"
-            password = "${GRAFANA_API_KEY}"
-        }
-    }
-}
-ALLOY_EOF
-
-    systemctl enable --now alloy
-    echo "Grafana Alloy configured and started"
-else
-    echo "Skipping Grafana Alloy setup (GRAFANA_* vars not set)"
-fi
-
 # --- Pull and Run VPN Server ---
 echo "Pulling VPN server image..."
 docker pull "$VPN_IMAGE"
@@ -129,4 +89,3 @@ echo "=== Setup Complete ==="
 echo "VPN server is running. Check status with:"
 echo "  docker logs vpn-server"
 echo "  curl http://localhost:8080/health"
-echo "  curl http://localhost:8080/metrics"
