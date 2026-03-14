@@ -2,10 +2,11 @@
 
 use anyhow::Result;
 use tracing::{debug, error, info};
+use vpnvpn_shared::config::VpnBinaryPaths;
 use vpnvpn_shared::protocol::{ConnectionState, ConnectionStatus, Protocol, VpnConfig};
 
 /// Connect using OpenVPN.
-pub async fn connect(config: &VpnConfig) -> Result<ConnectionStatus> {
+pub async fn connect(config: &VpnConfig, paths: &VpnBinaryPaths) -> Result<ConnectionStatus> {
     info!("Connecting via OpenVPN to {}", config.server_endpoint);
 
     // Get OpenVPN config or generate one
@@ -51,7 +52,7 @@ pub async fn connect(config: &VpnConfig) -> Result<ConnectionStatus> {
 
     // Start OpenVPN process
     #[cfg(unix)]
-    start_openvpn_unix(&config_path).await?;
+    start_openvpn_unix(&config_path, paths).await?;
 
     #[cfg(windows)]
     start_openvpn_windows(&config_path).await?;
@@ -95,20 +96,30 @@ pub async fn disconnect() -> Result<()> {
     Ok(())
 }
 
-/// Check OpenVPN connection status.
+/// Check OpenVPN connection status via tun interface presence.
 pub async fn check_status() -> Result<ConnectionStatus> {
-    // Check if openvpn process is running
-    #[cfg(unix)]
-    let is_running = {
-        let output = tokio::process::Command::new("pgrep")
-            .arg("openvpn")
+    #[cfg(target_os = "macos")]
+    let connected = {
+        let output = tokio::process::Command::new("ifconfig")
+            .arg("tun0")
             .output()
             .await;
-        matches!(output, Ok(o) if o.status.success())
+        matches!(output, Ok(o) if o.status.success()
+            && String::from_utf8_lossy(&o.stdout).contains("inet "))
+    };
+
+    #[cfg(target_os = "linux")]
+    let connected = {
+        let output = tokio::process::Command::new("ip")
+            .args(["addr", "show", "tun0"])
+            .output()
+            .await;
+        matches!(output, Ok(o) if o.status.success()
+            && String::from_utf8_lossy(&o.stdout).contains("inet "))
     };
 
     #[cfg(windows)]
-    let is_running = {
+    let connected = {
         let output = tokio::process::Command::new("tasklist")
             .args(["/FI", "IMAGENAME eq openvpn.exe"])
             .output()
@@ -117,7 +128,7 @@ pub async fn check_status() -> Result<ConnectionStatus> {
     };
 
     Ok(ConnectionStatus {
-        state: if is_running {
+        state: if connected {
             ConnectionState::Connected
         } else {
             ConnectionState::Disconnected
@@ -172,9 +183,9 @@ fn get_config_path() -> Result<std::path::PathBuf> {
 }
 
 #[cfg(unix)]
-async fn start_openvpn_unix(config_path: &std::path::Path) -> Result<()> {
+async fn start_openvpn_unix(config_path: &std::path::Path, paths: &VpnBinaryPaths) -> Result<()> {
     // Get openvpn path using the tools module
-    let openvpn_path = get_openvpn_path()?;
+    let openvpn_path = get_openvpn_path(paths)?;
     info!("Using openvpn at: {:?}", openvpn_path);
 
     // Start openvpn as daemon
@@ -208,12 +219,9 @@ async fn start_openvpn_unix(config_path: &std::path::Path) -> Result<()> {
 }
 
 #[cfg(unix)]
-fn get_openvpn_path() -> Result<std::path::PathBuf> {
-    use vpnvpn_shared::config::VpnBinaryPaths;
-
+fn get_openvpn_path(paths: &VpnBinaryPaths) -> Result<std::path::PathBuf> {
     // Use tools module for detection
-    let default_paths = VpnBinaryPaths::default();
-    if let Some(path) = crate::tools::get_openvpn_path(&default_paths) {
+    if let Some(path) = crate::tools::get_openvpn_path(paths) {
         return Ok(path);
     }
 

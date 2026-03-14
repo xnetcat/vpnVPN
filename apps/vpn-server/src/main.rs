@@ -348,6 +348,32 @@ async fn run_server(
         }
     };
 
+    // Generate PKI before starting backends (OpenVPN/IKEv2 need certs)
+    let detected_public_ip_early = {
+        let client = reqwest::Client::new();
+        let services = ["https://api.ipify.org", "https://ifconfig.me/ip"];
+        let mut ip = None;
+        for svc in services {
+            if let Ok(resp) = client.get(svc).send().await {
+                if let Ok(text) = resp.text().await {
+                    let trimmed = text.trim();
+                    if trimmed.parse::<std::net::IpAddr>().is_ok() {
+                        ip = Some(trimmed.to_string());
+                        break;
+                    }
+                }
+            }
+        }
+        ip
+    };
+
+    if let Err(err) = pki::ensure_pki(detected_public_ip_early.clone()) {
+        error!(error = ?err, "pki_generation_failed_before_backend_start");
+        return Err(1);
+    }
+    // Also generate tls-crypt key for OpenVPN
+    let _ = pki::ensure_tls_crypt_key();
+
     info!("starting_all_vpn_backends");
     node.start_all();
 

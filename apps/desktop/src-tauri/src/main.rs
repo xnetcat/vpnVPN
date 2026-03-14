@@ -491,7 +491,6 @@ fn apply_wireguard(config: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[allow(dead_code)]
 fn disconnect_wireguard_internal() -> Result<(), String> {
     let settings = load_settings().unwrap_or_default();
     let bin = settings.wg_quick_path.unwrap_or_else(|| "wg-quick".into());
@@ -546,7 +545,6 @@ fn apply_openvpn(config: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[allow(dead_code)]
 fn disconnect_openvpn() -> Result<(), String> {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
@@ -589,7 +587,6 @@ fn apply_ikev2(config: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[allow(dead_code)]
 fn disconnect_ikev2() -> Result<(), String> {
     Ok(())
 }
@@ -695,24 +692,24 @@ fn parse_wireguard_config(
     for line in config.lines() {
         let line = line.trim();
         if line.starts_with("PrivateKey") {
-            private_key = line.split('=').nth(1).map(|s| s.trim().to_string());
+            private_key = line.splitn(2, '=').nth(1).map(|s| s.trim().to_string());
         } else if line.starts_with("Address") {
             address = line
-                .split('=')
+                .splitn(2, '=')
                 .nth(1)
                 .map(|s| s.trim().split('/').next().unwrap_or("").to_string());
         } else if line.starts_with("DNS") {
             dns = line
-                .split('=')
+                .splitn(2, '=')
                 .nth(1)
                 .map(|s| s.split(',').map(|d| d.trim().to_string()).collect())
                 .unwrap_or_default();
         } else if line.starts_with("PublicKey") {
-            public_key = line.split('=').nth(1).map(|s| s.trim().to_string());
+            public_key = line.splitn(2, '=').nth(1).map(|s| s.trim().to_string());
         } else if line.starts_with("PresharedKey") {
-            preshared_key = line.split('=').nth(1).map(|s| s.trim().to_string());
+            preshared_key = line.splitn(2, '=').nth(1).map(|s| s.trim().to_string());
         } else if line.starts_with("Endpoint") {
-            endpoint = line.split('=').nth(1).map(|s| s.trim().to_string());
+            endpoint = line.splitn(2, '=').nth(1).map(|s| s.trim().to_string());
         }
     }
 
@@ -827,9 +824,11 @@ fn check_wireguard_status() -> Option<String> {
 
         if output.status.success() {
             let interfaces = String::from_utf8_lossy(&output.stdout);
-            let iface = interfaces.trim();
-            if !iface.is_empty() {
-                return Some(iface.to_string());
+            // Filter for vpnVPN's specific interface instead of returning any WG interface
+            for iface in interfaces.split_whitespace() {
+                if iface.starts_with("vpnvpn-wg") {
+                    return Some(iface.to_string());
+                }
             }
         }
         None
@@ -925,11 +924,22 @@ fn check_vpn_status_legacy() -> VpnConnectionStatus {
     }
 }
 
-/// Disconnect VPN via daemon (required).
+/// Disconnect VPN — try daemon first, fall back to legacy if daemon is unavailable.
 #[tauri::command]
-fn disconnect_vpn(_protocol: Option<String>) -> Result<(), String> {
-    // All disconnections go through daemon (protocol is ignored, daemon knows the active connection)
-    daemon_client::disconnect_vpn()
+fn disconnect_vpn(protocol: Option<String>) -> Result<(), String> {
+    if daemon_client::disconnect_vpn().is_ok() {
+        return Ok(());
+    }
+    // Daemon unavailable — fall back to direct disconnect
+    match protocol.as_deref() {
+        Some("wireguard") => disconnect_wireguard_internal(),
+        Some("openvpn") => disconnect_openvpn(),
+        Some("ikev2") => disconnect_ikev2(),
+        _ => {
+            let _ = disconnect_wireguard_internal();
+            disconnect_openvpn()
+        }
+    }
 }
 
 // Backwards-compatible wrappers used by older frontends.
@@ -1430,6 +1440,20 @@ fn find_workspace_root(start_path: &PathBuf) -> Option<PathBuf> {
     None
 }
 
+/// Validate a path is safe for shell interpolation — reject shell-injection characters.
+fn validate_path_for_shell(path: &std::path::Path) -> Result<(), String> {
+    let s = path.to_string_lossy();
+    for ch in ['\'', '"', '`', '$', '\n', '\r'] {
+        if s.contains(ch) {
+            return Err(format!(
+                "Daemon binary path contains unsafe character {:?} — refusing to interpolate into shell script",
+                ch
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Install the daemon service.
 #[tauri::command]
 fn install_daemon() -> Result<(), String> {
@@ -1460,6 +1484,7 @@ fn install_daemon_macos() -> Result<(), String> {
 
     let channel = app_channel();
     let (daemon_src, source) = find_daemon_binary(&channel)?;
+    validate_path_for_shell(&daemon_src)?;
     eprintln!(
         "[install_daemon_macos] Found daemon binary at: {} (source: {})",
         daemon_src.display(),
@@ -1664,6 +1689,8 @@ PLIST
 fn install_daemon_linux() -> Result<(), String> {
     let channel = app_channel();
     let (daemon_src, source) = find_daemon_binary(&channel)?;
+    let _ = source; // suppress unused warning
+    validate_path_for_shell(&daemon_src)?;
 
     let script = format!(
         r#"pkexec sh -c '
@@ -1883,8 +1910,6 @@ fn find_daemon_source_dir() -> Result<PathBuf, String> {
     let possible_paths = [
         // From src-tauri directory
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../daemon"),
-        // Absolute path from workspace root
-        PathBuf::from("/Users/xnetcat/Projects/xnetcat/vpnVPN/apps/desktop/daemon"),
     ];
 
     for path in &possible_paths {

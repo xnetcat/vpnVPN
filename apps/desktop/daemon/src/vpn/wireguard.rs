@@ -5,14 +5,11 @@ use tracing::{debug, error, info, warn};
 use vpnvpn_shared::config::VpnBinaryPaths;
 use vpnvpn_shared::protocol::{ConnectionState, ConnectionStatus, Protocol, VpnConfig};
 
-const INTERFACE_NAME: &str = "vpnvpn-wg0";
+const INTERFACE_NAME: &str = "vpnvpn-wg";
 
 /// Get wg-quick path using the tools detection module.
-fn get_wg_quick_path() -> Result<String> {
-    // Use default paths - in production, the daemon state holds the actual paths
-    let default_paths = VpnBinaryPaths::default();
-
-    if let Some(path) = crate::tools::get_wireguard_path(&default_paths) {
+fn get_wg_quick_path(paths: &VpnBinaryPaths) -> Result<String> {
+    if let Some(path) = crate::tools::get_wireguard_path(paths) {
         info!("Using wg-quick at: {:?}", path);
         return Ok(path.to_string_lossy().to_string());
     }
@@ -58,7 +55,7 @@ fn find_wg() -> Result<String> {
 }
 
 /// Connect to WireGuard VPN.
-pub async fn connect(config: &VpnConfig) -> Result<ConnectionStatus> {
+pub async fn connect(config: &VpnConfig, paths: &VpnBinaryPaths) -> Result<ConnectionStatus> {
     info!("Connecting via WireGuard to {}", config.server_endpoint);
 
     // Build WireGuard config file
@@ -84,10 +81,10 @@ pub async fn connect(config: &VpnConfig) -> Result<ConnectionStatus> {
 
     // Apply configuration using platform-specific method
     #[cfg(target_os = "macos")]
-    apply_macos(&config_path).await?;
+    apply_macos(&config_path, paths).await?;
 
     #[cfg(target_os = "linux")]
-    apply_linux(&config_path).await?;
+    apply_linux(&config_path, paths).await?;
 
     #[cfg(target_os = "windows")]
     apply_windows(&config_path).await?;
@@ -124,7 +121,7 @@ pub async fn connect(config: &VpnConfig) -> Result<ConnectionStatus> {
         "WireGuard connection not established after {} attempts. Rolling back interface.",
         MAX_RETRIES + 1
     );
-    if let Err(e) = disconnect().await {
+    if let Err(e) = disconnect(paths).await {
         warn!("Failed to rollback WireGuard interface: {}", e);
     }
 
@@ -134,14 +131,14 @@ pub async fn connect(config: &VpnConfig) -> Result<ConnectionStatus> {
 }
 
 /// Disconnect from WireGuard VPN.
-pub async fn disconnect() -> Result<()> {
+pub async fn disconnect(paths: &VpnBinaryPaths) -> Result<()> {
     info!("Disconnecting WireGuard");
 
     #[cfg(target_os = "macos")]
-    disconnect_macos().await?;
+    disconnect_macos(paths).await?;
 
     #[cfg(target_os = "linux")]
-    disconnect_linux().await?;
+    disconnect_linux(paths).await?;
 
     #[cfg(target_os = "windows")]
     disconnect_windows().await?;
@@ -294,7 +291,7 @@ fn get_config_path() -> Result<std::path::PathBuf> {
 }
 
 #[cfg(target_os = "macos")]
-async fn apply_macos(config_path: &std::path::Path) -> Result<()> {
+async fn apply_macos(config_path: &std::path::Path, paths: &VpnBinaryPaths) -> Result<()> {
     // Check if running as root
     if !nix::unistd::geteuid().is_root() {
         return Err(anyhow::anyhow!(
@@ -302,7 +299,7 @@ async fn apply_macos(config_path: &std::path::Path) -> Result<()> {
         ));
     }
 
-    let wg_quick = get_wg_quick_path()?;
+    let wg_quick = get_wg_quick_path(paths)?;
     info!("Using wg-quick at: {}", wg_quick);
 
     // Use wg-quick to bring up the interface
@@ -331,8 +328,8 @@ async fn apply_macos(config_path: &std::path::Path) -> Result<()> {
 }
 
 #[cfg(target_os = "macos")]
-async fn disconnect_macos() -> Result<()> {
-    let wg_quick = get_wg_quick_path()?;
+async fn disconnect_macos(paths: &VpnBinaryPaths) -> Result<()> {
+    let wg_quick = get_wg_quick_path(paths)?;
     let config_path = get_config_path()?;
 
     info!(
@@ -349,7 +346,7 @@ async fn disconnect_macos() -> Result<()> {
 }
 
 #[cfg(target_os = "linux")]
-async fn apply_linux(config_path: &std::path::Path) -> Result<()> {
+async fn apply_linux(config_path: &std::path::Path, paths: &VpnBinaryPaths) -> Result<()> {
     // Check if running as root
     if !nix::unistd::geteuid().is_root() {
         return Err(anyhow::anyhow!(
@@ -357,7 +354,7 @@ async fn apply_linux(config_path: &std::path::Path) -> Result<()> {
         ));
     }
 
-    let wg_quick = get_wg_quick_path()?;
+    let wg_quick = get_wg_quick_path(paths)?;
     info!("Using wg-quick at: {}", wg_quick);
 
     let output = tokio::process::Command::new(&wg_quick)
@@ -385,8 +382,8 @@ async fn apply_linux(config_path: &std::path::Path) -> Result<()> {
 }
 
 #[cfg(target_os = "linux")]
-async fn disconnect_linux() -> Result<()> {
-    let wg_quick = get_wg_quick_path()?;
+async fn disconnect_linux(paths: &VpnBinaryPaths) -> Result<()> {
+    let wg_quick = get_wg_quick_path(paths)?;
     let config_path = get_config_path()?;
 
     info!(

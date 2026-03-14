@@ -121,10 +121,15 @@ pub async fn handle_request(
             );
             info!("  DNS: {:?}", config.dns_servers);
 
+            let binary_paths = {
+                let state_read = state.read().await;
+                state_read.settings.binary_paths.clone()
+            };
+
             let result = match config.protocol {
-                vpnvpn_shared::Protocol::WireGuard => crate::vpn::wireguard::connect(&config).await,
-                vpnvpn_shared::Protocol::OpenVPN => crate::vpn::openvpn::connect(&config).await,
-                vpnvpn_shared::Protocol::IKEv2 => crate::vpn::ikev2::connect(&config).await,
+                vpnvpn_shared::Protocol::WireGuard => crate::vpn::wireguard::connect(&config, &binary_paths).await,
+                vpnvpn_shared::Protocol::OpenVPN => crate::vpn::openvpn::connect(&config, &binary_paths).await,
+                vpnvpn_shared::Protocol::IKEv2 => crate::vpn::ikev2::connect(&config, &binary_paths).await,
             };
 
             match result {
@@ -166,10 +171,12 @@ pub async fn handle_request(
                 state.kill_switch_active = false;
             }
 
+            let binary_paths = state.settings.binary_paths.clone();
+
             // Disconnect based on current protocol
             let result = if let Some(protocol) = state.connection.protocol {
                 match protocol {
-                    vpnvpn_shared::Protocol::WireGuard => crate::vpn::wireguard::disconnect().await,
+                    vpnvpn_shared::Protocol::WireGuard => crate::vpn::wireguard::disconnect(&binary_paths).await,
                     vpnvpn_shared::Protocol::OpenVPN => crate::vpn::openvpn::disconnect().await,
                     vpnvpn_shared::Protocol::IKEv2 => crate::vpn::ikev2::disconnect().await,
                 }
@@ -458,11 +465,12 @@ pub async fn auto_disconnect_vpn(state: Arc<RwLock<DaemonState>>) -> Result<()> 
 
     // Disconnect based on current protocol
     let protocol = state_guard.connection.protocol;
+    let binary_paths = state_guard.settings.binary_paths.clone();
     drop(state_guard); // Release lock before async disconnect
 
     let result = if let Some(protocol) = protocol {
         match protocol {
-            vpnvpn_shared::Protocol::WireGuard => crate::vpn::wireguard::disconnect().await,
+            vpnvpn_shared::Protocol::WireGuard => crate::vpn::wireguard::disconnect(&binary_paths).await,
             vpnvpn_shared::Protocol::OpenVPN => crate::vpn::openvpn::disconnect().await,
             vpnvpn_shared::Protocol::IKEv2 => crate::vpn::ikev2::disconnect().await,
         }

@@ -470,15 +470,6 @@ export default function App() {
       );
       return;
     }
-    // IKEv2 note: When CLI tool is available, we can open the config file
-    // but cannot verify connection status programmatically
-    if (protocol === "ikev2" && !vpnTools?.ikev2.available) {
-      showError(
-        "IKEv2/IPsec is not available on this system. Please install strongSwan or use a different protocol."
-      );
-      return;
-    }
-    // OpenVPN safety: require trust material either from server response or env
 
     setStatus("connecting");
     setConfig(null);
@@ -513,22 +504,31 @@ export default function App() {
         }
       }
 
+      // OpenVPN safety: verify CA certificate is present
+      if (protocol === "openvpn" && cfg && !cfg.includes("<ca>")) {
+        throw new Error("Server config missing CA certificate — cannot connect securely.");
+      }
+
       setConfig(cfg);
       try {
         await applyVpnConfig(protocol, cfg, result.vpnCredentials);
 
-        // For IKEv2, we can't verify connection status - it opens the config file
-        // for manual import into System Settings
+        // For IKEv2 without strongSwan, daemon opens a mobileconfig for manual import.
+        // Check daemon status — if it reports IKEv2 connected via strongSwan, proceed
+        // to the verify loop below. Otherwise, show manual-import message.
         if (protocol === "ikev2") {
-          info(
-            "IKEv2 config file opened. Please import it into your System Settings to complete the connection."
-          );
-          setStatus("disconnected");
-          // Don't confirm the device since we can't verify the connection
-          if (deviceId) {
-            await cancelConnection(deviceId);
+          const earlyStatus = await checkVpnStatus();
+          if (!earlyStatus?.is_connected) {
+            info(
+              "IKEv2 config file opened. Please import it into your System Settings to complete the connection."
+            );
+            setStatus("disconnected");
+            if (deviceId) {
+              await cancelConnection(deviceId);
+            }
+            return;
           }
-          return;
+          // strongSwan connected — fall through to verify loop
         }
 
         // Wait for VPN to initialize and peer to sync to VPN node
@@ -780,6 +780,14 @@ export default function App() {
           // Apply settings from onboarding
           if (state.selected_protocol) {
             setProtocol(state.selected_protocol);
+          }
+          // Apply kill switch preference from onboarding
+          if (state.kill_switch_enabled) {
+            try {
+              await enableKillSwitch(state.allow_lan ?? true);
+            } catch (e) {
+              logError("Failed to enable kill switch from onboarding", e);
+            }
           }
         }}
         initialState={onboardingState || undefined}

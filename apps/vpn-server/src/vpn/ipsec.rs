@@ -88,15 +88,16 @@ impl VpnBackend for IpsecBackend {
     fn apply_peers(&self, peers: &[PeerSpec]) -> Result<()> {
         // Preserve existing RSA key line from ipsec.secrets
         let existing = fs::read_to_string(IPSEC_SECRETS).unwrap_or_default();
-        let rsa_line = existing
+        // Preserve existing private key line (RSA or ECDSA)
+        let key_line = existing
             .lines()
-            .find(|l| l.contains(": RSA"))
+            .find(|l| l.contains(": RSA") || l.contains(": ECDSA"))
             .unwrap_or("")
             .to_string();
 
         let mut secrets = String::new();
-        if !rsa_line.is_empty() {
-            secrets.push_str(&rsa_line);
+        if !key_line.is_empty() {
+            secrets.push_str(&key_line);
             secrets.push('\n');
         }
 

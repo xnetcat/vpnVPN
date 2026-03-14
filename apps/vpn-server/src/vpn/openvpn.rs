@@ -79,7 +79,7 @@ impl OpenVpnBackend {
             verify-client-cert none\n\
             username-as-common-name\n\
             script-security 2\n\
-            auth-user-pass-verify {auth_script} via-env\n\
+            auth-user-pass-verify {auth_script} via-file\n\
             status {status_path} 5\nstatus-version 3\n\
             management 127.0.0.1 {mgmt} {mgmt_pw}\nverb 3\n",
             port = self.listen_port,
@@ -96,16 +96,21 @@ impl OpenVpnBackend {
     }
 
     fn ensure_auth_script(&self) -> Result<()> {
-        // Salted SHA-256 credential verification.
+        // Salted SHA-256 credential verification (via-file mode).
+        // OpenVPN passes a temp file as $1 with username on line 1, password on line 2.
         // secrets.txt format: "username salt:hash" per line.
         let script = r#"#!/bin/sh
 [ ! -f /etc/openvpn/secrets.txt ] && exit 1
-LINE=$(grep "^$username " /etc/openvpn/secrets.txt)
+[ -z "$1" ] && exit 1
+USERNAME=$(head -1 "$1")
+PASSWORD=$(sed -n '2p' "$1")
+[ -z "$USERNAME" ] && exit 1
+LINE=$(grep "^${USERNAME} " /etc/openvpn/secrets.txt)
 [ -z "$LINE" ] && exit 1
 SALTHASH=$(echo "$LINE" | awk '{print $2}')
 SALT=$(echo "$SALTHASH" | cut -d: -f1)
 STORED_HASH=$(echo "$SALTHASH" | cut -d: -f2)
-COMPUTED_HASH=$(printf '%s%s' "$SALT" "$password" | sha256sum | cut -d' ' -f1)
+COMPUTED_HASH=$(printf '%s%s' "$SALT" "$PASSWORD" | sha256sum | cut -d' ' -f1)
 [ "$STORED_HASH" = "$COMPUTED_HASH" ]
 exit $?
 "#;
@@ -208,9 +213,9 @@ impl VpnBackend for OpenVpnBackend {
         }
 
         fs::write(OVPN_SECRETS, &content).context("write secrets.txt")?;
-        // Restrict permissions on credentials file
+        // Set permissions readable by nobody (OpenVPN drops to nobody user)
         let mut perms = fs::metadata(OVPN_SECRETS)?.permissions();
-        perms.set_mode(0o600);
+        perms.set_mode(0o644);
         fs::set_permissions(OVPN_SECRETS, perms)?;
         info!(peer_count = peers.len(), "updated_openvpn_secrets");
         Ok(())

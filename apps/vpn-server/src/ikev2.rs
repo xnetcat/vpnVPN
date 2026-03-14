@@ -76,8 +76,8 @@ config setup
 conn ikev2-eaptls
     keyexchange=ikev2
     auto=add
-    ike=aes256gcm16-prfsha256-ecp256!
-    esp=aes256gcm16-prfsha256-ecp256!
+    ike=aes256-sha256-ecp256,aes256-sha256-modp2048
+    esp=aes256-sha256-ecp256,aes256-sha256
     left=%any
     leftid={id}
     leftcert=server.pem
@@ -103,8 +103,8 @@ conn ikev2-eaptls
 conn ikev2-eap
     keyexchange=ikev2
     auto=add
-    ike=aes256gcm16-prfsha256-ecp256!
-    esp=aes256gcm16-prfsha256-ecp256!
+    ike=aes256-sha256-ecp256,aes256-sha256-modp2048
+    esp=aes256-sha256-ecp256,aes256-sha256
     left=%any
     leftid={id}
     leftcert=server.pem
@@ -134,7 +134,7 @@ conn ikev2-eap
     fs::write("/etc/ipsec.conf", ipsec_conf).context("write ipsec.conf")?;
 
     let secrets = format!(
-        ": RSA {}\n",
+        ": ECDSA {}\n",
         key_path
             .to_str()
             .ok_or_else(|| anyhow!("invalid key path"))?

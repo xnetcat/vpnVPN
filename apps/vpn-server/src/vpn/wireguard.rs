@@ -258,8 +258,9 @@ impl VpnBackend for WireGuardBackend {
         let privkey = Zeroizing::new(fs::read_to_string(self.key_path())?.trim().to_string());
 
         let mut conf = format!(
-            "[Interface]\nPrivateKey = {privkey}\nListenPort = {port}\n",
-            port = self.listen_port
+            "[Interface]\nPrivateKey = {}\nListenPort = {}\n",
+            privkey.as_str(),
+            self.listen_port
         );
 
         for (i, peer) in peers.iter().enumerate() {

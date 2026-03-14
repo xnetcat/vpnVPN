@@ -12,6 +12,13 @@ export const requirePaidUser = async (): Promise<GateResult> => {
   const userId = (session?.user as any)?.id as string | undefined;
   if (!userId) return { ok: false, reason: "unauthenticated" };
 
+  // Admin bypass: admins get enterprise-level access without a subscription
+  const role = (session?.user as any)?.role as string | undefined;
+  if (role === "admin") {
+    const tierConfig = getTierConfig("enterprise");
+    return { ok: true, userId, tier: "enterprise", deviceLimit: tierConfig.deviceLimit };
+  }
+
   const sub = await prisma.subscription.findFirst({
     where: {
       userId,

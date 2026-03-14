@@ -43,9 +43,9 @@ export default async function AdminLayout({
   const pathname = ((await headers()).get("x-pathname") || "").toLowerCase();
 
   return (
-    <div className="flex min-h-[calc(100vh-64px)] bg-slate-950">
-      <aside className="hidden w-64 border-r border-amber-500/10 bg-slate-900/80 md:flex md:flex-col">
-        <div className="px-4 pb-2 pt-4">
+    <div className="flex min-h-screen bg-slate-950">
+      <aside className="hidden w-64 border-r border-amber-500/10 bg-slate-900/80 md:sticky md:top-0 md:flex md:h-screen md:flex-col">
+        <div className="px-4 pb-2 pt-6">
           <p className="text-xs font-semibold uppercase tracking-wide text-amber-400">
             Admin
           </p>

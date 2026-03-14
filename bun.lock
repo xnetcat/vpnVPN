@@ -114,23 +114,6 @@
       },
       "devDependencies": {
         "@biomejs/biome": "^1.8.0",
-        "@types/aws-lambda": "^8.10.145",
-        "typescript": "^5.6.3",
-        "vitest": "^2.1.4",
-      },
-    },
-    "services/metrics": {
-      "name": "@vpnvpn/metrics",
-      "version": "0.1.0",
-      "dependencies": {
-        "@fastify/cors": "^10.0.1",
-        "@vpnvpn/db": "workspace:*",
-        "fastify": "^5.1.0",
-        "zod": "^3.23.8",
-      },
-      "devDependencies": {
-        "@biomejs/biome": "^1.8.0",
-        "@types/aws-lambda": "^8.10.145",
         "typescript": "^5.6.3",
         "vitest": "^2.1.4",
       },
@@ -729,8 +712,6 @@
 
     "@trpc/server": ["@trpc/server@11.7.2", "", { "peerDependencies": { "typescript": ">=5.7.2" } }, "sha512-AgB26PXY69sckherIhCacKLY49rxE2XP5h38vr/KMZTbLCL1p8IuIoKPjALTcugC2kbyQ7Lbqo2JDVfRSmPmfQ=="],
 
-    "@types/aws-lambda": ["@types/aws-lambda@8.10.159", "", {}, "sha512-SAP22WSGNN12OQ8PlCzGzRCZ7QDCwI85dQZbmpz7+mAk+L7j+wI7qnvmdKh+o7A5LaOp6QnOZ2NJphAZQTTHQg=="],
-
     "@types/babel__core": ["@types/babel__core@7.20.5", "", { "dependencies": { "@babel/parser": "^7.20.7", "@babel/types": "^7.20.7", "@types/babel__generator": "*", "@types/babel__template": "*", "@types/babel__traverse": "*" } }, "sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA=="],
 
     "@types/babel__generator": ["@types/babel__generator@7.27.0", "", { "dependencies": { "@babel/types": "^7.0.0" } }, "sha512-ufFd2Xi92OAVPYsy+P4n7/U7e68fex0+Ee8gSG9KX7eo084CWiQ4sdxktvdl0bOPupXtVJPY19zk6EwWqUQ8lg=="],
@@ -802,8 +783,6 @@
     "@vpnvpn/db": ["@vpnvpn/db@workspace:packages/db"],
 
     "@vpnvpn/desktop": ["@vpnvpn/desktop@workspace:apps/desktop"],
-
-    "@vpnvpn/metrics": ["@vpnvpn/metrics@workspace:services/metrics"],
 
     "@vpnvpn/vpn-server": ["@vpnvpn/vpn-server@workspace:apps/vpn-server"],
 

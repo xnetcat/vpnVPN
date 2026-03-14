@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const protectedPaths = new Set([
+const protectedPrefixes = [
   "/dashboard",
   "/servers",
   "/proxies",
   "/account",
   "/devices",
   "/admin",
-]);
+];
 
 // Limit host-based rewrites to our own domains so we don't accidentally
 // rewrite for arbitrary hostnames. Supports both production and staging:
@@ -70,7 +70,10 @@ export function middleware(req: NextRequest) {
   response.headers.set("x-pathname", pathname);
   response.headers.set("x-search", req.nextUrl.search);
 
-  if (!protectedPaths.has(pathname)) return response;
+  const isProtected = protectedPrefixes.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+  if (!isProtected) return response;
 
   const hasSession =
     req.cookies.has("__Secure-next-auth.session-token") ||

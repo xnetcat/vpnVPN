@@ -78,7 +78,7 @@ pub fn ensure_pki(public_ip: Option<String>) -> Result<PkiArtifacts> {
         });
     }
 
-    // Generate fresh CA and server cert with explicit algorithm and constraints
+    // Generate fresh CA and server cert with ECDSA P-256
     let mut ca_params = CertificateParams::default();
     ca_params.alg = &PKCS_ECDSA_P256_SHA256;
     ca_params.is_ca = IsCa::Ca(BasicConstraints::Constrained(0));

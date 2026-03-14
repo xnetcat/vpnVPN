@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 
 export default async function SiteHeader() {
   const headersList = await headers();
@@ -23,15 +22,7 @@ export default async function SiteHeader() {
 
   const session = await getSession();
   const authed = Boolean((session?.user as any)?.id);
-  const role = authed
-    ? (
-        await prisma.user.findUnique({
-          where: { id: (session?.user as any)?.id as string },
-          select: { role: true },
-        })
-      )?.role
-    : null;
-  const isAdmin = role === "admin";
+  const isAdmin = (session?.user as any)?.role === "admin";
   return (
     <header className="border-b border-slate-800 bg-slate-950/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">

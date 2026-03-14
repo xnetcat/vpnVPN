@@ -83,6 +83,30 @@ describe("requirePaidUser", () => {
     }
   });
 
+  it("should allow admin user without subscription", async () => {
+    const { getSession } = await import("@/lib/auth");
+    vi.mocked(getSession).mockResolvedValue({
+      user: { id: "admin123", role: "admin" },
+      expires: new Date(Date.now() + 86400000).toISOString(),
+    } as any);
+
+    vi.doMock("@/lib/prisma", () => ({
+      prisma: mockPrisma,
+    }));
+
+    const { requirePaidUser } = await import("@/lib/requirePaidUser");
+    const result = await requirePaidUser();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.userId).toBe("admin123");
+      expect(result.tier).toBe("enterprise");
+      expect(result.deviceLimit).toBe(999);
+    }
+    // Subscription should not be queried for admins
+    expect(mockPrisma.subscription.findFirst).not.toHaveBeenCalled();
+  });
+
   it("should check device limit", async () => {
     const { getSession } = await import("@/lib/auth");
     vi.mocked(getSession).mockResolvedValue({

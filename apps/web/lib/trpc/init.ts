@@ -33,6 +33,7 @@ export const createContext = async (opts?: {
         const session: Session = {
           user: {
             id: dbSession.user.id,
+            role: (dbSession.user as any).role ?? "user",
             email: dbSession.user.email ?? undefined,
             name: dbSession.user.name ?? undefined,
             image: dbSession.user.image ?? undefined,
@@ -86,6 +87,22 @@ export const protectedProcedure = t.procedure.use(async (opts) => {
 // Paid user procedure
 export const paidProcedure = protectedProcedure.use(async (opts) => {
   const { ctx } = opts;
+
+  // Admin bypass: admins get enterprise-level access without a subscription
+  const user = await ctx.prisma.user.findUnique({
+    where: { id: ctx.userId },
+    select: { role: true },
+  });
+  if (user?.role === "admin") {
+    return opts.next({
+      ctx: {
+        ...ctx,
+        subscription: null,
+        tier: "enterprise" as const,
+      },
+    });
+  }
+
   const subscription = await ctx.prisma.subscription.findFirst({
     where: {
       userId: ctx.userId,

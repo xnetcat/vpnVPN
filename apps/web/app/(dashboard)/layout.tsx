@@ -43,12 +43,6 @@ export default async function DashboardLayout({
   const headerList = await headers();
   const pathname = (headerList.get("x-pathname") || "").toLowerCase();
 
-  // Admin routes have their own layout; keep the wrapper minimal here so the
-  // nested admin layout can render its own chrome.
-  if (pathname.startsWith("/admin")) {
-    return <div className="bg-slate-950">{children}</div>;
-  }
-
   const session = await getSession();
   const email = (session?.user as any)?.email as string | undefined;
   const role = (session?.user as any)?.role as string | undefined;
