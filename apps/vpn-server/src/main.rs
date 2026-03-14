@@ -104,23 +104,39 @@ fn setup_nat_and_forwarding() -> Result<(), i32> {
 
     info!("setting_up_ip_forwarding_and_nat");
 
-    // Enable IP forwarding
+    // Enable IPv4 forwarding
     let forward_result = Command::new("sysctl")
         .args(["-w", "net.ipv4.ip_forward=1"])
         .output();
 
     match forward_result {
         Ok(output) if output.status.success() => {
-            info!("ip_forwarding_enabled");
+            info!("ipv4_forwarding_enabled");
         }
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            warn!(stderr = stderr.as_ref(), "failed_to_enable_ip_forwarding");
-            // Non-fatal, continue
+            warn!(stderr = stderr.as_ref(), "failed_to_enable_ipv4_forwarding");
         }
         Err(e) => {
-            warn!(error = ?e, "failed_to_run_sysctl_for_ip_forwarding");
-            // Non-fatal, continue
+            warn!(error = ?e, "failed_to_run_sysctl_for_ipv4_forwarding");
+        }
+    }
+
+    // Enable IPv6 forwarding (needed for WireGuard/IKEv2 IPv6 pools)
+    let forward_v6_result = Command::new("sysctl")
+        .args(["-w", "net.ipv6.conf.all.forwarding=1"])
+        .output();
+
+    match forward_v6_result {
+        Ok(output) if output.status.success() => {
+            info!("ipv6_forwarding_enabled");
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            warn!(stderr = stderr.as_ref(), "failed_to_enable_ipv6_forwarding");
+        }
+        Err(e) => {
+            warn!(error = ?e, "failed_to_run_sysctl_for_ipv6_forwarding");
         }
     }
 
@@ -131,6 +147,15 @@ fn setup_nat_and_forwarding() -> Result<(), i32> {
         warn!("could_not_determine_default_interface_using_eth0");
         "eth0".to_string()
     });
+
+    // Validate interface name to prevent iptables argument injection
+    if !default_iface.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
+        || default_iface.is_empty()
+        || default_iface.len() > 15
+    {
+        error!(interface = default_iface.as_str(), "invalid_interface_name");
+        return Err(1);
+    }
 
     info!(
         interface = default_iface.as_str(),
@@ -380,32 +405,43 @@ async fn run_server(
     // Detect public IP early for metadata
     let detected_public_ip = cp_client.detect_public_ip().await;
 
-    // Fallback IKEv2 remote for metadata even if setup fails
-    if let Some(ip) = detected_public_ip.clone() {
-        let default_remote = format!("{ip}:500");
-        std::env::set_var(
-            "VPN_IKEV2_REMOTE",
-            std::env::var("VPN_IKEV2_REMOTE").unwrap_or(default_remote),
-        );
-    }
+    // Detect geolocation BEFORE spawning any tasks to avoid thread-unsafe env::set_var.
+    // All env vars must be set before spawning async tasks.
+    if let Some(ref ip) = detected_public_ip {
+        info!(ip = ip.as_str(), "detected_public_ip");
 
-    // Ensure WireGuard/OpenVPN endpoints and ports are populated for registration
-    if let Some(ip) = detected_public_ip.clone() {
+        if env::var("VPN_IKEV2_REMOTE").is_err() {
+            env::set_var("VPN_IKEV2_REMOTE", format!("{ip}:500"));
+        }
         if env::var("VPN_WG_ENDPOINT").is_err() {
             env::set_var("VPN_WG_ENDPOINT", ip.clone());
         }
         if env::var("VPN_OVPN_ENDPOINT").is_err() {
             env::set_var("VPN_OVPN_ENDPOINT", ip.clone());
         }
+
+        // Detect geolocation synchronously (before spawning tasks)
+        if env::var("VPN_REGION").is_err() || env::var("VPN_COUNTRY").is_err() {
+            if let Some((country, region)) = cp_client.detect_geolocation(ip).await {
+                info!(
+                    country = country.as_str(),
+                    region = region.as_str(),
+                    "detected_geolocation_from_ip"
+                );
+                env::set_var("VPN_COUNTRY", &country);
+                env::set_var("VPN_REGION", &region);
+            } else {
+                warn!("failed_to_detect_geolocation");
+            }
+        }
     }
-    env::set_var(
-        "VPN_WG_PORT",
-        env::var("VPN_WG_PORT").unwrap_or_else(|_| args.listen_port.to_string()),
-    );
-    env::set_var(
-        "VPN_OVPN_PORT",
-        env::var("VPN_OVPN_PORT").unwrap_or_else(|_| "1194".to_string()),
-    );
+
+    if env::var("VPN_WG_PORT").is_err() {
+        env::set_var("VPN_WG_PORT", args.listen_port.to_string());
+    }
+    if env::var("VPN_OVPN_PORT").is_err() {
+        env::set_var("VPN_OVPN_PORT", "1194");
+    }
 
     // Registration (fail fast if we cannot talk to the control plane)
     if let Some(pubkey) = node_arc.get_public_key() {
@@ -415,8 +451,9 @@ async fn run_server(
         // Generate self-signed PKI for OpenVPN/IKE if none provided via env
         let pki_artifacts = match pki::ensure_pki(detected_public_ip.clone()) {
             Ok(pki) => {
-                std::env::set_var("VPN_OVPN_CA_BUNDLE", pki.ca_pem.clone());
-                std::env::set_var("VPN_OVPN_PEER_FINGERPRINT", pki.server_fingerprint.clone());
+                // Set env vars before any tasks are spawned (safe, single-threaded context)
+                env::set_var("VPN_OVPN_CA_BUNDLE", &pki.ca_pem);
+                env::set_var("VPN_OVPN_PEER_FINGERPRINT", &pki.server_fingerprint);
                 pki
             }
             Err(err) => {
@@ -432,11 +469,11 @@ async fn run_server(
             &pki_artifacts.server_pem,
             &pki_artifacts.server_fingerprint,
         ) {
-            if std::env::var("VPN_IKEV2_REMOTE").is_err() {
-                std::env::set_var("VPN_IKEV2_REMOTE", &meta.remote);
+            if env::var("VPN_IKEV2_REMOTE").is_err() {
+                env::set_var("VPN_IKEV2_REMOTE", &meta.remote);
             }
-            std::env::set_var("VPN_IKEV2_FINGERPRINT", &meta.server_fingerprint);
-            std::env::set_var("VPN_IKEV2_CA_BUNDLE", &meta.ca_pem);
+            env::set_var("VPN_IKEV2_FINGERPRINT", &meta.server_fingerprint);
+            env::set_var("VPN_IKEV2_CA_BUNDLE", &meta.ca_pem);
         }
 
         const MAX_ATTEMPTS: u32 = 12; // ~1 minute of retries
@@ -488,29 +525,7 @@ async fn run_server(
     let heartbeat_node = node_arc.clone();
     let heartbeat_client = cp_client.clone();
     tokio::spawn(async move {
-        // Reuse detected public IP from startup
         let public_ip = detected_public_ip.clone();
-        if let Some(ref ip) = public_ip {
-            info!(ip = ip.as_str(), "detected_public_ip");
-
-            // Detect geolocation from IP if VPN_REGION/VPN_COUNTRY not set
-            if env::var("VPN_REGION").is_err() || env::var("VPN_COUNTRY").is_err() {
-                if let Some((country, region)) = heartbeat_client.detect_geolocation(ip).await {
-                    info!(
-                        country = country.as_str(),
-                        region = region.as_str(),
-                        "detected_geolocation_from_ip"
-                    );
-                    // Set environment variables for other parts of the code to use
-                    env::set_var("VPN_COUNTRY", &country);
-                    env::set_var("VPN_REGION", &region);
-                } else {
-                    warn!("failed_to_detect_geolocation");
-                }
-            }
-        } else {
-            warn!("failed_to_detect_public_ip");
-        }
 
         loop {
             // Send heartbeat every 2 minutes (well under the 5 minute offline threshold)
@@ -610,8 +625,29 @@ async fn run_server(
 }
 
 async fn run_admin(port: u16, log_buffer: std::sync::Arc<logging::LogBuffer>) {
-    use axum::http::StatusCode;
+    use axum::http::{header, StatusCode};
     use axum::response::IntoResponse;
+
+    // Admin token for sensitive endpoints (logs, status, pubkey).
+    // If not set, these endpoints return 403.
+    let admin_token: Option<String> = std::env::var("ADMIN_API_TOKEN").ok()
+        .filter(|t| !t.trim().is_empty());
+
+    fn check_admin_auth(headers: &axum::http::HeaderMap, expected: &Option<String>) -> bool {
+        match expected {
+            None => false, // No token configured = sensitive endpoints disabled
+            Some(token) => {
+                if let Some(auth) = headers.get(header::AUTHORIZATION) {
+                    if let Ok(val) = auth.to_str() {
+                        if val.starts_with("Bearer ") {
+                            return &val[7..] == token.as_str();
+                        }
+                    }
+                }
+                false
+            }
+        }
+    }
 
     #[derive(serde::Serialize)]
     struct HealthCheck {
@@ -724,12 +760,36 @@ async fn run_admin(port: u16, log_buffer: std::sync::Arc<logging::LogBuffer>) {
             buffer,
         )
     }
-    async fn status() -> axum::Json<Vec<crate::vpn::BackendStatus>> {
+    // status, pubkey, logs endpoints below require ADMIN_API_TOKEN auth
+
+    #[derive(Clone)]
+    struct AdminState {
+        log_buffer: std::sync::Arc<logging::LogBuffer>,
+        admin_token: Option<String>,
+    }
+
+    async fn logs_authed(
+        axum::extract::State(state): axum::extract::State<AdminState>,
+        headers: axum::http::HeaderMap,
+    ) -> impl IntoResponse {
+        if !check_admin_auth(&headers, &state.admin_token) {
+            return (StatusCode::FORBIDDEN, "Admin token required".to_string());
+        }
+        (StatusCode::OK, state.log_buffer.snapshot().join("\n"))
+    }
+
+    async fn status_authed(
+        axum::extract::State(state): axum::extract::State<AdminState>,
+        headers: axum::http::HeaderMap,
+    ) -> impl IntoResponse {
+        if !check_admin_auth(&headers, &state.admin_token) {
+            return (StatusCode::FORBIDDEN, axum::Json(Vec::new()));
+        }
         let statuses = crate::vpn::VPN_NODE
             .get()
             .map(|n| n.collect_status())
             .unwrap_or_default();
-        axum::Json(statuses)
+        (StatusCode::OK, axum::Json(statuses))
     }
 
     async fn pubkey() -> axum::Json<Option<String>> {
@@ -737,21 +797,18 @@ async fn run_admin(port: u16, log_buffer: std::sync::Arc<logging::LogBuffer>) {
         axum::Json(pk)
     }
 
-    // Capture log_buffer for the closure
-    let log_buffer_clone = log_buffer.clone();
-    async fn logs(
-        axum::extract::State(buffer): axum::extract::State<std::sync::Arc<logging::LogBuffer>>,
-    ) -> String {
-        buffer.snapshot().join("\n")
-    }
+    let admin_state = AdminState {
+        log_buffer: log_buffer.clone(),
+        admin_token: admin_token.clone(),
+    };
 
     let app = Router::new()
         .route("/health", get(health))
         .route("/metrics", get(metrics))
-        .route("/status", get(status))
+        .route("/status", get(status_authed))
         .route("/pubkey", get(pubkey))
-        .route("/logs", get(logs))
-        .with_state(log_buffer_clone);
+        .route("/logs", get(logs_authed))
+        .with_state(admin_state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     axum::serve(TcpListener::bind(addr).await.unwrap(), app)

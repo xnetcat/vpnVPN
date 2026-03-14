@@ -1,8 +1,9 @@
 use super::{BackendStatus, PeerSpec, VpnBackend, VpnProtocol};
 use anyhow::{Context, Result};
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
-use tracing::info;
+use tracing::{info, warn};
 
 const IPSEC_SECRETS: &str = "/etc/ipsec.secrets";
 
@@ -101,12 +102,26 @@ impl VpnBackend for IpsecBackend {
 
         for p in peers {
             if let (Some(u), Some(pw)) = (&p.username, &p.password) {
+                // Validate username/password don't contain config-breaking characters
+                if u.contains('\n') || u.contains(':') || u.contains('"') {
+                    warn!(username = u.as_str(), "skipping_peer_with_invalid_username_chars");
+                    continue;
+                }
+                if pw.contains('\n') || pw.contains('"') {
+                    warn!("skipping_peer_with_invalid_password_chars");
+                    continue;
+                }
                 // EAP credentials for EAP-MSCHAPv2
                 secrets.push_str(&format!("{u} : EAP \"{pw}\"\n"));
             }
         }
 
         fs::write(IPSEC_SECRETS, &secrets).context("write ipsec.secrets")?;
+
+        // Restrict file permissions on secrets file
+        let mut perms = fs::metadata(IPSEC_SECRETS)?.permissions();
+        perms.set_mode(0o600);
+        fs::set_permissions(IPSEC_SECRETS, perms)?;
 
         // Reload strongSwan to pick up new credentials
         let _ = Command::new("swanctl").arg("--load-all").output();

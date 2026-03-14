@@ -49,7 +49,7 @@ pub trait VpnBackend: Send + Sync {
     }
 }
 
-#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+#[derive(Clone, Serialize, serde::Deserialize)]
 pub struct PeerSpec {
     pub public_key: Option<String>,
     pub preshared_key: Option<String>,
@@ -59,10 +59,25 @@ pub struct PeerSpec {
     pub password: Option<String>,
 }
 
+impl std::fmt::Debug for PeerSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PeerSpec")
+            .field("public_key", &self.public_key)
+            .field("preshared_key", &self.preshared_key.as_ref().map(|_| "[REDACTED]"))
+            .field("allowed_ips", &self.allowed_ips)
+            .field("endpoint", &self.endpoint)
+            .field("username", &self.username)
+            .field("password", &self.password.as_ref().map(|_| "[REDACTED]"))
+            .finish()
+    }
+}
+
 pub struct VpnNode {
     backends: Vec<Arc<dyn VpnBackend>>, // wireguard/openvpn/ipsec
     #[allow(dead_code)]
     last_egress_by_proto: Arc<RwLock<std::collections::HashMap<String, u64>>>,
+    /// Mutex to serialize apply_peers calls and prevent concurrent config writes
+    peers_lock: std::sync::Mutex<()>,
 }
 
 impl VpnNode {
@@ -130,6 +145,7 @@ impl VpnNode {
         Ok(Self {
             backends,
             last_egress_by_proto: Arc::new(RwLock::new(Default::default())),
+            peers_lock: std::sync::Mutex::new(()),
         })
     }
 
@@ -198,6 +214,8 @@ impl VpnNode {
     }
 
     pub fn apply_peers(&self, peers: &[PeerSpec]) -> Result<()> {
+        // Serialize peer updates to prevent concurrent config file writes (TOCTOU)
+        let _guard = self.peers_lock.lock().unwrap_or_else(|e| e.into_inner());
         info!(peer_count = peers.len(), "applying_peers_to_all_backends");
         for peer in peers {
             debug!(

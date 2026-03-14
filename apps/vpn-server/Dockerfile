@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1.7
 
-FROM rust:1.88-bullseye AS builder
+FROM rust:1.88-bookworm AS builder
 WORKDIR /src
 
 COPY Cargo.toml Cargo.lock ./
 COPY . .
 RUN cargo build --release
 
-FROM debian:bullseye-slim AS runtime
+FROM debian:bookworm-slim AS runtime
 WORKDIR /
 RUN for i in 1 2 3; do apt-get update && break || sleep 5; done && \
     for i in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \

@@ -44,9 +44,16 @@ struct PeersResponse {
 
 impl ControlPlaneClient {
     pub fn new(base_url: String, auth_token: String, server_id: String) -> Self {
+        let trimmed_url = base_url.trim_end_matches('/').to_string();
+        if !trimmed_url.starts_with("https://") {
+            tracing::warn!(
+                url = trimmed_url.as_str(),
+                "control_plane_url_is_not_https — tokens and peer data will be sent in plaintext"
+            );
+        }
         Self {
             client: Client::new(),
-            base_url: base_url.trim_end_matches('/').to_string(),
+            base_url: trimmed_url,
             auth_token,
             server_id,
         }
@@ -62,15 +69,6 @@ impl ControlPlaneClient {
         }
         if let Ok(country) = std::env::var("VPN_COUNTRY") {
             meta.insert("country".to_string(), serde_json::Value::String(country));
-        }
-        if let Ok(fp) = std::env::var("VPN_IKEV2_FINGERPRINT") {
-            meta.insert(
-                "ikev2Fingerprint".to_string(),
-                serde_json::Value::String(fp),
-            );
-        }
-        if let Ok(ca) = std::env::var("VPN_IKEV2_CA_BUNDLE") {
-            meta.insert("ikev2CaBundle".to_string(), serde_json::Value::String(ca));
         }
         if let Ok(fp) = std::env::var("VPN_IKEV2_FINGERPRINT") {
             meta.insert(
@@ -248,7 +246,8 @@ impl ControlPlaneClient {
             if let Ok(resp) = self.client.get(service).send().await {
                 if let Ok(ip) = resp.text().await {
                     let ip = ip.trim();
-                    if !ip.is_empty() && ip.len() < 50 {
+                    // Validate that the response is actually an IP address
+                    if let Ok(_addr) = ip.parse::<std::net::IpAddr>() {
                         debug!(ip, "detected_public_ip");
                         return Some(ip.to_string());
                     }
@@ -264,19 +263,21 @@ impl ControlPlaneClient {
         #[derive(serde::Deserialize)]
         #[allow(dead_code)]
         struct GeoResponse {
-            status: String,
-            #[serde(rename = "countryCode")]
+            success: Option<bool>,
+            #[serde(rename = "country_code")]
             country_code: Option<String>,
-            #[serde(rename = "regionName")]
-            region_name: Option<String>,
+            region: Option<String>,
             city: Option<String>,
         }
 
-        // Use ip-api.com (free, no rate limits for reasonable usage)
-        let url = format!(
-            "http://ip-api.com/json/{}?fields=status,countryCode,regionName,city",
-            ip
-        );
+        // Validate IP address before embedding in URL
+        if ip.parse::<std::net::IpAddr>().is_err() {
+            debug!(ip, "invalid_ip_address_for_geolocation");
+            return None;
+        }
+
+        // Use ipwho.is (free, HTTPS supported)
+        let url = format!("https://ipwho.is/{}", ip);
 
         let timeout_duration = std::time::Duration::from_secs(5);
         let result = tokio::time::timeout(timeout_duration, async {
@@ -287,8 +288,8 @@ impl ControlPlaneClient {
         match result {
             Ok(Ok(resp)) => {
                 if let Ok(geo) = resp.json::<GeoResponse>().await {
-                    if geo.status == "success" {
-                        if let (Some(country), Some(region)) = (geo.country_code, geo.region_name) {
+                    if geo.success.unwrap_or(false) {
+                        if let (Some(country), Some(region)) = (geo.country_code, geo.region) {
                             debug!(
                                 country = country.as_str(),
                                 region = region.as_str(),

@@ -21,20 +21,6 @@ export function buildWireGuardConfig(params: {
   const serverPublicKey =
     params.serverPublicKeyOverride || WG_SERVER_PUBLIC_KEY;
 
-  console.log("[vpnConfig] Building WireGuard config:");
-  console.log("[vpnConfig]   endpointOverride:", params.endpointOverride);
-  console.log("[vpnConfig]   WG_ENDPOINT from env:", WG_ENDPOINT);
-  console.log("[vpnConfig]   Final endpoint:", endpoint);
-  console.log(
-    "[vpnConfig]   serverPublicKeyOverride:",
-    params.serverPublicKeyOverride,
-  );
-  console.log(
-    "[vpnConfig]   WG_SERVER_PUBLIC_KEY from env:",
-    WG_SERVER_PUBLIC_KEY,
-  );
-  console.log("[vpnConfig]   Final serverPublicKey:", serverPublicKey);
-
   // assignedIp may already include /32 suffix from server, so check before adding
   const address = params.assignedIp.includes("/")
     ? params.assignedIp
@@ -119,16 +105,22 @@ export function buildOpenVpnConfig(params: {
   return lines.join("\n");
 }
 
-export function buildIkev2Config(params: { serverName: string }) {
-  return [
-    "# Example strongSwan / IKEv2 configuration for vpnVPN.",
+export function buildIkev2Config(params: {
+  serverName: string;
+  authMode?: "eap-tls" | "eap-mschapv2";
+}) {
+  const authMode = params.authMode ?? "eap-mschapv2";
+
+  const lines = [
+    "# strongSwan / IKEv2 configuration for vpnVPN.",
     `# Remote gateway: ${IKEV2_REMOTE}`,
+    `# Auth mode: ${authMode}`,
     "",
     "conn vpnvpn",
     "  keyexchange=ikev2",
     "  type=tunnel",
     "  left=%any",
-    "  leftauth=eap-mschapv2",
+    `  leftauth=${authMode}`,
     "  eap_identity=%identity",
     `  right=${IKEV2_REMOTE}`,
     "  rightauth=pubkey",
@@ -138,7 +130,15 @@ export function buildIkev2Config(params: { serverName: string }) {
     "  rightsubnet=0.0.0.0/0",
     "  auto=add",
     `# Server: ${params.serverName}`,
-    "# Credentials: use your VPN username/password",
-    "",
-  ].join("\n");
+  ];
+
+  if (authMode === "eap-tls") {
+    lines.push("# Auth: install your client certificate from the VPN provider");
+    lines.push("  leftcert=client.pem");
+  } else {
+    lines.push("# Credentials: use your VPN username/password");
+  }
+
+  lines.push("");
+  return lines.join("\n");
 }

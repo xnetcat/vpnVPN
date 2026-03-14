@@ -2,9 +2,10 @@ use super::{BackendStatus, VpnBackend, VpnProtocol};
 use crate::pki::{PKI_DIR, CA_PEM, SERVER_PEM, SERVER_KEY, TLS_CRYPT_KEY};
 use anyhow::{anyhow, Context, Result};
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
-use tracing::info;
+use tracing::{info, warn};
 
 const OVPN_DIR: &str = "/etc/openvpn";
 const OVPN_CONF: &str = "/etc/openvpn/server.conf";
@@ -48,15 +49,24 @@ impl OpenVpnBackend {
             fs::copy(&pki_key, &ovpn_key).context("copy server key to openvpn dir")?;
         }
 
-        // Set up tls-crypt if key exists
+        // tls-crypt is required — generate the key if it doesn't exist yet
         let tls_crypt_src = Path::new(PKI_DIR).join(TLS_CRYPT_KEY);
-        let tls_crypt_line = if tls_crypt_src.exists() {
-            let dest = format!("{}/tls-crypt.key", OVPN_DIR);
-            fs::copy(&tls_crypt_src, &dest).context("copy tls-crypt key")?;
-            format!("tls-crypt {}\n", dest)
-        } else {
-            String::new()
-        };
+        if !tls_crypt_src.exists() {
+            info!("generating_tls_crypt_key");
+            crate::pki::ensure_tls_crypt_key()
+                .context("tls-crypt key generation required for OpenVPN security")?;
+        }
+        let dest = format!("{}/tls-crypt.key", OVPN_DIR);
+        fs::copy(&tls_crypt_src, &dest).context("copy tls-crypt key")?;
+        let tls_crypt_line = format!("tls-crypt {}\n", dest);
+
+        // Generate a random management interface password
+        let mgmt_pw_path = format!("{}/mgmt.passwd", OVPN_DIR);
+        let mgmt_password = format!("{:016x}", rand::random::<u64>());
+        fs::write(&mgmt_pw_path, &mgmt_password).context("write mgmt password")?;
+        let mut perms = fs::metadata(&mgmt_pw_path)?.permissions();
+        perms.set_mode(0o600);
+        fs::set_permissions(&mgmt_pw_path, perms)?;
 
         let conf = format!(
             "port {port}\nproto udp\ndev tun1\nuser nobody\ngroup nogroup\n\
@@ -71,13 +81,14 @@ impl OpenVpnBackend {
             script-security 2\n\
             auth-user-pass-verify {auth_script} via-env\n\
             status {status_path} 5\nstatus-version 3\n\
-            management 127.0.0.1 {mgmt}\nverb 3\n",
+            management 127.0.0.1 {mgmt} {mgmt_pw}\nverb 3\n",
             port = self.listen_port,
             ov = OVPN_DIR,
             tls_crypt = tls_crypt_line,
             auth_script = OVPN_AUTH_SCRIPT,
             status_path = OVPN_STATUS,
             mgmt = OVPN_MGMT_PORT,
+            mgmt_pw = mgmt_pw_path,
         );
         fs::write(OVPN_CONF, conf).context("write openvpn server.conf")?;
 
@@ -85,11 +96,17 @@ impl OpenVpnBackend {
     }
 
     fn ensure_auth_script(&self) -> Result<()> {
-        // Use SHA-256 hashed credential verification instead of plaintext
+        // Salted SHA-256 credential verification.
+        // secrets.txt format: "username salt:hash" per line.
         let script = r#"#!/bin/sh
 [ ! -f /etc/openvpn/secrets.txt ] && exit 1
-HASH=$(printf '%s' "$password" | sha256sum | cut -d' ' -f1)
-grep -F -x "$username $HASH" /etc/openvpn/secrets.txt >/dev/null
+LINE=$(grep "^$username " /etc/openvpn/secrets.txt)
+[ -z "$LINE" ] && exit 1
+SALTHASH=$(echo "$LINE" | awk '{print $2}')
+SALT=$(echo "$SALTHASH" | cut -d: -f1)
+STORED_HASH=$(echo "$SALTHASH" | cut -d: -f2)
+COMPUTED_HASH=$(printf '%s%s' "$SALT" "$password" | sha256sum | cut -d' ' -f1)
+[ "$STORED_HASH" = "$COMPUTED_HASH" ]
 exit $?
 "#;
         fs::write(OVPN_AUTH_SCRIPT, script).context("write verify.sh")?;
@@ -106,11 +123,17 @@ exit $?
         Ok(())
     }
 
-    fn hash_password(password: &str) -> String {
+    /// Hash a password with a random per-user salt (salt:hash format).
+    /// Uses SHA-256 with a 16-byte random salt to prevent rainbow table attacks.
+    fn hash_password_salted(password: &str) -> String {
         use sha2::{Digest, Sha256};
+        let salt: [u8; 16] = rand::random();
+        let salt_hex: String = salt.iter().map(|b| format!("{:02x}", b)).collect();
         let mut hasher = Sha256::new();
+        hasher.update(salt_hex.as_bytes());
         hasher.update(password.as_bytes());
-        format!("{:x}", hasher.finalize())
+        let hash = format!("{:x}", hasher.finalize());
+        format!("{}:{}", salt_hex, hash)
     }
 
     fn parse_status() -> BackendStatus {
@@ -170,12 +193,25 @@ impl VpnBackend for OpenVpnBackend {
         let mut content = String::new();
         for p in peers {
             if let (Some(u), Some(pw)) = (&p.username, &p.password) {
-                let hashed = Self::hash_password(pw);
-                content.push_str(&format!("{} {}\n", u, hashed));
+                // Validate username/password don't contain config-breaking characters
+                if u.contains('\n') || u.contains(' ') || u.contains('\0') {
+                    warn!("skipping_openvpn_peer_with_invalid_username");
+                    continue;
+                }
+                if pw.contains('\n') || pw.contains('\0') {
+                    warn!("skipping_openvpn_peer_with_invalid_password");
+                    continue;
+                }
+                let salted_hash = Self::hash_password_salted(pw);
+                content.push_str(&format!("{} {}\n", u, salted_hash));
             }
         }
 
-        fs::write(OVPN_SECRETS, content).context("write secrets.txt")?;
+        fs::write(OVPN_SECRETS, &content).context("write secrets.txt")?;
+        // Restrict permissions on credentials file
+        let mut perms = fs::metadata(OVPN_SECRETS)?.permissions();
+        perms.set_mode(0o600);
+        fs::set_permissions(OVPN_SECRETS, perms)?;
         info!(peer_count = peers.len(), "updated_openvpn_secrets");
         Ok(())
     }

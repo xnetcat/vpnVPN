@@ -5,6 +5,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 use tracing::{debug, error, info, warn};
+use zeroize::Zeroizing;
 
 const WG_IFACE: &str = "wg0";
 const WG_CONF: &str = "wg0.conf"; // Relative or absolute depends on OS config
@@ -72,6 +73,13 @@ impl WireGuardBackend {
             }
             let key = String::from_utf8_lossy(&output.stdout).trim().to_string();
             fs::write(&key_path, format!("{}\n", key)).context("write wg private key")?;
+            // Restrict permissions on private key file
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = fs::metadata(&key_path)?.permissions();
+                perms.set_mode(0o600);
+                fs::set_permissions(&key_path, perms)?;
+            }
             info!("wireguard_private_key_generated");
         } else {
             debug!(key_path = key_path.as_str(), "wireguard_key_exists");
@@ -213,7 +221,7 @@ impl VpnBackend for WireGuardBackend {
             return None;
         }
         let privkey = match fs::read_to_string(&key_path) {
-            Ok(k) => k.trim().to_string(),
+            Ok(k) => Zeroizing::new(k.trim().to_string()),
             Err(e) => {
                 warn!(error = ?e, "failed_to_read_private_key");
                 return None;
@@ -232,6 +240,7 @@ impl VpnBackend for WireGuardBackend {
             use std::io::Write;
             let _ = stdin.write_all(privkey.as_bytes());
         }
+        drop(privkey); // Zeroize the key material
 
         let output = child.wait_with_output().ok()?;
         if output.status.success() {
@@ -246,7 +255,7 @@ impl VpnBackend for WireGuardBackend {
     fn apply_peers(&self, peers: &[PeerSpec]) -> Result<()> {
         info!(peer_count = peers.len(), "applying_wireguard_peers");
 
-        let privkey = fs::read_to_string(self.key_path())?.trim().to_string();
+        let privkey = Zeroizing::new(fs::read_to_string(self.key_path())?.trim().to_string());
 
         let mut conf = format!(
             "[Interface]\nPrivateKey = {privkey}\nListenPort = {port}\n",
@@ -255,6 +264,11 @@ impl VpnBackend for WireGuardBackend {
 
         for (i, peer) in peers.iter().enumerate() {
             if let Some(pk) = &peer.public_key {
+                // Validate WireGuard public key format (44 chars base64)
+                if pk.len() != 44 || pk.contains('\n') {
+                    warn!(peer_index = i, "skipping_peer_with_invalid_public_key_format");
+                    continue;
+                }
                 debug!(
                     peer_index = i,
                     public_key_prefix = &pk[..8.min(pk.len())],
@@ -279,7 +293,14 @@ impl VpnBackend for WireGuardBackend {
         let conf_path = self.conf_path();
         let tmp_conf = format!("{}.new", conf_path);
         debug!(tmp_conf = tmp_conf.as_str(), "writing_temporary_config");
-        fs::write(&tmp_conf, conf)?;
+        fs::write(&tmp_conf, &conf)?;
+        // Restrict permissions — config contains private key
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&tmp_conf)?.permissions();
+            perms.set_mode(0o600);
+            fs::set_permissions(&tmp_conf, perms)?;
+        }
 
         let nm = get_network_manager();
 
