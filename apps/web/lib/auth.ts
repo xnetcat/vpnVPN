@@ -148,9 +148,22 @@ function buildAuthOptions(): NextAuthOptions {
 }
 
 // Lazy accessor so the options object is built at runtime, not import time.
+// We need ownKeys/getOwnPropertyDescriptor so that object spread ({...authOptions})
+// works correctly — next-auth's init() spreads the options internally.
 export const authOptions: NextAuthOptions = new Proxy({} as NextAuthOptions, {
   get(_target, prop) {
     return (buildAuthOptions() as any)[prop];
+  },
+  ownKeys() {
+    return Reflect.ownKeys(buildAuthOptions());
+  },
+  getOwnPropertyDescriptor(_target, prop) {
+    const desc = Object.getOwnPropertyDescriptor(buildAuthOptions(), prop);
+    if (desc) desc.configurable = true;
+    return desc;
+  },
+  has(_target, prop) {
+    return prop in buildAuthOptions();
   },
 });
 
