@@ -205,9 +205,87 @@ export const deviceRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { name, serverId, machineId } = input;
 
-      const serverRecord = serverId
-        ? await ctx.prisma.vpnServer.findUnique({ where: { id: serverId } })
-        : null;
+      if (!serverId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "serverId is required",
+        });
+      }
+
+      // First check the local DB
+      let serverRecord = await ctx.prisma.vpnServer.findUnique({
+        where: { id: serverId },
+      });
+
+      // If not in DB, fetch from control plane and upsert
+      if (!serverRecord) {
+        const base = WEB_ENV.CONTROL_PLANE_API_URL?.replace(/\/$/, "");
+        const apiKey = WEB_ENV.CONTROL_PLANE_API_KEY;
+
+        if (!base || !apiKey) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Control plane not configured",
+          });
+        }
+
+        const res = await fetch(`${base}/servers`, {
+          method: "GET",
+          headers: { "x-api-key": apiKey },
+          cache: "no-store",
+        });
+
+        if (!res.ok) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "VPN server not found or offline",
+          });
+        }
+
+        const servers: any[] = await res.json();
+        const cpServer = servers.find((s: any) => s.id === serverId);
+
+        if (!cpServer) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "VPN server not found or offline",
+          });
+        }
+
+        // Upsert the server into the local DB so future lookups work
+        serverRecord = await ctx.prisma.vpnServer.upsert({
+          where: { id: serverId },
+          update: {
+            publicIp: cpServer.publicIp || null,
+            publicKey: cpServer.publicKey || null,
+            wgEndpoint: cpServer.wgEndpoint || cpServer.metadata?.wgEndpoint || null,
+            wgPort: cpServer.wgPort || cpServer.metadata?.wgPort || null,
+            ovpnEndpoint: cpServer.ovpnEndpoint || cpServer.metadata?.ovpnEndpoint || null,
+            ovpnPort: cpServer.ovpnPort || cpServer.metadata?.ovpnPort || null,
+            ovpnCaBundle: cpServer.ovpnCaBundle || cpServer.metadata?.ovpnCaBundle || null,
+            ovpnPeerFingerprint: cpServer.ovpnPeerFingerprint || cpServer.metadata?.ovpnPeerFingerprint || null,
+            ikev2Remote: cpServer.ikev2Remote || cpServer.metadata?.ikev2Remote || null,
+            status: cpServer.status || "online",
+            lastSeen: cpServer.lastSeen ? new Date(cpServer.lastSeen) : new Date(),
+            metadata: cpServer.metadata || {},
+          },
+          create: {
+            id: serverId,
+            publicIp: cpServer.publicIp || null,
+            publicKey: cpServer.publicKey || null,
+            wgEndpoint: cpServer.wgEndpoint || cpServer.metadata?.wgEndpoint || null,
+            wgPort: cpServer.wgPort || cpServer.metadata?.wgPort || null,
+            ovpnEndpoint: cpServer.ovpnEndpoint || cpServer.metadata?.ovpnEndpoint || null,
+            ovpnPort: cpServer.ovpnPort || cpServer.metadata?.ovpnPort || null,
+            ovpnCaBundle: cpServer.ovpnCaBundle || cpServer.metadata?.ovpnCaBundle || null,
+            ovpnPeerFingerprint: cpServer.ovpnPeerFingerprint || cpServer.metadata?.ovpnPeerFingerprint || null,
+            ikev2Remote: cpServer.ikev2Remote || cpServer.metadata?.ikev2Remote || null,
+            status: cpServer.status || "online",
+            lastSeen: cpServer.lastSeen ? new Date(cpServer.lastSeen) : new Date(),
+            metadata: cpServer.metadata || {},
+          },
+        });
+      }
 
       if (!serverRecord) {
         throw new TRPCError({
