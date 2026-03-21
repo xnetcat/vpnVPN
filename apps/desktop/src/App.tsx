@@ -345,7 +345,13 @@ export default function App() {
   } = useDaemonStatus();
 
   // VPN connection state
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem("vpnvpn_selected_server");
+    } catch {
+      return null;
+    }
+  });
   const [status, setStatus] = useState<ViewState>("disconnected");
   const [config, setConfig] = useState<string | null>(null);
   const [hasAttemptedAutoConnect, setHasAttemptedAutoConnect] = useState(false);
@@ -705,6 +711,28 @@ export default function App() {
           setAppView("settings");
         });
         unlisten.push(unlistenSettings);
+
+        // Handle deep links (vpnvpn://auth?token=...)
+        const unlistenDeepLink = await listen<string>(
+          "deep-link://new-url",
+          (event) => {
+            log("Deep link received:", event.payload);
+            try {
+              const url = new URL(event.payload);
+              if (url.hostname === "auth" || url.pathname === "/auth") {
+                const token = url.searchParams.get("token");
+                if (token) {
+                  log("Deep link: setting auth token");
+                  setStoredSessionToken(token);
+                  void checkAuth();
+                }
+              }
+            } catch (e) {
+              logError("Failed to parse deep link", e);
+            }
+          }
+        );
+        unlisten.push(unlistenDeepLink);
       } catch (e) {
         logError("Failed to set up tray listeners", e);
       }
@@ -726,6 +754,9 @@ export default function App() {
 
   const handleSelectServer = useCallback((id: string) => {
     setSelectedId(id);
+    try {
+      localStorage.setItem("vpnvpn_selected_server", id);
+    } catch {}
   }, []);
 
   const handleSignOut = useCallback(async () => {

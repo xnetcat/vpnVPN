@@ -9,6 +9,15 @@ export type MapServer = {
   sessions: number;
   publicKey?: string | null;
   publicIp?: string | null;
+  wgEndpoint?: string | null;
+  wgPort?: number | null;
+  ovpnEndpoint?: string | null;
+  ovpnPort?: number | null;
+  ovpnCaBundle?: string | null;
+  ovpnPeerFingerprint?: string | null;
+  ikev2Remote?: string | null;
+  cpu?: number;
+  lastSeen?: string;
   metadata?: {
     port?: number;
     [key: string]: unknown;

@@ -107,10 +107,14 @@ export const paidProcedure = protectedProcedure.use(async (opts) => {
     },
   });
 
+  // No subscription → free tier (1 device, all servers)
   if (!subscription) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Active subscription required",
+    return opts.next({
+      ctx: {
+        ...ctx,
+        subscription: null,
+        tier: "free" as const,
+      },
     });
   }
 

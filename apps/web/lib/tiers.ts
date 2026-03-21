@@ -1,4 +1,4 @@
-export type Tier = "basic" | "pro" | "enterprise";
+export type Tier = "free" | "basic" | "pro" | "enterprise";
 
 export interface TierConfig {
   name: string;
@@ -11,6 +11,17 @@ export interface TierConfig {
 import { WEB_ENV } from "@/env";
 
 export const TIERS: Record<Tier, TierConfig> = {
+  free: {
+    name: "Free",
+    price: 0,
+    priceId: "",
+    deviceLimit: 1,
+    features: [
+      "1 device",
+      "Access to all servers",
+      "Limited bandwidth",
+    ],
+  },
   basic: {
     name: "Basic",
     price: 10,

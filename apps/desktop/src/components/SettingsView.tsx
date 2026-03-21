@@ -338,12 +338,16 @@ function GeneralTab({
   autoConnect,
   setAutoConnect,
   vpnTools,
+  killSwitchActive,
+  onToggleKillSwitch,
 }: {
   protocol: Protocol;
   setProtocol: (p: Protocol) => void;
   autoConnect: boolean;
   setAutoConnect: (b: boolean) => void;
   vpnTools: VpnToolsStatus | null;
+  killSwitchActive: boolean;
+  onToggleKillSwitch: () => void;
 }) {
   const isProtocolAvailable = (id: Protocol): boolean => {
     if (!vpnTools) return true;
@@ -436,6 +440,37 @@ function GeneralTab({
             <span
               className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
                 autoConnect ? "translate-x-5" : "translate-x-0"
+              }`}
+            />
+          </button>
+        </label>
+      </div>
+
+      <div className="border-t border-slate-800 pt-6">
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-400">
+          Security
+        </h2>
+        <label className="flex cursor-pointer items-center justify-between rounded-lg border border-slate-700 bg-slate-900/50 p-4">
+          <div>
+            <div className="text-sm font-medium text-slate-100">
+              Kill Switch
+            </div>
+            <div className="text-xs text-slate-500">
+              Block all internet traffic if the VPN disconnects unexpectedly
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={killSwitchActive}
+            onClick={onToggleKillSwitch}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
+              killSwitchActive ? "bg-emerald-500" : "bg-slate-700"
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                killSwitchActive ? "translate-x-5" : "translate-x-0"
               }`}
             />
           </button>
@@ -913,6 +948,21 @@ export function SettingsView({
               autoConnect={autoConnect}
               setAutoConnect={setAutoConnect}
               vpnTools={vpnTools}
+              killSwitchActive={daemonStatus?.kill_switch_active ?? false}
+              onToggleKillSwitch={async () => {
+                // Dynamically import Tauri APIs
+                try {
+                  const { invoke } = await import("@tauri-apps/api/core");
+                  if (daemonStatus?.kill_switch_active) {
+                    await invoke("disable_kill_switch");
+                  } else {
+                    await invoke("enable_kill_switch", { allowLan: true });
+                  }
+                  await onRefreshDaemonStatus();
+                } catch (e) {
+                  console.error("Failed to toggle kill switch:", e);
+                }
+              }}
             />
           )}
           {activeTab === "connection" && (
