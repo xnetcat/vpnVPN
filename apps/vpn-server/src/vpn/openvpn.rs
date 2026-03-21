@@ -80,6 +80,9 @@ impl OpenVpnBackend {
             username-as-common-name\n\
             script-security 2\n\
             auth-user-pass-verify {auth_script} via-file\n\
+            push \"redirect-gateway def1 bypass-dhcp\"\n\
+            push \"dhcp-option DNS 1.1.1.1\"\n\
+            push \"dhcp-option DNS 8.8.8.8\"\n\
             status {status_path} 5\nstatus-version 3\n\
             management 127.0.0.1 {mgmt} {mgmt_pw}\nverb 3\n",
             port = self.listen_port,

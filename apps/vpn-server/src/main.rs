@@ -227,7 +227,70 @@ fn setup_nat_and_forwarding() -> Result<(), i32> {
         );
     }
 
+    // Set up FORWARD rules for VPN interfaces.
+    // Docker sets FORWARD policy to DROP, so we must explicitly allow VPN traffic.
+    // Use -I (insert) to place rules before Docker's chains which would otherwise drop traffic.
+    let vpn_ifaces = ["wg0", "tun0", "tun1"];
+    for vpn_iface in &vpn_ifaces {
+        // Allow forwarding from VPN interface to the default (outbound) interface
+        ensure_iptables_rule(&[
+            "-I", "FORWARD",
+            "-i", vpn_iface,
+            "-o", &default_iface,
+            "-j", "ACCEPT",
+        ]);
+        // Allow established/related return traffic back into the VPN interface
+        ensure_iptables_rule(&[
+            "-I", "FORWARD",
+            "-i", &default_iface,
+            "-o", vpn_iface,
+            "-m", "state",
+            "--state", "RELATED,ESTABLISHED",
+            "-j", "ACCEPT",
+        ]);
+    }
+
+    info!("forward_rules_configured");
+
     Ok(())
+}
+
+/// Add an iptables rule if it doesn't already exist.
+fn ensure_iptables_rule(args: &[&str]) {
+    use std::process::Command;
+
+    // Build the corresponding -C (check) args by replacing -A/-I with -C
+    let check_args: Vec<&str> = args
+        .iter()
+        .map(|a| if *a == "-A" || *a == "-I" { "-C" } else { a })
+        .collect();
+
+    let exists = Command::new("iptables")
+        .args(&check_args)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    if exists {
+        return;
+    }
+
+    match Command::new("iptables").args(args).output() {
+        Ok(output) if output.status.success() => {
+            info!(rule = args.join(" ").as_str(), "iptables_rule_added");
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            error!(
+                stderr = stderr.as_ref(),
+                rule = args.join(" ").as_str(),
+                "failed_to_add_iptables_rule"
+            );
+        }
+        Err(e) => {
+            error!(error = ?e, rule = args.join(" ").as_str(), "failed_to_run_iptables");
+        }
+    }
 }
 
 /// Find the default network interface by checking the default route.

@@ -44,7 +44,39 @@ pub fn setup_ikev2(
         fs::read_to_string(Path::new(PKI_DIR).join(SERVER_KEY))
             .context("read generated server key")?,
     );
-    fs::write(&key_path, stored_key.as_str()).context("write ikev2 server key")?;
+    // Convert to PKCS#8 if needed — strongSwan 5.9+ prefers PKCS#8 for ECDSA keys
+    let key_str = stored_key.as_str();
+    if key_str.contains("BEGIN EC PRIVATE KEY") {
+        let convert = Command::new("openssl")
+            .args([
+                "pkcs8", "-topk8", "-nocrypt", "-in", "/dev/stdin", "-out", "/dev/stdout",
+            ])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn();
+        if let Ok(mut child) = convert {
+            use std::io::Write;
+            if let Some(ref mut stdin) = child.stdin {
+                let _ = stdin.write_all(key_str.as_bytes());
+            }
+            if let Ok(output) = child.wait_with_output() {
+                if output.status.success() {
+                    let pkcs8_key = Zeroizing::new(String::from_utf8_lossy(&output.stdout).to_string());
+                    fs::write(&key_path, pkcs8_key.as_str()).context("write ikev2 server key (pkcs8)")?;
+                } else {
+                    warn!("openssl pkcs8 conversion failed, using original key format");
+                    fs::write(&key_path, key_str).context("write ikev2 server key")?;
+                }
+            } else {
+                fs::write(&key_path, key_str).context("write ikev2 server key")?;
+            }
+        } else {
+            fs::write(&key_path, key_str).context("write ikev2 server key")?;
+        }
+    } else {
+        fs::write(&key_path, key_str).context("write ikev2 server key")?;
+    }
     drop(stored_key);
 
     // Restrict permissions on private key
@@ -72,12 +104,35 @@ pub fn setup_ikev2(
 config setup
     charondebug="ike 1, cfg 1"
 
-# EAP-TLS connection (preferred — certificate-based, no password cracking possible)
+# EAP-MSCHAPv2 (default — username/password authentication)
+conn ikev2-eap
+    keyexchange=ikev2
+    auto=add
+    ike=aes256-sha256-modp2048,aes256-sha256-ecp256!
+    esp=aes256-sha256!
+    left=%any
+    leftid={id}
+    leftcert=server.pem
+    leftsendcert=always
+    leftsubnet=0.0.0.0/0,::/0
+    leftauth=pubkey
+    right=%any
+    rightid=%any
+    rightauth=eap-mschapv2
+    eap_identity=%identity
+    rightsourceip={pool_v4},{pool_v6}
+    dpdaction=clear
+    dpddelay=30s
+    fragmentation=yes
+    rekey=yes
+    mobike=yes
+
+# EAP-TLS connection (certificate-based, for clients with certs)
 conn ikev2-eaptls
     keyexchange=ikev2
     auto=add
-    ike=aes256-sha256-ecp256,aes256-sha256-modp2048
-    esp=aes256-sha256-ecp256,aes256-sha256
+    ike=aes256-sha256-modp2048,aes256-sha256-ecp256!
+    esp=aes256-sha256!
     left=%any
     leftid={id}
     leftcert=server.pem
@@ -95,46 +150,16 @@ conn ikev2-eaptls
     fragmentation=yes
     rekey=yes
     mobike=yes
-    forceencaps=yes
-    leftikeport={port}
-    rightikeport={port}
-
-# EAP-MSCHAPv2 fallback (for clients without certificates)
-conn ikev2-eap
-    keyexchange=ikev2
-    auto=add
-    ike=aes256-sha256-ecp256,aes256-sha256-modp2048
-    esp=aes256-sha256-ecp256,aes256-sha256
-    left=%any
-    leftid={id}
-    leftcert=server.pem
-    leftsendcert=always
-    leftsubnet=0.0.0.0/0,::/0
-    leftauth=pubkey
-    right=%any
-    rightid=%any
-    rightauth=eap-mschapv2
-    eap_identity=%identity
-    rightsourceip={pool_v4},{pool_v6}
-    dpdaction=clear
-    dpddelay=30s
-    fragmentation=yes
-    rekey=yes
-    mobike=yes
-    forceencaps=yes
-    leftikeport={port}
-    rightikeport={port}
 "#,
         id = id,
         pool_v4 = pool_v4,
-        pool_v6 = pool_v6,
-        port = ike_port
+        pool_v6 = pool_v6
     );
 
     fs::write("/etc/ipsec.conf", ipsec_conf).context("write ipsec.conf")?;
 
     let secrets = format!(
-        ": ECDSA {}\n",
+        ": RSA {}\n",
         key_path
             .to_str()
             .ok_or_else(|| anyhow!("invalid key path"))?

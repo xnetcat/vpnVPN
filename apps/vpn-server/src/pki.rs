@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use rcgen::{
-    BasicConstraints, Certificate, CertificateParams, DistinguishedName, DnType, IsCa, SanType,
-    PKCS_ECDSA_P256_SHA256,
+    BasicConstraints, Certificate, CertificateParams, DistinguishedName, DnType,
+    ExtendedKeyUsagePurpose, IsCa, KeyUsagePurpose, SanType, PKCS_RSA_SHA256,
 };
 use sha2::{Digest, Sha256};
 use std::os::unix::fs::PermissionsExt;
@@ -76,9 +76,11 @@ pub fn ensure_pki(public_ip: Option<String>) -> Result<PkiArtifacts> {
         });
     }
 
-    // Generate fresh CA and server cert with ECDSA P-256
+    // Generate fresh CA and server cert with RSA-2048
+    // RSA is used instead of ECDSA because strongSwan's gcrypt backend
+    // supports RSA signing but not ECDSA signing for IKE_AUTH.
     let mut ca_params = CertificateParams::default();
-    ca_params.alg = &PKCS_ECDSA_P256_SHA256;
+    ca_params.alg = &PKCS_RSA_SHA256;
     ca_params.is_ca = IsCa::Ca(BasicConstraints::Constrained(0));
     ca_params.distinguished_name = DistinguishedName::new();
     ca_params
@@ -91,7 +93,7 @@ pub fn ensure_pki(public_ip: Option<String>) -> Result<PkiArtifacts> {
     // Do not persist it to disk to reduce exposure surface.
 
     let mut server_params = CertificateParams::new(vec!["vpnvpn-server".into()]);
-    server_params.alg = &PKCS_ECDSA_P256_SHA256;
+    server_params.alg = &PKCS_RSA_SHA256;
     if let Some(ip) = public_ip {
         if let Ok(parsed_ip) = ip.parse() {
             server_params
@@ -105,6 +107,11 @@ pub fn ensure_pki(public_ip: Option<String>) -> Result<PkiArtifacts> {
         .push(DnType::CommonName, "vpnvpn-server");
     server_params.is_ca = IsCa::NoCa;
     server_params.use_authority_key_identifier_extension = true;
+    server_params.key_usages = vec![
+        KeyUsagePurpose::DigitalSignature,
+        KeyUsagePurpose::KeyEncipherment,
+    ];
+    server_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
     let server_cert = Certificate::from_params(server_params)?;
     let server_pem = server_cert.serialize_pem_with_signer(&ca_cert)?;
     fs::write(&server_pem_path, &server_pem).context("write server pem")?;
