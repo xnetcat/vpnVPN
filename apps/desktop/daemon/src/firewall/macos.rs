@@ -7,13 +7,13 @@ const PF_ANCHOR: &str = "com.vpnvpn";
 const PF_ANCHOR_FILE: &str = "/etc/pf.anchors/com.vpnvpn";
 
 /// Enable kill-switch using pf.
-pub fn enable_kill_switch(vpn_interface: &str, allow_lan: bool) -> Result<()> {
+pub fn enable_kill_switch(vpn_interface: &str, allow_lan: bool, server_ip: Option<&str>) -> Result<()> {
     info!(
-        "Enabling kill-switch for interface {} (allow_lan={})",
-        vpn_interface, allow_lan
+        "Enabling kill-switch for interface {} (allow_lan={}, server_ip={:?})",
+        vpn_interface, allow_lan, server_ip
     );
 
-    let rules = build_pf_rules(vpn_interface, allow_lan);
+    let rules = build_pf_rules(vpn_interface, allow_lan, server_ip);
 
     // Write rules to anchor file
     std::fs::write(PF_ANCHOR_FILE, &rules)?;
@@ -53,7 +53,7 @@ pub fn disable_kill_switch() -> Result<()> {
     Ok(())
 }
 
-fn build_pf_rules(vpn_interface: &str, allow_lan: bool) -> String {
+fn build_pf_rules(vpn_interface: &str, allow_lan: bool, server_ip: Option<&str>) -> String {
     let mut rules = String::new();
 
     // Header
@@ -72,12 +72,14 @@ fn build_pf_rules(vpn_interface: &str, allow_lan: bool) -> String {
     rules.push_str(&format!("pass quick on {} all\n\n", vpn_interface));
 
     // Allow traffic to VPN server (for initial handshake)
-    rules.push_str("# Allow VPN protocols\n");
-    rules.push_str("pass out quick proto udp to any port 51820\n"); // WireGuard
-    rules.push_str("pass out quick proto udp to any port 1194\n"); // OpenVPN UDP
-    rules.push_str("pass out quick proto tcp to any port 1194\n"); // OpenVPN TCP
-    rules.push_str("pass out quick proto udp to any port 500\n"); // IKEv2/IPsec
-    rules.push_str("pass out quick proto udp to any port 4500\n"); // IKEv2/IPsec NAT-T
+    // Restrict to server IP when known to prevent leaks to arbitrary destinations
+    let dest = server_ip.unwrap_or("any");
+    rules.push_str("# Allow VPN protocols (to server only)\n");
+    rules.push_str(&format!("pass out quick proto udp to {} port 51820\n", dest)); // WireGuard
+    rules.push_str(&format!("pass out quick proto udp to {} port 1194\n", dest)); // OpenVPN UDP
+    rules.push_str(&format!("pass out quick proto tcp to {} port 1194\n", dest)); // OpenVPN TCP
+    rules.push_str(&format!("pass out quick proto udp to {} port 500\n", dest)); // IKEv2/IPsec
+    rules.push_str(&format!("pass out quick proto udp to {} port 4500\n", dest)); // IKEv2/IPsec NAT-T
     rules.push_str("\n");
 
     // Allow DHCP
@@ -118,17 +120,20 @@ mod tests {
 
     #[test]
     fn test_build_pf_rules() {
-        let rules = build_pf_rules("utun5", false);
+        let rules = build_pf_rules("utun5", false, Some("1.2.3.4"));
         assert!(rules.contains("pass quick on utun5 all"));
         assert!(rules.contains("block drop all"));
         assert!(!rules.contains("192.168.0.0/16"));
+        assert!(rules.contains("to 1.2.3.4 port 51820"));
+        assert!(!rules.contains("to any port 51820"));
     }
 
     #[test]
     fn test_build_pf_rules_with_lan() {
-        let rules = build_pf_rules("utun5", true);
+        let rules = build_pf_rules("utun5", true, None);
         assert!(rules.contains("pass quick on utun5 all"));
         assert!(rules.contains("192.168.0.0/16"));
         assert!(rules.contains("10.0.0.0/8"));
+        assert!(rules.contains("to any port 51820"));
     }
 }

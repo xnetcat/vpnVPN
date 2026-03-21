@@ -78,11 +78,30 @@ pub async fn disconnect() -> Result<()> {
 
     #[cfg(unix)]
     {
-        // Kill openvpn process
-        let _ = tokio::process::Command::new("pkill")
-            .args(["-SIGTERM", "openvpn"])
-            .output()
-            .await;
+        // Try PID-based kill first to avoid killing unrelated openvpn processes
+        let pid_path = get_config_path()?
+            .parent()
+            .unwrap()
+            .join("vpnvpn-openvpn.pid");
+        let mut killed = false;
+        if let Ok(pid_str) = std::fs::read_to_string(&pid_path) {
+            if let Ok(pid) = pid_str.trim().parse::<i32>() {
+                info!("Killing OpenVPN process with PID {}", pid);
+                let _ = tokio::process::Command::new("kill")
+                    .args(["-SIGTERM", &pid.to_string()])
+                    .output()
+                    .await;
+                killed = true;
+            }
+            let _ = std::fs::remove_file(&pid_path);
+        }
+        if !killed {
+            // Fallback: kill by name (less precise)
+            let _ = tokio::process::Command::new("pkill")
+                .args(["-SIGTERM", "openvpn"])
+                .output()
+                .await;
+        }
     }
 
     #[cfg(windows)]
@@ -97,25 +116,42 @@ pub async fn disconnect() -> Result<()> {
 }
 
 /// Check OpenVPN connection status via tun interface presence.
+/// Checks multiple tun interfaces since the server may use tun1.
 pub async fn check_status() -> Result<ConnectionStatus> {
     #[cfg(target_os = "macos")]
-    let connected = {
-        let output = tokio::process::Command::new("ifconfig")
-            .arg("tun0")
-            .output()
-            .await;
-        matches!(output, Ok(o) if o.status.success()
-            && String::from_utf8_lossy(&o.stdout).contains("inet "))
+    let (connected, iface_name) = {
+        let mut found = (false, "tun0".to_string());
+        for iface in &["tun0", "tun1", "utun3", "utun4", "utun5"] {
+            let output = tokio::process::Command::new("ifconfig")
+                .arg(iface)
+                .output()
+                .await;
+            if matches!(&output, Ok(o) if o.status.success()
+                && String::from_utf8_lossy(&o.stdout).contains("inet "))
+            {
+                found = (true, iface.to_string());
+                break;
+            }
+        }
+        found
     };
 
     #[cfg(target_os = "linux")]
-    let connected = {
-        let output = tokio::process::Command::new("ip")
-            .args(["addr", "show", "tun0"])
-            .output()
-            .await;
-        matches!(output, Ok(o) if o.status.success()
-            && String::from_utf8_lossy(&o.stdout).contains("inet "))
+    let (connected, iface_name) = {
+        let mut found = (false, "tun0".to_string());
+        for iface in &["tun0", "tun1"] {
+            let output = tokio::process::Command::new("ip")
+                .args(["addr", "show", iface])
+                .output()
+                .await;
+            if matches!(&output, Ok(o) if o.status.success()
+                && String::from_utf8_lossy(&o.stdout).contains("inet "))
+            {
+                found = (true, iface.to_string());
+                break;
+            }
+        }
+        found
     };
 
     #[cfg(windows)]
@@ -134,7 +170,7 @@ pub async fn check_status() -> Result<ConnectionStatus> {
             ConnectionState::Disconnected
         },
         protocol: Some(Protocol::OpenVPN),
-        interface_name: Some("tun0".to_string()),
+        interface_name: Some(iface_name),
         ..Default::default()
     })
 }
@@ -157,6 +193,8 @@ persist-key
 persist-tun
 remote-cert-tls server
 cipher AES-256-GCM
+data-ciphers AES-256-GCM:CHACHA20-POLY1305
+tls-version-min 1.2
 auth SHA256
 verb 3
 
@@ -165,9 +203,6 @@ dhcp-option DNS {}
 
 # Keep alive
 keepalive 10 60
-
-# Compression (disabled for security)
-compress
 
 # Server: {}
 "#,
@@ -188,7 +223,8 @@ async fn start_openvpn_unix(config_path: &std::path::Path, paths: &VpnBinaryPath
     let openvpn_path = get_openvpn_path(paths)?;
     info!("Using openvpn at: {:?}", openvpn_path);
 
-    // Start openvpn as daemon
+    // Start openvpn as daemon with PID file for targeted disconnect
+    let pid_path = config_path.parent().unwrap().join("vpnvpn-openvpn.pid");
     let output = tokio::process::Command::new(&openvpn_path)
         .args([
             "--config",
@@ -196,6 +232,8 @@ async fn start_openvpn_unix(config_path: &std::path::Path, paths: &VpnBinaryPath
             "--daemon",
             "--log",
             "/var/log/vpnvpn-openvpn.log",
+            "--writepid",
+            pid_path.to_str().unwrap(),
         ])
         .output()
         .await?;

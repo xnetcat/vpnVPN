@@ -86,7 +86,7 @@ function buildWireguardConfig(params: {
     "[Interface]",
     `PrivateKey = ${privateKey}`,
     `Address = ${address}`,
-    "DNS = 1.1.1.1",
+    "DNS = 1.1.1.1, 1.0.0.1",
     "",
     "[Peer]",
     `PublicKey = ${server.publicKey}`,
@@ -134,6 +134,8 @@ function buildOpenVpnConfig(params: {
       ? `peer-fingerprint ${peerFingerprint}`
       : "# peer-fingerprint <hex>",
     "cipher AES-256-GCM",
+    "data-ciphers AES-256-GCM:CHACHA20-POLY1305",
+    "tls-version-min 1.2",
     "auth-user-pass vpnvpn-auth.txt",
     "auth SHA256",
     "verb 3",
@@ -148,34 +150,65 @@ function buildOpenVpnConfig(params: {
     lines.push("</ca>");
   }
 
+  // Embed tls-crypt key if available (required by the server)
+  const tlsCryptKey =
+    server.tlsCryptKey ?? (server.metadata as any)?.tlsCryptKey ?? null;
+  if (tlsCryptKey) {
+    lines.push("<tls-crypt>");
+    lines.push(tlsCryptKey);
+    lines.push("</tls-crypt>");
+  }
+
   return lines.join("\n");
 }
 
-function buildIkev2Config(params: { server: any; serverName: string }) {
-  const { server, serverName } = params;
+function buildIkev2Config(params: {
+  server: any;
+  serverName: string;
+  username?: string;
+  password?: string;
+}) {
+  const { server, serverName, username, password } = params;
   const remote = server.ikev2Remote || server.publicIp;
   if (!remote) return null;
+  // Strip port from remote if present (e.g. "1.2.3.4:500" → "1.2.3.4")
+  const remoteHost = remote.includes(":") ? remote.split(":")[0] : remote;
 
-  return [
-    "# Example strongSwan / IKEv2 configuration for vpnVPN.",
-    `# Remote gateway: ${remote}`,
+  const caBundle = server.ovpnCaBundle ?? null;
+
+  const lines = [
+    "# vpnVPN IKEv2 configuration (EAP-MSCHAPv2)",
+    `# Remote gateway: ${remoteHost}`,
     "",
     "conn vpnvpn",
     "  keyexchange=ikev2",
     "  type=tunnel",
     "  left=%any",
-    "  leftauth=psk",
-    `  right=${remote}`,
-    "  rightauth=psk",
-    "  ike=aes256-sha256-modp2048!",
-    "  esp=aes256-sha256!",
-    "  leftsubnet=0.0.0.0/0",
+    "  leftauth=eap-mschapv2",
+    username ? `  eap_identity=${username}` : "  eap_identity=%identity",
+    `  right=${remoteHost}`,
+    `  rightid=${remoteHost}`,
+    "  rightauth=pubkey",
+    '  rightca="CN=vpnvpn-ca"',
     "  rightsubnet=0.0.0.0/0",
+    "  ike=aes256-sha256-modp2048!",
+    "  esp=aes256gcm128!",
     "  auto=add",
     `# Server: ${serverName}`,
-    "# PSK: <ask your administrator or see documentation>",
     "",
-  ].join("\n");
+  ];
+
+  if (caBundle) {
+    lines.push("# CA certificate (save as /etc/ipsec.d/cacerts/ca.pem):");
+    lines.push(`# ${caBundle.replace(/\n/g, "\n# ")}`);
+  }
+
+  if (username && password) {
+    lines.push(`# Secrets (add to /etc/ipsec.secrets):`);
+    lines.push(`# ${username} : EAP "${password}"`);
+  }
+
+  return lines.join("\n");
 }
 
 export const deviceRouter = router({
@@ -388,6 +421,8 @@ export const deviceRouter = router({
         const ikev2Config = buildIkev2Config({
           server: { ...serverRecord, metadata: serverMetadata },
           serverName: serverRecord.id,
+          username: device.id,
+          password: keyPair.privateKey.slice(0, 32),
         });
 
         return {
@@ -396,6 +431,10 @@ export const deviceRouter = router({
           wireguardConfig,
           openvpnConfig,
           ikev2Config,
+          vpnCredentials: {
+            username: device.id,
+            password: keyPair.privateKey.slice(0, 32),
+          },
         };
       }
 
@@ -501,6 +540,8 @@ export const deviceRouter = router({
       const ikev2Config = buildIkev2Config({
         server: { ...serverRecord, metadata: serverMetadata },
         serverName: serverRecord.id,
+        username: vpnUsername,
+        password: vpnPassword,
       });
 
       return {

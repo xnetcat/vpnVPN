@@ -141,7 +141,8 @@ pub async fn handle_request(
                     if state.settings.kill_switch_enabled {
                         if let Some(iface) = &status.interface_name {
                             let allow_lan = state.settings.allow_lan;
-                            if let Err(e) = enable_kill_switch(iface, allow_lan).await {
+                            let server_ip = Some(config.server_endpoint.as_str());
+                            if let Err(e) = enable_kill_switch(iface, allow_lan, server_ip).await {
                                 warn!("Failed to enable kill-switch: {}", e);
                             } else {
                                 state.kill_switch_active = true;
@@ -162,18 +163,10 @@ pub async fn handle_request(
             info!("Disconnect request");
 
             let mut state = state.write().await;
-
-            // Disable kill-switch first if active
-            if state.kill_switch_active {
-                if let Err(e) = disable_kill_switch().await {
-                    warn!("Failed to disable kill-switch: {}", e);
-                }
-                state.kill_switch_active = false;
-            }
-
             let binary_paths = state.settings.binary_paths.clone();
 
-            // Disconnect based on current protocol
+            // Disconnect VPN first, THEN disable kill switch.
+            // This prevents a window where traffic flows unprotected.
             let result = if let Some(protocol) = state.connection.protocol {
                 match protocol {
                     vpnvpn_shared::Protocol::WireGuard => crate::vpn::wireguard::disconnect(&binary_paths).await,
@@ -183,6 +176,14 @@ pub async fn handle_request(
             } else {
                 Ok(())
             };
+
+            // Now disable kill-switch after VPN is down
+            if state.kill_switch_active {
+                if let Err(e) = disable_kill_switch().await {
+                    warn!("Failed to disable kill-switch: {}", e);
+                }
+                state.kill_switch_active = false;
+            }
 
             match result {
                 Ok(()) => {
@@ -204,7 +205,7 @@ pub async fn handle_request(
             drop(state_read);
 
             if let Some(iface) = interface {
-                match enable_kill_switch(&iface, allow_lan).await {
+                match enable_kill_switch(&iface, allow_lan, None).await {
                     Ok(()) => {
                         let mut state = state.write().await;
                         state.kill_switch_active = true;
@@ -395,10 +396,10 @@ pub async fn handle_request(
     }
 }
 
-async fn enable_kill_switch(interface: &str, allow_lan: bool) -> Result<()> {
+async fn enable_kill_switch(interface: &str, allow_lan: bool, server_ip: Option<&str>) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
-        crate::firewall::macos::enable_kill_switch(interface, allow_lan)
+        crate::firewall::macos::enable_kill_switch(interface, allow_lan, server_ip)
     }
 
     #[cfg(target_os = "windows")]
@@ -408,7 +409,7 @@ async fn enable_kill_switch(interface: &str, allow_lan: bool) -> Result<()> {
 
     #[cfg(target_os = "linux")]
     {
-        crate::firewall::linux::enable_kill_switch(interface, allow_lan)
+        crate::firewall::linux::enable_kill_switch(interface, allow_lan, server_ip)
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]

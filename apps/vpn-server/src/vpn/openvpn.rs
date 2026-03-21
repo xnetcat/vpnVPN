@@ -74,6 +74,8 @@ impl OpenVpnBackend {
             topology subnet\nserver 10.9.0.0 255.255.255.0\n\
             keepalive 10 60\n\
             dh none\n\
+            data-ciphers AES-256-GCM:CHACHA20-POLY1305\n\
+            tls-version-min 1.2\n\
             tls-server\nca {ov}/ca.pem\ncert {ov}/server.pem\nkey {ov}/server.key\n\
             {tls_crypt}\
             verify-client-cert none\n\
@@ -216,9 +218,9 @@ impl VpnBackend for OpenVpnBackend {
         }
 
         fs::write(OVPN_SECRETS, &content).context("write secrets.txt")?;
-        // Set permissions readable by nobody (OpenVPN drops to nobody user)
+        // Restrict permissions — the verify.sh script runs as nobody and reads this file
         let mut perms = fs::metadata(OVPN_SECRETS)?.permissions();
-        perms.set_mode(0o644);
+        perms.set_mode(0o604);
         fs::set_permissions(OVPN_SECRETS, perms)?;
         info!(peer_count = peers.len(), "updated_openvpn_secrets");
         Ok(())

@@ -171,17 +171,20 @@ conn vpnvpn
     keyexchange=ikev2
     type=tunnel
     left=%any
-    leftid={}
+    leftid={identity}
     leftauth=eap-mschapv2
-    right={}
-    rightid=%any
+    leftsourceip=%config
+    right={server}
+    rightid={server}
     rightauth=pubkey
+    rightca="CN=vpnvpn-ca"
     rightsubnet=0.0.0.0/0
-    ike=aes256-sha256-ecp256,aes256-sha256-modp2048!
-    esp=aes256-sha256-ecp256,aes256-sha256!
+    ike=aes256-sha256-modp2048!
+    esp=aes256gcm128!
     auto=add
 "#,
-        identity, config.server_endpoint
+        identity = identity,
+        server = config.server_endpoint
     )
 }
 

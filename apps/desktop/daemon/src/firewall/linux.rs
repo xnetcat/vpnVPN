@@ -6,19 +6,19 @@ use tracing::{debug, info, warn};
 const NFT_TABLE: &str = "vpnvpn_killswitch";
 
 /// Enable kill-switch using nftables.
-pub fn enable_kill_switch(vpn_interface: &str, allow_lan: bool) -> Result<()> {
+pub fn enable_kill_switch(vpn_interface: &str, allow_lan: bool, server_ip: Option<&str>) -> Result<()> {
     info!(
-        "Enabling kill-switch for interface {} (allow_lan={})",
-        vpn_interface, allow_lan
+        "Enabling kill-switch for interface {} (allow_lan={}, server_ip={:?})",
+        vpn_interface, allow_lan, server_ip
     );
 
     // First, try nftables
     if has_nftables() {
-        enable_nftables(vpn_interface, allow_lan)?;
+        enable_nftables(vpn_interface, allow_lan, server_ip)?;
     } else {
         // Fall back to iptables
         warn!("nftables not available, falling back to iptables");
-        enable_iptables(vpn_interface, allow_lan)?;
+        enable_iptables(vpn_interface, allow_lan, server_ip)?;
     }
 
     info!("Kill-switch enabled");
@@ -47,8 +47,8 @@ fn has_nftables() -> bool {
         .unwrap_or(false)
 }
 
-fn enable_nftables(vpn_interface: &str, allow_lan: bool) -> Result<()> {
-    let rules = build_nftables_rules(vpn_interface, allow_lan);
+fn enable_nftables(vpn_interface: &str, allow_lan: bool, server_ip: Option<&str>) -> Result<()> {
+    let rules = build_nftables_rules(vpn_interface, allow_lan, server_ip);
 
     debug!("Applying nftables rules:\n{}", rules);
 
@@ -81,14 +81,12 @@ fn disable_nftables() -> Result<()> {
     Ok(())
 }
 
-fn build_nftables_rules(vpn_interface: &str, allow_lan: bool) -> String {
+fn build_nftables_rules(vpn_interface: &str, allow_lan: bool, server_ip: Option<&str>) -> String {
     let mut rules = String::new();
 
-    // Delete existing table if present
-    rules.push_str(&format!(
-        "delete table inet {} 2>/dev/null || true\n",
-        NFT_TABLE
-    ));
+    // Delete existing table if present (flush first, then delete to avoid nft parse errors)
+    rules.push_str(&format!("flush table inet {} ;\n", NFT_TABLE));
+    rules.push_str(&format!("delete table inet {} ;\n", NFT_TABLE));
 
     // Create table
     rules.push_str(&format!("table inet {} {{\n", NFT_TABLE));
@@ -105,13 +103,21 @@ fn build_nftables_rules(vpn_interface: &str, allow_lan: bool) -> String {
     rules.push_str("        # Allow VPN tunnel\n");
     rules.push_str(&format!("        oif {} accept\n\n", vpn_interface));
 
-    // Allow VPN protocols
+    // Allow VPN protocols (restricted to server IP when known)
     rules.push_str("        # Allow VPN protocols\n");
-    rules.push_str("        udp dport 51820 accept  # WireGuard\n");
-    rules.push_str("        udp dport 1194 accept   # OpenVPN UDP\n");
-    rules.push_str("        tcp dport 1194 accept   # OpenVPN TCP\n");
-    rules.push_str("        udp dport 500 accept    # IKEv2\n");
-    rules.push_str("        udp dport 4500 accept   # IKEv2 NAT-T\n\n");
+    if let Some(ip) = server_ip {
+        rules.push_str(&format!("        ip daddr {} udp dport 51820 accept\n", ip));
+        rules.push_str(&format!("        ip daddr {} udp dport 1194 accept\n", ip));
+        rules.push_str(&format!("        ip daddr {} tcp dport 1194 accept\n", ip));
+        rules.push_str(&format!("        ip daddr {} udp dport 500 accept\n", ip));
+        rules.push_str(&format!("        ip daddr {} udp dport 4500 accept\n\n", ip));
+    } else {
+        rules.push_str("        udp dport 51820 accept  # WireGuard\n");
+        rules.push_str("        udp dport 1194 accept   # OpenVPN UDP\n");
+        rules.push_str("        tcp dport 1194 accept   # OpenVPN TCP\n");
+        rules.push_str("        udp dport 500 accept    # IKEv2\n");
+        rules.push_str("        udp dport 4500 accept   # IKEv2 NAT-T\n\n");
+    }
 
     // Allow DHCP
     rules.push_str("        # Allow DHCP\n");
@@ -153,7 +159,7 @@ fn build_nftables_rules(vpn_interface: &str, allow_lan: bool) -> String {
 
 // iptables fallback
 
-fn enable_iptables(vpn_interface: &str, allow_lan: bool) -> Result<()> {
+fn enable_iptables(vpn_interface: &str, allow_lan: bool, server_ip: Option<&str>) -> Result<()> {
     // Create chains
     let _ = std::process::Command::new("iptables")
         .args(["-N", "VPNVPN_OUTPUT"])
@@ -182,54 +188,29 @@ fn enable_iptables(vpn_interface: &str, allow_lan: bool) -> Result<()> {
         .output();
 
     // OUTPUT rules
-    let output_rules = vec![
+    let mut output_rules: Vec<Vec<&str>> = vec![
         vec!["-A", "VPNVPN_OUTPUT", "-o", "lo", "-j", "ACCEPT"],
         vec!["-A", "VPNVPN_OUTPUT", "-o", vpn_interface, "-j", "ACCEPT"],
-        vec![
-            "-A",
-            "VPNVPN_OUTPUT",
-            "-p",
-            "udp",
-            "--dport",
-            "51820",
-            "-j",
-            "ACCEPT",
-        ],
-        vec![
-            "-A",
-            "VPNVPN_OUTPUT",
-            "-p",
-            "udp",
-            "--dport",
-            "1194",
-            "-j",
-            "ACCEPT",
-        ],
-        vec![
-            "-A",
-            "VPNVPN_OUTPUT",
-            "-p",
-            "udp",
-            "--dport",
-            "500",
-            "-j",
-            "ACCEPT",
-        ],
-        vec![
-            "-A",
-            "VPNVPN_OUTPUT",
-            "-p",
-            "udp",
-            "--dport",
-            "4500",
-            "-j",
-            "ACCEPT",
-        ],
     ];
 
-    for rule in output_rules {
+    // VPN protocol port rules — restrict to server IP when known
+    let ports = ["51820", "1194", "500", "4500"];
+    let protos = ["udp", "udp", "udp", "udp"];
+    for (port, proto) in ports.iter().zip(protos.iter()) {
+        if let Some(ip) = server_ip {
+            output_rules.push(vec![
+                "-A", "VPNVPN_OUTPUT", "-d", ip, "-p", proto, "--dport", port, "-j", "ACCEPT",
+            ]);
+        } else {
+            output_rules.push(vec![
+                "-A", "VPNVPN_OUTPUT", "-p", proto, "--dport", port, "-j", "ACCEPT",
+            ]);
+        }
+    }
+
+    for rule in &output_rules {
         std::process::Command::new("iptables")
-            .args(&rule)
+            .args(rule)
             .output()?;
     }
 

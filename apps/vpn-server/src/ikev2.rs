@@ -109,7 +109,7 @@ conn ikev2-eap
     keyexchange=ikev2
     auto=add
     ike=aes256-sha256-modp2048,aes256-sha256-ecp256!
-    esp=aes256-sha256!
+    esp=aes256gcm128!
     left=%any
     leftid={id}
     leftcert=server.pem
@@ -132,7 +132,7 @@ conn ikev2-eaptls
     keyexchange=ikev2
     auto=add
     ike=aes256-sha256-modp2048,aes256-sha256-ecp256!
-    esp=aes256-sha256!
+    esp=aes256gcm128!
     left=%any
     leftid={id}
     leftcert=server.pem
