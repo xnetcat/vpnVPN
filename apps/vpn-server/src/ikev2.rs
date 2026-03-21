@@ -159,7 +159,7 @@ conn ikev2-eaptls
     fs::write("/etc/ipsec.conf", ipsec_conf).context("write ipsec.conf")?;
 
     let secrets = format!(
-        ": RSA {}\n",
+        ": ECDSA {}\n",
         key_path
             .to_str()
             .ok_or_else(|| anyhow!("invalid key path"))?
