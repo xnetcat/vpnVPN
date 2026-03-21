@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-export default function DesktopAuthPage() {
+function DesktopAuthContent() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<"redirecting" | "error">("redirecting");
 
@@ -12,13 +12,11 @@ export default function DesktopAuthPage() {
     const callbackUrl = searchParams.get("callbackUrl");
 
     if (token) {
-      // Direct token handoff — redirect to desktop app via deep link
       window.location.href = `vpnvpn://auth?token=${encodeURIComponent(token)}`;
       return;
     }
 
     if (callbackUrl) {
-      // NextAuth callback flow — wrap in deep link
       window.location.href = `vpnvpn://auth/email-callback?next=${encodeURIComponent(callbackUrl)}`;
       return;
     }
@@ -43,5 +41,20 @@ export default function DesktopAuthPage() {
         If nothing happens, make sure vpnVPN Desktop is installed.
       </p>
     </div>
+  );
+}
+
+export default function DesktopAuthPage() {
+  return (
+    <Suspense
+      fallback={
+        <div style={{ padding: 40, textAlign: "center", fontFamily: "system-ui" }}>
+          <h1>vpnVPN Desktop</h1>
+          <p>Loading...</p>
+        </div>
+      }
+    >
+      <DesktopAuthContent />
+    </Suspense>
   );
 }
